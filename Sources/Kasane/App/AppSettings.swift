@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import KasaneStore
 
 /// UserDefaults に保存する設定。設定画面は v1 の仕上げで作るので、MVP ではメニューと `defaults` コマンドで変える
@@ -44,18 +44,51 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "showsDetails") }
     }
 
-    /// 履歴ウインドウの不透明度（0.3〜1.0）。背景のぼかしの上に重ねる色の濃さ
+    /// 履歴ウインドウの不透明度（0〜1）。背景のぼかしの上に重ねる色の濃さ
     static var panelOpacity: Double {
         get {
             let value = defaults.object(forKey: "panelOpacity") as? Double ?? 0.7
-            return min(max(value, 0.3), 1.0)
+            return min(max(value, 0), 1)
         }
         set { defaults.set(newValue, forKey: "panelOpacity") }
     }
 
-    static var blurLevel: BlurLevel {
-        get { BlurLevel(rawValue: defaults.integer(forKey: "blurLevel") - 1) ?? .standard }
-        set { defaults.set(newValue.rawValue + 1, forKey: "blurLevel") }
+    /// 背景のぼかしの半径（0 でぼかしなし）
+    static var blurRadius: Int {
+        get {
+            let value = defaults.object(forKey: "blurRadius") as? Int ?? BlurPreset.defaultRadius
+            return min(max(value, 0), BlurPreset.maxRadius)
+        }
+        set { defaults.set(newValue, forKey: "blurRadius") }
+    }
+
+    /// FIFO / LIFO 中の小さな表示の文字の大きさ（pt）
+    static var hudFontSize: Double {
+        get {
+            let value = defaults.object(forKey: "hudFontSize") as? Double ?? 12
+            return min(max(value, 10), 24)
+        }
+        set { defaults.set(newValue, forKey: "hudFontSize") }
+    }
+
+    /// URL のプレビューでページのタイトルと画像を取りに行くか。
+    /// 初期値はオフ: 社内のリンクやログイン用の一度きりのリンクに、コピーしただけでアクセスしないようにする
+    static var fetchesLinkPreviews: Bool {
+        get { defaults.bool(forKey: "fetchesLinkPreviews") }
+        set { defaults.set(newValue, forKey: "fetchesLinkPreviews") }
+    }
+
+    /// 履歴ウインドウの大きさ。nil なら既定の大きさ
+    static var historyWindowSize: NSSize? {
+        get { (defaults.string(forKey: "historyWindowSize")).map(NSSizeFromString) }
+        set { defaults.set(newValue.map(NSStringFromSize), forKey: "historyWindowSize") }
+    }
+
+    /// 履歴ウインドウの中心の、画面の中心からのずれ。nil なら既定の位置（中央の少し上）。
+    /// 画面ごとではなくずれで覚えるので、別の画面で開いても同じあたりに出る
+    static var historyWindowOffset: NSPoint? {
+        get { (defaults.string(forKey: "historyWindowOffset")).map(NSPointFromString) }
+        set { defaults.set(newValue.map(NSStringFromPoint), forKey: "historyWindowOffset") }
     }
 
     static var hudPosition: HUDPosition {

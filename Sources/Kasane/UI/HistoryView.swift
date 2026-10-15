@@ -13,8 +13,6 @@ struct HistoryView: View {
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
 
-    static let cornerRadius: CGFloat = 20
-
     var body: some View {
         VStack(spacing: 0) {
             searchBar
@@ -41,9 +39,11 @@ struct HistoryView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
         }
-        .frame(width: HistoryPanelController.size.width, height: HistoryPanelController.size.height)
-        .background(PanelBackground(appearance: appearance, cornerRadius: Self.cornerRadius))
-        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
+        .frame(
+            minWidth: HistoryPanelController.minSize.width, maxWidth: .infinity,
+            minHeight: HistoryPanelController.minSize.height, maxHeight: .infinity
+        )
+        .background(PanelBackground(appearance: appearance))
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
@@ -56,7 +56,7 @@ struct HistoryView: View {
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
             TextField(
-                model.isShowingQueue ? "入力すると履歴を検索します" : "履歴を検索（例: kaigi、otsu tani）",
+                model.isShowingQueue ? "入力すると履歴を検索します" : "履歴を検索",
                 text: $model.query
             )
             .textFieldStyle(.plain)
@@ -71,6 +71,22 @@ struct HistoryView: View {
         .padding(.horizontal, 20)
         .padding(.top, 16)
         .padding(.bottom, 10)
+        // 検索欄の周りをつかんでウインドウを動かせるようにする
+        .background(WindowDragArea())
+    }
+}
+
+/// つかんでドラッグするとウインドウが動く領域
+struct WindowDragArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    private final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+
+        override func mouseDown(with event: NSEvent) {
+            window?.performDrag(with: event)
+        }
     }
 }
 
@@ -102,7 +118,9 @@ private struct Toolbar: View {
                         .buttonStyle(ChipStyle(isOn: model.kindFilter == filter, onColor: .primary))
                 }
             }
-            Spacer(minLength: 8)
+            // 空いている所をつかんでもウインドウを動かせる
+            WindowDragArea()
+                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 28, maxHeight: 28)
             Button("ペースト ⏎") { model.activateSelection(.paste) }
                 .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }

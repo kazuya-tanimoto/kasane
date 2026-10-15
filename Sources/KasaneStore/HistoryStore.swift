@@ -92,7 +92,12 @@ public final class HistoryStore: @unchecked Sendable {
                 if var existing = try ClipItem.filter(Column("contentHash") == hash).fetchOne(db) {
                     existing.copiedAt = now
                     existing.copyCount += 1
+                    // 空白の違いや書式の有無は無視してまとめるので、種類や本文は新しいコピーに合わせる
+                    existing.kind = capture.kind
                     existing.title = capture.title
+                    existing.text = capture.text
+                    existing.romaji = capture.romaji
+                    existing.thumbnail = capture.thumbnail ?? existing.thumbnail
                     existing.sourceBundleID = capture.sourceBundleID ?? existing.sourceBundleID
                     existing.sourceAppName = capture.sourceAppName ?? existing.sourceAppName
                     existing.byteSize = capture.byteSize

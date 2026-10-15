@@ -1,16 +1,22 @@
 import AppKit
+import Combine
 import SwiftUI
 
 /// 履歴ウインドウ。Spotlight や Raycast と同じく、Kasane 自身はアクティブにならないパネルにする。
-/// 元のアプリが前面のままなので、閉じた直後に ⌘V を送れば元のアプリに貼り付けられる
+/// 元のアプリが前面のままなので、閉じた直後に ⌘V を送れば元のアプリに貼り付けられる。
+/// ドラッグで動かせて、端で大きさを変えられる。位置と大きさは次に開いたときも使う
 final class HistoryPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            styleMask: [.titled, .resizable, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        hideTitlebar()
+        isMovable = true
+        isMovableByWindowBackground = true
+        minSize = HistoryPanelController.minSize
         isFloatingPanel = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
@@ -22,28 +28,39 @@ final class HistoryPanel: NSPanel {
         isReleasedWhenClosed = false
     }
 
-    // 枠なしのパネルは既定ではキーウインドウになれないので、検索欄に入力できるようにする
+    // 検索欄に入力できるよう、キーウインドウにはなれるようにする
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }
 
 @MainActor
 final class HistoryPanelController: NSObject, NSWindowDelegate {
-    static let size = NSSize(width: 880, height: 560)
+    static let defaultSize = NSSize(width: 880, height: 560)
+    static let minSize = NSSize(width: 720, height: 420)
 
     private let panel: HistoryPanel
     private let model: HistoryModel
     private var keyMonitor: Any?
     private var isHiding = false
+    /// 自分で位置を決めている間は、動かした・大きさを変えたとみなして保存しない
+    private var isPositioning = false
+    private var blurObserver: AnyCancellable?
 
     init(model: HistoryModel) {
         self.model = model
-        panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.size))
+        panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.defaultSize))
         super.init()
         let hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
-        hosting.frame = NSRect(origin: .zero, size: HistoryPanelController.size)
+        hosting.sizingOptions = [.minSize]
+        // タイトルバーは隠しているので、その分の余白を空けない
+        hosting.safeAreaRegions = []
+        hosting.frame = NSRect(origin: .zero, size: HistoryPanelController.defaultSize)
         panel.contentView = hosting
         panel.delegate = self
+        blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
+            guard let self else { return }
+            WindowBlur.apply(radius: radius, to: self.panel)
+        }
     }
 
     /// 表示・非表示が変わったとき（FIFO / LIFO 中の小さな表示の出し入れに使う）
@@ -62,6 +79,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         isHiding = false
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
+        WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
         installKeyMonitor()
         onVisibilityChange?(true)
         NSAnimationContext.runAnimationGroup { context in
@@ -94,16 +112,49 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         })
     }
 
-    /// マウスカーソルのある画面の中央（少し上寄り）に置く
+    /// マウスカーソルのある画面に置く。前に動かした・大きさを変えたときは、その位置と大きさを使う
     private func position() {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
-        let origin = NSPoint(
-            x: frame.midX - Self.size.width / 2,
-            y: frame.midY - Self.size.height / 2 + frame.height * 0.06
+        let saved = AppSettings.historyWindowSize ?? Self.defaultSize
+        let size = NSSize(
+            width: min(max(saved.width, Self.minSize.width), frame.width),
+            height: min(max(saved.height, Self.minSize.height), frame.height)
         )
-        panel.setFrame(NSRect(origin: origin, size: Self.size), display: false)
+        let offset = AppSettings.historyWindowOffset ?? NSPoint(x: 0, y: frame.height * 0.06)
+        // 画面からはみ出さないようにする
+        let origin = NSPoint(
+            x: min(max(frame.midX + offset.x - size.width / 2, frame.minX), frame.maxX - size.width),
+            y: min(max(frame.midY + offset.y - size.height / 2, frame.minY), frame.maxY - size.height)
+        )
+        isPositioning = true
+        panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        isPositioning = false
+    }
+
+    /// 位置と大きさを既定に戻す（次に開いたときから）
+    func resetFrame() {
+        AppSettings.historyWindowSize = nil
+        AppSettings.historyWindowOffset = nil
+        if isVisible {
+            position()
+        }
+    }
+
+    private func saveFrame() {
+        guard !isPositioning, panel.isVisible, !isHiding, let screen = panel.screen?.visibleFrame else { return }
+        let frame = panel.frame
+        AppSettings.historyWindowSize = frame.size
+        AppSettings.historyWindowOffset = NSPoint(x: frame.midX - screen.midX, y: frame.midY - screen.midY)
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveFrame()
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveFrame()
     }
 
     // ウインドウの外をクリックしたら閉じる

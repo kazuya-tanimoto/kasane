@@ -202,8 +202,8 @@ private struct URLPreview: View {
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: urlString) {
-            // ページタイトルは、プレビューを開いたときにだけ取得する（コピーしただけでは通信しない）
-            guard let url = URL(string: urlString) else { return }
+            // ページタイトルは、設定でオンのときに、プレビューを開いたときだけ取得する（コピーしただけでは通信しない）
+            guard AppSettings.fetchesLinkPreviews, let url = URL(string: urlString) else { return }
             let result = await LinkTitleCache.shared.metadata(for: url)
             title = result.title
             icon = result.icon

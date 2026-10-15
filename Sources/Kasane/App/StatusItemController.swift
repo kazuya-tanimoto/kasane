@@ -11,6 +11,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         var setSortOrder: (HistorySortOrder) -> Void
         var setHistoryLimit: (Int) -> Void
         var setHUDPosition: (HUDPosition) -> Void
+        var setHUDFontSize: (Double) -> Void
+        var resetHistoryWindowFrame: () -> Void
         var showOnboarding: () -> Void
         var clearHistory: () -> Void
     }
@@ -96,6 +98,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(appearanceItem())
 
+        let linkPreview = item("URL のページ情報を取得", #selector(toggleLinkPreviews))
+        linkPreview.state = AppSettings.fetchesLinkPreviews ? .on : .off
+        linkPreview.toolTip = "URL のプレビューで、ページのタイトルと画像を取りに行きます"
+        menu.addItem(linkPreview)
+
         let login = item("ログイン時に起動", #selector(toggleLoginItem))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(login)
@@ -114,13 +121,13 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// 透明度・ぼかし・小さな表示の位置。設定画面ができるまではメニューで変える
+    /// 透明度・ぼかし・小さな表示の位置と文字の大きさ。設定画面ができるまではメニューで変える
     private func appearanceItem() -> NSMenuItem {
         let appearance = AppearanceSettings.shared
         let menu = NSMenu()
 
         menu.addItem(header("不透明度"))
-        for percent in stride(from: 30, through: 100, by: 10) {
+        for percent in stride(from: 10, through: 100, by: 10) {
             let entry = item("\(percent)%", #selector(selectOpacity(_:)))
             entry.representedObject = percent
             entry.state = Int((appearance.opacity * 100).rounded()) == percent ? .on : .off
@@ -129,11 +136,21 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(header("背景のぼかし"))
-        for level in BlurLevel.allCases {
-            let entry = item(level.displayName, #selector(selectBlur(_:)))
-            entry.representedObject = level.rawValue
-            entry.state = appearance.blur == level ? .on : .off
+        menu.addItem(header(WindowBlur.isAvailable ? "背景のぼかし（半径）" : "背景のぼかし"))
+        for radius in BlurPreset.radii {
+            // 半径を指定できない macOS では、ぼかしあり / なしだけになる
+            if !WindowBlur.isAvailable && radius != 0 && radius != BlurPreset.defaultRadius { continue }
+            let title: String
+            if radius == 0 {
+                title = "なし"
+            } else if !WindowBlur.isAvailable {
+                title = "あり"
+            } else {
+                title = radius == BlurPreset.defaultRadius ? "\(radius)（標準）" : "\(radius)"
+            }
+            let entry = item(title, #selector(selectBlur(_:)))
+            entry.representedObject = radius
+            entry.state = (WindowBlur.isAvailable ? appearance.blurRadius == radius : (appearance.blurRadius > 0) == (radius > 0)) ? .on : .off
             entry.indentationLevel = 1
             menu.addItem(entry)
         }
@@ -147,6 +164,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             entry.indentationLevel = 1
             menu.addItem(entry)
         }
+
+        menu.addItem(.separator())
+        menu.addItem(header("FIFO / LIFO の小さな表示の文字の大きさ"))
+        for size in [11.0, 12, 14, 16, 18, 20] {
+            let entry = item(size == 12 ? "12 pt（標準）" : "\(Int(size)) pt", #selector(selectHUDFontSize(_:)))
+            entry.representedObject = size
+            entry.state = AppSettings.hudFontSize == size ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(item("履歴ウインドウの位置と大きさを元に戻す", #selector(resetHistoryWindowFrame)))
 
         let appearanceItem = NSMenuItem(title: "見た目", action: nil, keyEquivalent: "")
         appearanceItem.submenu = menu
@@ -183,9 +213,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func selectBlur(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? Int, let level = BlurLevel(rawValue: raw) else { return }
-        AppearanceSettings.shared.blur = level
+        guard let radius = sender.representedObject as? Int else { return }
+        AppearanceSettings.shared.blurRadius = radius
     }
+
+    @objc private func selectHUDFontSize(_ sender: NSMenuItem) {
+        guard let size = sender.representedObject as? Double else { return }
+        actions.setHUDFontSize(size)
+    }
+
+    @objc private func toggleLinkPreviews() { AppSettings.fetchesLinkPreviews.toggle() }
+    @objc private func resetHistoryWindowFrame() { actions.resetHistoryWindowFrame() }
 
     @objc private func selectHUDPosition(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let position = HUDPosition(rawValue: raw) else { return }
