@@ -152,15 +152,15 @@ final class HistoryModel: ObservableObject {
     func load() {
         let store = self.store
         let sort = sortOrder
-        Task.detached(priority: .userInitiated) { [weak self] in
-            let index = (try? store.loadIndex(sort: sort)) ?? []
-            await MainActor.run {
-                guard let self else { return }
-                self.summaries = index.map(\.summary)
-                self.candidateByID = Dictionary(index.map { ($0.summary.id, $0.candidate) }, uniquingKeysWith: { a, _ in a })
-                self.rebuild()
-                self.isLoaded = true
-            }
+        Task { [weak self] in
+            let index = await Task.detached(priority: .userInitiated) {
+                (try? store.loadIndex(sort: sort)) ?? []
+            }.value
+            guard let self else { return }
+            self.summaries = index.map(\.summary)
+            self.candidateByID = Dictionary(index.map { ($0.summary.id, $0.candidate) }, uniquingKeysWith: { a, _ in a })
+            self.rebuild()
+            self.isLoaded = true
         }
     }
 
@@ -249,13 +249,12 @@ final class HistoryModel: ObservableObject {
             return
         }
         let candidates = self.candidates
-        searchTask = Task.detached(priority: .userInitiated) { [weak self] in
-            let hits = FuzzyMatcher.search(query, in: candidates)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                guard let self, self.query == query else { return }
-                self.apply(hits.compactMap { self.summaryByID[$0.id] })
-            }
+        searchTask = Task { [weak self] in
+            let hits = await Task.detached(priority: .userInitiated) {
+                FuzzyMatcher.search(query, in: candidates)
+            }.value
+            guard !Task.isCancelled, let self, self.query == query else { return }
+            self.apply(hits.compactMap { self.summaryByID[$0.id] })
         }
     }
 
@@ -369,32 +368,33 @@ final class HistoryModel: ObservableObject {
         }
         if preview?.item.id == id { return }
         let store = self.store
-        previewTask = Task.detached(priority: .userInitiated) { [weak self] in
-            guard let item = try? store.item(id: id) else {
+        previewTask = Task { [weak self] in
+            let source = await Task.detached(priority: .userInitiated) { () -> PreviewSource? in
+                guard let item = try? store.item(id: id) else { return nil }
+                var source = PreviewSource(item: item)
+                if item.kind == .image {
+                    source.imageData = try? store.data(itemID: id, types: CaptureBuilder.imageTypes)?.data
+                    if source.imageData == nil {
+                        source.pdfData = try? store.data(itemID: id, types: ["com.adobe.pdf"])?.data
+                    }
+                }
+                return source
+            }.value
+            guard let self else { return }
+            guard let loaded = source else {
                 // 削除済みなど。古いプレビューを残さない
-                await MainActor.run { if self?.currentItemID == id { self?.preview = nil } }
+                if self.currentItemID == id { self.preview = nil }
                 return
             }
-            var source = PreviewSource(item: item)
-            if item.kind == .image {
-                source.imageData = try? store.data(itemID: id, types: CaptureBuilder.imageTypes)?.data
-                if source.imageData == nil {
-                    source.pdfData = try? store.data(itemID: id, types: ["com.adobe.pdf"])?.data
-                }
-            }
-            guard !Task.isCancelled else { return }
-            let loaded = source
-            await MainActor.run {
-                guard let self, self.currentItemID == id else { return }
-                self.preview = PreviewContent(
-                    item: loaded.item,
-                    image: loaded.imageData.flatMap { NSImage(data: $0) },
-                    pdfData: loaded.pdfData,
-                    fileURLs: loaded.item.kind == .file
-                        ? (loaded.item.text ?? "").split(separator: "\n").map { URL(fileURLWithPath: String($0)) }
-                        : []
-                )
-            }
+            guard !Task.isCancelled, self.currentItemID == id else { return }
+            self.preview = PreviewContent(
+                item: loaded.item,
+                image: loaded.imageData.flatMap { NSImage(data: $0) },
+                pdfData: loaded.pdfData,
+                fileURLs: loaded.item.kind == .file
+                    ? (loaded.item.text ?? "").split(separator: "\n").map { URL(fileURLWithPath: String($0)) }
+                    : []
+            )
         }
     }
 
