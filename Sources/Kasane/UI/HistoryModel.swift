@@ -65,6 +65,8 @@ struct PreviewContent {
     var image: NSImage?
     var pdfData: Data?
     var fileURLs: [URL]
+    /// リッチテキストを書式付きで見せるためのもの（読めなければ nil で、文字だけを出す）
+    var richText: NSAttributedString?
 }
 
 /// バックグラウンドで読み込んだプレビューの材料（スレッドをまたいで渡せる型だけにする）
@@ -72,6 +74,7 @@ private struct PreviewSource: Sendable {
     var item: ClipItem
     var imageData: Data?
     var pdfData: Data?
+    var richTextData: (type: String, data: Data)?
 }
 
 /// 履歴の一覧（メモリ上の索引）と、履歴ウインドウの検索・選択の状態
@@ -377,6 +380,8 @@ final class HistoryModel: ObservableObject {
                     if source.imageData == nil {
                         source.pdfData = try? store.data(itemID: id, types: ["com.adobe.pdf"])?.data
                     }
+                } else if item.kind == .richText {
+                    source.richTextData = try? store.data(itemID: id, types: RichTextPreview.preferredTypes)
                 }
                 return source
             }.value
@@ -393,7 +398,8 @@ final class HistoryModel: ObservableObject {
                 pdfData: loaded.pdfData,
                 fileURLs: loaded.item.kind == .file
                     ? (loaded.item.text ?? "").split(separator: "\n").map { URL(fileURLWithPath: String($0)) }
-                    : []
+                    : [],
+                richText: loaded.richTextData.flatMap { RichTextPreview.attributedString(type: $0.type, data: $0.data) }
             )
         }
     }

@@ -32,7 +32,13 @@ struct PreviewPane: View {
     @ViewBuilder
     private func mainView(for content: PreviewContent) -> some View {
         switch content.item.kind {
-        case .text, .richText:
+        case .richText:
+            if let richText = content.richText {
+                RichTextView(text: richText)
+            } else {
+                TextPreview(text: content.item.text ?? "")
+            }
+        case .text:
             TextPreview(text: content.item.text ?? "")
         case .url:
             URLPreview(urlString: content.item.text ?? "")
@@ -70,10 +76,97 @@ private struct TextPreview: View {
     }
 }
 
+/// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く
+private struct RichTextView: NSViewRepresentable {
+    let text: NSAttributedString
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        if let textView = scrollView.documentView as? NSTextView {
+            textView.isEditable = false
+            textView.isSelectable = true
+            textView.drawsBackground = false
+            textView.textContainerInset = NSSize(width: 13, height: 18)
+            textView.textStorage?.setAttributedString(text)
+        }
+        return scrollView
+    }
+
+    // 項目が変わるとプレビュー全体を作り直すので、ここでは何もしない
+    func updateNSView(_ view: NSScrollView, context: Context) {}
+}
+
+/// コピーしたリッチテキストを、プレビュー用の NSAttributedString にする
+enum RichTextPreview {
+    /// 優先する順。HTML は読み込みが重いので、RTF がないときだけ使う
+    static let preferredTypes = ["com.apple.flat-rtfd", "public.rtf", "public.html"]
+    /// これより大きい HTML は書式付きで出さない（読み込みでウインドウが固まらないように）
+    static let maxHTMLBytes = 300_000
+
+    @MainActor
+    static func attributedString(type: String, data: Data) -> NSAttributedString? {
+        let documentType: NSAttributedString.DocumentType
+        switch type {
+        case "com.apple.flat-rtfd": documentType = .rtfd
+        case "public.rtf": documentType = .rtf
+        case "public.html":
+            guard data.count <= maxHTMLBytes else { return nil }
+            documentType = .html
+        default: return nil
+        }
+        guard let source = try? NSMutableAttributedString(
+            data: data,
+            options: [.documentType: documentType, .characterEncoding: String.Encoding.utf8.rawValue],
+            documentAttributes: nil
+        ) else { return nil }
+
+        var text = source
+        if text.length > TextPreview.maxLength {
+            text = NSMutableAttributedString(attributedString: source.attributedSubstring(from: NSRange(location: 0, length: TextPreview.maxLength)))
+        }
+        adaptColors(text)
+        return text
+    }
+
+    /// 元のアプリの黒や白の文字色・背景色は、ダークモードで読めなくなるので外し、システムの文字色にする。
+    /// 赤や青など、意味のある色はそのまま残す
+    @MainActor
+    private static func adaptColors(_ text: NSMutableAttributedString) {
+        let whole = NSRange(location: 0, length: text.length)
+        text.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
+            if let color = value as? NSColor, isNeutral(color) {
+                text.removeAttribute(.foregroundColor, range: range)
+            }
+        }
+        text.enumerateAttribute(.backgroundColor, in: whole) { value, range, _ in
+            if let color = value as? NSColor, isNeutral(color) {
+                text.removeAttribute(.backgroundColor, range: range)
+            }
+        }
+        text.enumerateAttribute(.foregroundColor, in: whole) { value, range, _ in
+            if value == nil {
+                text.addAttribute(.foregroundColor, value: NSColor.labelColor, range: range)
+            }
+        }
+    }
+
+    /// 白・黒・灰色（彩度の低い色）か
+    private static func isNeutral(_ color: NSColor) -> Bool {
+        guard let rgb = color.usingColorSpace(.sRGB) else { return true }
+        let maxValue = max(rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+        let minValue = min(rgb.redComponent, rgb.greenComponent, rgb.blueComponent)
+        return maxValue - minValue < 0.12
+    }
+}
+
 private struct URLPreview: View {
     let urlString: String
     @State private var title: String?
     @State private var icon: NSImage?
+    @State private var image: NSImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -92,6 +185,18 @@ private struct URLPreview: View {
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .lineLimit(8)
+            // ページの代表画像（og:image）。SNS で共有したときに出るサムネイルと同じもの
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxWidth: .infinity, maxHeight: 300, alignment: .leading)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(Color.primary.opacity(0.08))
+                    )
+            }
             Spacer()
         }
         .padding(16)
@@ -102,6 +207,7 @@ private struct URLPreview: View {
             let result = await LinkTitleCache.shared.metadata(for: url)
             title = result.title
             icon = result.icon
+            image = result.image
         }
     }
 }
@@ -110,28 +216,32 @@ private struct URLPreview: View {
 @MainActor
 final class LinkTitleCache {
     static let shared = LinkTitleCache()
-    private var cache: [URL: (title: String?, icon: NSImage?)] = [:]
+    typealias Metadata = (title: String?, icon: NSImage?, image: NSImage?)
+    private var cache: [URL: Metadata] = [:]
 
-    func metadata(for url: URL) async -> (title: String?, icon: NSImage?) {
+    func metadata(for url: URL) async -> Metadata {
         if let cached = cache[url] { return cached }
         let provider = LPMetadataProvider()
         provider.timeout = 5
         guard let metadata = try? await provider.startFetchingMetadata(for: url) else {
-            return (nil, nil)
+            return (nil, nil, nil)
         }
         let title = metadata.title
-        var icon: NSImage?
-        if let iconProvider = metadata.iconProvider {
-            let data: Data? = await withCheckedContinuation { continuation in
-                _ = iconProvider.loadDataRepresentation(for: UTType.image) { data, _ in
-                    continuation.resume(returning: data)
-                }
-            }
-            icon = data.flatMap { NSImage(data: $0) }
-        }
-        let result = (title, icon)
+        let icon = await Self.loadImage(metadata.iconProvider)
+        let image = await Self.loadImage(metadata.imageProvider)
+        let result = (title, icon, image)
         cache[url] = result
         return result
+    }
+
+    private static func loadImage(_ provider: NSItemProvider?) async -> NSImage? {
+        guard let provider else { return nil }
+        let data: Data? = await withCheckedContinuation { continuation in
+            _ = provider.loadDataRepresentation(for: UTType.image) { data, _ in
+                continuation.resume(returning: data)
+            }
+        }
+        return data.flatMap { NSImage(data: $0) }
     }
 }
 
