@@ -8,7 +8,7 @@ app:
 
 # 前の Kasane が終わりきる前に open すると -600 で失敗するので、終わるのを待つ
 run: app
-	-pkill -x Kasane
+	@pkill -x Kasane || true
 	@for i in $$(seq 50); do pgrep -x Kasane >/dev/null || break; sleep 0.1; done
 	open build/Kasane.app
 
