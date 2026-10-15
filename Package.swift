@@ -30,7 +30,6 @@ let package = Package(
             dependencies: [
                 "KasaneCore",
                 "KasaneStore",
-                .product(name: "GRDB", package: "GRDB.swift"),
             ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
