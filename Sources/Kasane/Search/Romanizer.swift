@@ -14,7 +14,7 @@ enum Romanizer {
         guard TextNormalizer.containsJapanese(text) else { return nil }
         let source = String(text.prefix(maxLength)) as CFString
         let range = CFRange(location: 0, length: CFStringGetLength(source))
-        let locale = CFLocaleCreate(kCFAllocatorDefault, "ja" as CFString)
+        let locale = Locale(identifier: "ja") as CFLocale
         guard let tokenizer = CFStringTokenizerCreate(
             kCFAllocatorDefault, source, range, kCFStringTokenizerUnitWord, locale
         ) else { return nil }
