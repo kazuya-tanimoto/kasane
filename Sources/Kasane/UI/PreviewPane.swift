@@ -6,18 +6,23 @@ import Quartz
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// 右側のプレビュー
+/// 右側のプレビュー。普段は内容だけを大きく出し、⌘I で下に詳細を出す
 struct PreviewPane: View {
     let content: PreviewContent?
+    let showsDetails: Bool
 
     var body: some View {
         if let content {
             VStack(spacing: 0) {
                 mainView(for: content)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Divider().opacity(0.5)
-                InfoTable(content: content)
+                if showsDetails {
+                    Divider().opacity(0.5)
+                    InfoTable(content: content)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeOut(duration: 0.15), value: showsDetails)
             .id(content.item.id)
         } else {
             Color.clear
@@ -56,10 +61,11 @@ private struct TextPreview: View {
     var body: some View {
         ScrollView {
             Text(text.count > Self.maxLength ? String(text.prefix(Self.maxLength)) + "\n…" : text)
-                .font(.system(size: 12.5, design: .monospaced))
+                .font(.system(size: 14))
+                .lineSpacing(5)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(16)
+                .padding(18)
         }
     }
 }
@@ -169,7 +175,8 @@ private struct QuickLookPreview: NSViewRepresentable {
     let url: URL
 
     func makeNSView(context: Context) -> QLPreviewView {
-        let view = QLPreviewView(frame: .zero)
+        // SDK によっては init! で取り込まれるので、型を明示して Optional にならないようにする
+        let view: QLPreviewView = QLPreviewView(frame: .zero, style: .normal)
         view.autostarts = true
         view.previewItem = url as NSURL
         return view
@@ -222,30 +229,49 @@ private struct Placeholder: View {
 private struct InfoTable: View {
     let content: PreviewContent
 
-    var body: some View {
+    /// 表示する項目（ラベルと値）
+    private var entries: [(String, String)] {
         let item = content.item
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
-            row("種類", item.kind.displayName)
-            if let app = item.sourceAppName { row("コピー元", app) }
-            row("コピー日時", Formatters.dateTime.string(from: item.copiedAt))
-            if let text = item.text, item.kind == .text || item.kind == .richText {
-                row("文字数", "\(text.count) 文字 · \(text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count) 行")
-            }
-            if let w = item.pixelWidth, let h = item.pixelHeight {
-                row("サイズ", "\(w) × \(h) px · \(Formatters.bytes.string(fromByteCount: Int64(item.byteSize)))")
-            }
-            row("使用回数", "コピー \(item.copyCount) 回 · 貼り付け \(item.pasteCount) 回")
+        var entries: [(String, String)] = [("種類", item.kind.displayName)]
+        entries.append(("コピー元", item.sourceAppName ?? "不明"))
+        entries.append(("コピー日時", Formatters.dateTime.string(from: item.copiedAt)))
+        if let text = item.text, item.kind == .text || item.kind == .richText {
+            let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+            entries.append(("文字数", "\(text.count) 文字 · \(lines) 行"))
+        } else if let w = item.pixelWidth, let h = item.pixelHeight {
+            entries.append(("サイズ", "\(w) × \(h) px · \(Formatters.bytes.string(fromByteCount: Int64(item.byteSize)))"))
+        } else if item.kind == .url, let host = URL(string: item.text ?? "")?.host() {
+            entries.append(("ドメイン", host))
+        } else if item.kind == .file {
+            entries.append(("件数", "\(content.fileURLs.count) ファイル"))
         }
-        .font(.system(size: 11))
-        .padding(.horizontal, 16)
+        entries.append(("使用回数", "コピー \(item.copyCount) 回 · 貼り付け \(item.pasteCount) 回"))
+        return entries
+    }
+
+    var body: some View {
+        let entries = self.entries
+        // 高さを抑えるため、1行にラベルと値の組を2つ並べる
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+            ForEach(Array(stride(from: 0, to: entries.count, by: 2)), id: \.self) { index in
+                GridRow {
+                    cell(entries[index])
+                    if index + 1 < entries.count {
+                        cell(entries[index + 1])
+                    }
+                }
+            }
+        }
+        .font(.system(size: 11.5))
+        .padding(.horizontal, 18)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func row(_ label: String, _ value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value).lineLimit(1).truncationMode(.middle)
-        }
+    @ViewBuilder
+    private func cell(_ entry: (String, String)) -> some View {
+        Text(entry.0).foregroundStyle(.secondary)
+        Text(entry.1).lineLimit(1).truncationMode(.middle)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

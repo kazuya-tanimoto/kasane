@@ -236,7 +236,7 @@ public final class HistoryStore: @unchecked Sendable {
     }
 
     /// リスト表示と検索に使う全件。並び順は `sort` に従う（ピン留めの扱いは呼び出し側で決める）
-    public func loadIndex(sort: SortOrder) throws -> [(summary: ClipSummary, candidate: SearchCandidate)] {
+    public func loadIndex(sort: HistorySortOrder) throws -> [(summary: ClipSummary, candidate: SearchCandidate)] {
         let order: String
         switch sort {
         case .recent: order = "copiedAt DESC"

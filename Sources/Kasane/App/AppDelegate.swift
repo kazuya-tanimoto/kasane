@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: PasteboardMonitor!
     private var panel: HistoryPanelController!
     private var queue: QueueController!
+    private let queueHUD = QueueHUDController()
     private var statusItem: StatusItemController!
     private var onboarding: OnboardingWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
@@ -36,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.load()
 
         panel = HistoryPanelController(model: model)
+        panel.onVisibilityChange = { [weak self] _ in self?.updateQueueHUD() }
 
         queue = QueueController(store: store, writer: writer)
         queue.isHistoryPanelKey = { [weak self] in self?.panel.isKey ?? false }
@@ -53,6 +55,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 toggleQueue: { [weak self] mode in self?.toggleQueue(mode) },
                 setSortOrder: { [weak self] order in self?.setSortOrder(order) },
                 setHistoryLimit: { [weak self] limit in self?.setHistoryLimit(limit) },
+                setHUDPosition: { [weak self] position in
+                    AppSettings.hudPosition = position
+                    self?.updateQueueHUD()
+                },
                 showOnboarding: { [weak self] in self?.showOnboarding() },
                 clearHistory: { [weak self] in self?.confirmClearHistory() }
             ),
@@ -164,17 +170,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func queueDidChange() {
         let current = queue.queue
         statusItem?.update(queueMode: current?.mode, count: current?.count ?? 0)
-        if let current {
-            let titles = current.itemsInPasteOrder.map { model.summary(id: $0)?.title ?? "?" }
-            model.queueInfo = QueueInfo(mode: current.mode, titles: titles)
-        } else {
-            model.queueInfo = nil
-        }
+        model.updateQueue(current.map { QueueInfo(mode: $0.mode, itemIDs: $0.itemsInPasteOrder) })
+        updateQueueHUD()
+    }
+
+    /// 履歴ウインドウを閉じている間だけ、画面の隅にキュー（スタック）の中身を小さく出す
+    private func updateQueueHUD() {
+        let current = queue.queue
+        let titles = current?.itemsInPasteOrder.map { model.summary(id: $0)?.title ?? "?" } ?? []
+        queueHUD.update(mode: current?.mode, titles: titles, visible: !panel.isVisible)
     }
 
     // MARK: - メニュー
 
-    private func setSortOrder(_ order: SortOrder) {
+    private func setSortOrder(_ order: HistorySortOrder) {
         AppSettings.sortOrder = order
         model.setSortOrder(order)
     }

@@ -148,7 +148,7 @@ public struct Capture: Sendable {
     }
 }
 
-public enum SortOrder: String, Sendable, CaseIterable {
+public enum HistorySortOrder: String, Sendable, CaseIterable {
     /// コピー日時の新しい順
     case recent
     /// 貼り付けた回数の多い順

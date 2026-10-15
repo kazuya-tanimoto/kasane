@@ -8,8 +8,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     struct Actions {
         var showHistory: () -> Void
         var toggleQueue: (QueueMode) -> Void
-        var setSortOrder: (SortOrder) -> Void
+        var setSortOrder: (HistorySortOrder) -> Void
         var setHistoryLimit: (Int) -> Void
+        var setHUDPosition: (HUDPosition) -> Void
         var showOnboarding: () -> Void
         var clearHistory: () -> Void
     }
@@ -72,7 +73,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
 
         let sortMenu = NSMenu()
-        for order in SortOrder.allCases {
+        for order in HistorySortOrder.allCases {
             let entry = item(order.displayName, #selector(selectSortOrder(_:)))
             entry.representedObject = order.rawValue
             entry.state = AppSettings.sortOrder == order ? .on : .off
@@ -93,6 +94,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         limitItem.submenu = limitMenu
         menu.addItem(limitItem)
 
+        menu.addItem(appearanceItem())
+
         let login = item("ログイン時に起動", #selector(toggleLoginItem))
         login.state = LoginItem.isEnabled ? .on : .off
         menu.addItem(login)
@@ -111,6 +114,51 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
+    /// 透明度・ぼかし・小さな表示の位置。設定画面ができるまではメニューで変える
+    private func appearanceItem() -> NSMenuItem {
+        let appearance = AppearanceSettings.shared
+        let menu = NSMenu()
+
+        menu.addItem(header("不透明度"))
+        for percent in stride(from: 30, through: 100, by: 10) {
+            let entry = item("\(percent)%", #selector(selectOpacity(_:)))
+            entry.representedObject = percent
+            entry.state = Int((appearance.opacity * 100).rounded()) == percent ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(header("背景のぼかし"))
+        for level in BlurLevel.allCases {
+            let entry = item(level.displayName, #selector(selectBlur(_:)))
+            entry.representedObject = level.rawValue
+            entry.state = appearance.blur == level ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
+        menu.addItem(.separator())
+        menu.addItem(header("FIFO / LIFO の小さな表示の位置"))
+        for position in HUDPosition.allCases {
+            let entry = item(position.displayName, #selector(selectHUDPosition(_:)))
+            entry.representedObject = position.rawValue
+            entry.state = AppSettings.hudPosition == position ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
+        let appearanceItem = NSMenuItem(title: "見た目", action: nil, keyEquivalent: "")
+        appearanceItem.submenu = menu
+        return appearanceItem
+    }
+
+    private func header(_ title: String) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        return item
+    }
+
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
         item.target = self
@@ -125,8 +173,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleLoginItem() { LoginItem.setEnabled(!LoginItem.isEnabled) }
 
     @objc private func selectSortOrder(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let order = SortOrder(rawValue: raw) else { return }
+        guard let raw = sender.representedObject as? String, let order = HistorySortOrder(rawValue: raw) else { return }
         actions.setSortOrder(order)
+    }
+
+    @objc private func selectOpacity(_ sender: NSMenuItem) {
+        guard let percent = sender.representedObject as? Int else { return }
+        AppearanceSettings.shared.opacity = Double(percent) / 100
+    }
+
+    @objc private func selectBlur(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? Int, let level = BlurLevel(rawValue: raw) else { return }
+        AppearanceSettings.shared.blur = level
+    }
+
+    @objc private func selectHUDPosition(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let position = HUDPosition(rawValue: raw) else { return }
+        actions.setHUDPosition(position)
     }
 
     @objc private func selectHistoryLimit(_ sender: NSMenuItem) {

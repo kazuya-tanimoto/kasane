@@ -12,11 +12,51 @@ enum PasteAction {
     case copyOnly
 }
 
-/// FIFO / LIFO モードの状態（履歴ウインドウの表示用）
+/// FIFO / LIFO モードの状態（履歴ウインドウと隅の小さな表示で使う）
 struct QueueInfo: Equatable {
     var mode: QueueMode
-    /// 貼り付ける順に並べたタイトル
-    var titles: [String]
+    /// 貼り付ける順に並べた項目の ID（同じ項目が2回入ることもある）
+    var itemIDs: [Int64]
+}
+
+/// 種類での絞り込み
+enum KindFilter: String, CaseIterable, Identifiable {
+    case all, text, image, url, file
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .all: return "すべて"
+        case .text: return "テキスト"
+        case .image: return "画像"
+        case .url: return "URL"
+        case .file: return "ファイル"
+        }
+    }
+
+    func matches(_ kind: ClipKind) -> Bool {
+        switch self {
+        case .all: return true
+        case .text: return kind == .text || kind == .richText
+        case .image: return kind == .image
+        case .url: return kind == .url
+        case .file: return kind == .file
+        }
+    }
+}
+
+/// 左のリストに出すもの。FIFO / LIFO 中はキューが既定になる
+enum ListMode {
+    case history
+    case queue
+}
+
+/// キューの1行
+struct QueueRow: Identifiable, Equatable {
+    /// キューの中での位置（0 が次に貼り付けるもの）
+    let id: Int
+    let summary: ClipSummary
 }
 
 /// プレビューに出す内容
@@ -38,22 +78,42 @@ private struct PreviewSource: Sendable {
 @MainActor
 final class HistoryModel: ObservableObject {
     @Published var query = "" {
-        didSet { if query != oldValue { runSearch() } }
+        didSet {
+            guard query != oldValue else { return }
+            // キューの表示中に文字を入れたら、履歴の検索に切り替える
+            if !query.isEmpty, listMode == .queue { listMode = .history }
+            runSearch()
+        }
+    }
+    @Published var kindFilter: KindFilter = .all {
+        didSet { if kindFilter != oldValue { runSearch() } }
     }
     @Published private(set) var pinned: [ClipSummary] = []
     @Published private(set) var others: [ClipSummary] = []
     @Published var selectedID: Int64? {
         didSet { if selectedID != oldValue { loadPreview() } }
     }
+    @Published private(set) var listMode: ListMode = .history {
+        didSet { if listMode != oldValue { loadPreview() } }
+    }
+    @Published private(set) var queueRows: [QueueRow] = []
+    @Published var queueSelection = 0 {
+        didSet { if queueSelection != oldValue { loadPreview() } }
+    }
+    @Published private(set) var queueMode: QueueMode?
     @Published private(set) var preview: PreviewContent?
-    @Published var queueInfo: QueueInfo?
-    @Published private(set) var sortOrder: SortOrder
+    @Published private(set) var sortOrder: HistorySortOrder
+    /// プレビューの下に詳細（種類、コピー元など）を出すか。⌘I で切り替える
+    @Published var showsDetails: Bool {
+        didSet { AppSettings.showsDetails = showsDetails }
+    }
     /// 値が変わるたびに検索欄にフォーカスを当てる
     @Published private(set) var focusToken = 0
     @Published private(set) var isLoaded = false
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
     var onActivate: ((Int64, PasteAction) -> Void)?
+    var onDelete: (([Int64]) -> Void)?
 
     let store: HistoryStore
 
@@ -61,18 +121,30 @@ final class HistoryModel: ObservableObject {
     private var candidates: [SearchCandidate] = []
     private var candidateByID: [Int64: SearchCandidate] = [:]
     private var summaryByID: [Int64: ClipSummary] = [:]
+    private var queueInfo: QueueInfo?
     private var searchTask: Task<Void, Never>?
     private var lastAppliedQuery: String?
     private var previewTask: Task<Void, Never>?
     private let thumbnailCache = NSCache<NSNumber, NSImage>()
 
-    init(store: HistoryStore, sortOrder: SortOrder) {
+    init(store: HistoryStore, sortOrder: HistorySortOrder) {
         self.store = store
         self.sortOrder = sortOrder
+        showsDetails = AppSettings.showsDetails
     }
 
-    /// 表示中の順（ピン留め → それ以外）。キーボードでの移動と ⌘1〜9 に使う
+    /// 履歴の表示中の順（ピン留め → それ以外）。キーボードでの移動と ⌘1〜9 に使う
     var visible: [ClipSummary] { pinned + others }
+
+    var isShowingQueue: Bool { listMode == .queue }
+
+    /// プレビューと操作の対象になっている項目
+    var currentItemID: Int64? {
+        switch listMode {
+        case .history: return selectedID
+        case .queue: return queueRows.indices.contains(queueSelection) ? queueRows[queueSelection].summary.id : nil
+        }
+    }
 
     // MARK: - 索引
 
@@ -115,11 +187,7 @@ final class HistoryModel: ObservableObject {
         rebuild()
     }
 
-    func removeAllUnpinned() {
-        remove(ids: summaries.filter { !$0.isPinned }.map(\.id))
-    }
-
-    func setSortOrder(_ order: SortOrder) {
+    func setSortOrder(_ order: HistorySortOrder) {
         sortOrder = order
         rebuild()
     }
@@ -137,7 +205,38 @@ final class HistoryModel: ObservableObject {
         summaries.sort(by: sortOrder.areInIncreasingOrder)
         summaryByID = Dictionary(summaries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         candidates = summaries.compactMap { candidateByID[$0.id] }
+        rebuildQueueRows()
         runSearch()
+    }
+
+    // MARK: - FIFO / LIFO
+
+    /// キューが変わったときに呼ぶ。モードが始まったら左のリストをキューに切り替える
+    func updateQueue(_ info: QueueInfo?) {
+        let started = queueInfo == nil && info != nil
+        queueInfo = info
+        queueMode = info?.mode
+        rebuildQueueRows()
+        if info == nil {
+            listMode = .history
+        } else if started {
+            listMode = .queue
+            queueSelection = 0
+        }
+        queueSelection = min(queueSelection, max(queueRows.count - 1, 0))
+        if listMode == .queue { loadPreview() }
+    }
+
+    private func rebuildQueueRows() {
+        queueRows = (queueInfo?.itemIDs ?? []).enumerated().compactMap { index, id in
+            summaryByID[id].map { QueueRow(id: index, summary: $0) }
+        }
+    }
+
+    /// Tab: キューと履歴の表示を切り替える（FIFO / LIFO 中だけ）
+    func toggleListMode() {
+        guard queueMode != nil else { return }
+        listMode = listMode == .queue ? .history : .queue
     }
 
     // MARK: - 検索
@@ -160,18 +259,20 @@ final class HistoryModel: ObservableObject {
         }
     }
 
-    private func apply(_ list: [ClipSummary]) {
+    private func apply(_ all: [ClipSummary]) {
+        let list = kindFilter == .all ? all : all.filter { kindFilter.matches($0.kind) }
         let pinnedList = list.filter(\.isPinned)
         let otherList = list.filter { !$0.isPinned }
         pinned = pinnedList
         others = otherList
-        let queryChanged = lastAppliedQuery != query
-        lastAppliedQuery = query
+        let key = query + "\u{0}" + kindFilter.rawValue
+        let queryChanged = lastAppliedQuery != key
+        lastAppliedQuery = key
         // 検索語が同じで、選択中の項目がまだ表示されていればそのままにする
         if !queryChanged, let selectedID, list.contains(where: { $0.id == selectedID }) {
             return
         }
-        // 検索語が変わったら先頭を選び直す
+        // 検索語や絞り込みが変わったら先頭を選び直す
         selectedID = pinnedList.first?.id ?? otherList.first?.id
     }
 
@@ -179,20 +280,27 @@ final class HistoryModel: ObservableObject {
 
     /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選ぶ
     func prepareForShow() {
-        if !query.isEmpty {
-            query = ""
-        } else {
-            selectedID = visible.first?.id
+        if !query.isEmpty { query = "" }
+        if kindFilter != .all { kindFilter = .all }
+        selectedID = visible.first?.id
+        if queueMode != nil {
+            listMode = .queue
+            queueSelection = 0
         }
+        loadPreview()
         focusToken += 1
     }
 
     func moveSelection(_ delta: Int) {
+        if listMode == .queue {
+            guard !queueRows.isEmpty else { return }
+            queueSelection = min(max(queueSelection + delta, 0), queueRows.count - 1)
+            return
+        }
         let list = visible
         guard !list.isEmpty else { return }
         let current = list.firstIndex { $0.id == selectedID } ?? -1
-        let next = min(max(current + delta, 0), list.count - 1)
-        selectedID = list[next].id
+        selectedID = list[min(max(current + delta, 0), list.count - 1)].id
     }
 
     func select(_ id: Int64) {
@@ -200,8 +308,8 @@ final class HistoryModel: ObservableObject {
     }
 
     func activateSelection(_ action: PasteAction) {
-        guard let selectedID else { return }
-        onActivate?(selectedID, action)
+        guard let id = currentItemID else { return }
+        onActivate?(id, action)
     }
 
     func activate(id: Int64, action: PasteAction) {
@@ -210,6 +318,11 @@ final class HistoryModel: ObservableObject {
 
     /// ⌘1〜⌘9: 表示中の上から n 番目
     func activate(index: Int, action: PasteAction) {
+        if listMode == .queue {
+            guard queueRows.indices.contains(index) else { return }
+            onActivate?(queueRows[index].summary.id, action)
+            return
+        }
         let list = visible
         guard list.indices.contains(index) else { return }
         onActivate?(list[index].id, action)
@@ -224,7 +337,7 @@ final class HistoryModel: ObservableObject {
     }
 
     func togglePinSelection() {
-        guard let id = selectedID, let summary = summaryByID[id] else { return }
+        guard let id = currentItemID, let summary = summaryByID[id] else { return }
         let pinned = !summary.isPinned
         try? store.setPinned(pinned, itemID: id)
         if let index = summaries.firstIndex(where: { $0.id == id }) {
@@ -232,35 +345,36 @@ final class HistoryModel: ObservableObject {
             summaries[index].pinnedAt = pinned ? Date() : nil
         }
         rebuild()
-        selectedID = id
+        if listMode == .history { selectedID = id }
     }
 
     func deleteSelection() {
-        guard let id = selectedID else { return }
-        let list = visible
-        let index = list.firstIndex { $0.id == id } ?? 0
+        guard listMode == .history, let id = selectedID else { return }
+        // 検索中は remove(ids:) のあと検索が非同期でやり直されるので、次に選ぶ項目は消す前に決めておく
+        let remaining = visible.filter { $0.id != id }
+        let index = visible.firstIndex { $0.id == id } ?? 0
         try? store.delete(itemID: id)
         remove(ids: [id])
-        let after = visible
-        if !after.isEmpty {
-            selectedID = after[min(index, after.count - 1)].id
-        }
+        selectedID = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
         onDelete?([id])
     }
-
-    var onDelete: (([Int64]) -> Void)?
 
     // MARK: - プレビュー
 
     private func loadPreview() {
         previewTask?.cancel()
-        guard let id = selectedID else {
+        guard let id = currentItemID else {
             preview = nil
             return
         }
+        if preview?.item.id == id { return }
         let store = self.store
         previewTask = Task.detached(priority: .userInitiated) { [weak self] in
-            guard let item = try? store.item(id: id) else { return }
+            guard let item = try? store.item(id: id) else {
+                // 削除済みなど。古いプレビューを残さない
+                await MainActor.run { if self?.currentItemID == id { self?.preview = nil } }
+                return
+            }
             var source = PreviewSource(item: item)
             if item.kind == .image {
                 source.imageData = try? store.data(itemID: id, types: CaptureBuilder.imageTypes)?.data
@@ -271,7 +385,7 @@ final class HistoryModel: ObservableObject {
             guard !Task.isCancelled else { return }
             let loaded = source
             await MainActor.run {
-                guard let self, self.selectedID == id else { return }
+                guard let self, self.currentItemID == id else { return }
                 self.preview = PreviewContent(
                     item: loaded.item,
                     image: loaded.imageData.flatMap { NSImage(data: $0) },
@@ -296,7 +410,7 @@ final class HistoryModel: ObservableObject {
     }
 }
 
-extension SortOrder {
+extension HistorySortOrder {
     var areInIncreasingOrder: (ClipSummary, ClipSummary) -> Bool {
         switch self {
         case .recent:

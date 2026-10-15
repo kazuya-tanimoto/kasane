@@ -16,8 +16,8 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "historyLimit") }
     }
 
-    static var sortOrder: SortOrder {
-        get { SortOrder(rawValue: defaults.string(forKey: "sortOrder") ?? "") ?? .recent }
+    static var sortOrder: HistorySortOrder {
+        get { HistorySortOrder(rawValue: defaults.string(forKey: "sortOrder") ?? "") ?? .recent }
         set { defaults.set(newValue.rawValue, forKey: "sortOrder") }
     }
 
@@ -36,6 +36,31 @@ enum AppSettings {
     static var pasteDelay: TimeInterval {
         let value = defaults.double(forKey: "pasteDelay")
         return value > 0 ? value : 0.05
+    }
+
+    /// プレビューの下に詳細を出すか（⌘I）
+    static var showsDetails: Bool {
+        get { defaults.bool(forKey: "showsDetails") }
+        set { defaults.set(newValue, forKey: "showsDetails") }
+    }
+
+    /// 履歴ウインドウの不透明度（0.3〜1.0）。背景のぼかしの上に重ねる色の濃さ
+    static var panelOpacity: Double {
+        get {
+            let value = defaults.object(forKey: "panelOpacity") as? Double ?? 0.7
+            return min(max(value, 0.3), 1.0)
+        }
+        set { defaults.set(newValue, forKey: "panelOpacity") }
+    }
+
+    static var blurLevel: BlurLevel {
+        get { BlurLevel(rawValue: defaults.integer(forKey: "blurLevel") - 1) ?? .standard }
+        set { defaults.set(newValue.rawValue + 1, forKey: "blurLevel") }
+    }
+
+    static var hudPosition: HUDPosition {
+        get { HUDPosition(rawValue: defaults.string(forKey: "hudPosition") ?? "") ?? .topRight }
+        set { defaults.set(newValue.rawValue, forKey: "hudPosition") }
     }
 
     static var hasCompletedOnboarding: Bool {

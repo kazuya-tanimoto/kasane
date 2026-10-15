@@ -1,31 +1,49 @@
 import AppKit
+import KasaneCore
 import KasaneStore
 import SwiftUI
 
+/// 履歴ウインドウ（デザインモック「C案 改訂版」）
+///
+/// - 1行目: 検索欄
+/// - 2行目: モード（FIFO/LIFO 中のみ）、種類の絞り込み、操作ボタン、詳細の切り替え
+/// - 本体: 左に履歴かキューのリスト、右に大きなプレビュー（⌘I で詳細）
 struct HistoryView: View {
     @ObservedObject var model: HistoryModel
+    @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
+
+    static let cornerRadius: CGFloat = 20
 
     var body: some View {
         VStack(spacing: 0) {
             searchBar
-            if let info = model.queueInfo {
-                QueueBanner(info: info)
-            }
-            Divider().opacity(0.5)
-            HStack(spacing: 0) {
-                ItemListView(model: model)
-                    .frame(width: 330)
-                Divider().opacity(0.5)
-                PreviewPane(content: model.preview)
+            Toolbar(model: model)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+            HStack(spacing: 12) {
+                Group {
+                    if model.isShowingQueue {
+                        QueueListView(model: model)
+                    } else {
+                        ItemListView(model: model)
+                    }
+                }
+                .frame(width: 350)
+                PreviewPane(content: model.preview, showsDetails: model.showsDetails)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-            Divider().opacity(0.5)
-            FooterHints()
+            .padding(.horizontal, 12)
+            .padding(.bottom, 12)
         }
         .frame(width: HistoryPanelController.size.width, height: HistoryPanelController.size.height)
-        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(PanelBackground(appearance: appearance, cornerRadius: Self.cornerRadius))
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
@@ -33,56 +51,112 @@ struct HistoryView: View {
     }
 
     private var searchBar: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField("クリップボードの履歴を検索", text: $model.query)
-                .textFieldStyle(.plain)
-                .font(.system(size: 20))
-                .focused($searchFocused)
-            if model.sortOrder == .mostPasted {
-                Label("貼り付け回数順", systemImage: "arrow.up.arrow.down")
-                    .font(.caption)
+            TextField(
+                model.isShowingQueue ? "入力すると履歴を検索します" : "履歴を検索（例: kaigi、otsu tani）",
+                text: $model.query
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 19))
+            .focused($searchFocused)
+            if !model.isShowingQueue {
+                Text("\(model.pinned.count + model.others.count) 件")
+                    .font(.system(size: 12))
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-    }
-}
-
-/// FIFO / LIFO モード中に、キューの中身と次に貼り付ける項目を出す
-private struct QueueBanner: View {
-    let info: QueueInfo
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Text(info.mode == .fifo ? "FIFO" : "LIFO")
-                .font(.caption.weight(.bold))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2)
-                .background(Capsule().fill(Color.accentColor.opacity(0.85)))
-                .foregroundStyle(.white)
-            if let next = info.titles.first {
-                Text("次: \(next)")
-                    .lineLimit(1)
-                    .font(.callout)
-                Spacer()
-                Text("残り \(info.titles.count) 件")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("コピーするとここに積まれます。⌘V で順に貼り付けます")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-        }
-        .padding(.horizontal, 18)
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
         .padding(.bottom, 10)
     }
 }
+
+// MARK: - ツールバー（1行）
+
+private struct Toolbar: View {
+    @ObservedObject var model: HistoryModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let mode = model.queueMode {
+                Button {
+                    model.toggleListMode()
+                } label: {
+                    Text("\(mode == .fifo ? "FIFO" : "LIFO") \(model.queueRows.count)")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .buttonStyle(ChipStyle(isOn: model.isShowingQueue, onColor: .orange))
+                .help("Tab でキューと履歴を切り替え")
+                Divider().frame(height: 18).padding(.horizontal, 4)
+            }
+            if model.isShowingQueue {
+                Text("⌘V で上から順に貼り付け · Tab で履歴に切り替え")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(KindFilter.allCases) { filter in
+                    Button(filter.label) { model.kindFilter = filter }
+                        .buttonStyle(ChipStyle(isOn: model.kindFilter == filter, onColor: .primary))
+                }
+            }
+            Spacer(minLength: 8)
+            Button("ペースト ⏎") { model.activateSelection(.paste) }
+                .buttonStyle(ActionStyle(isPrimary: true))
+            Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
+                .buttonStyle(ActionStyle(isPrimary: false))
+            Button("コピー ⌥⏎") { model.activateSelection(.copyOnly) }
+                .buttonStyle(ActionStyle(isPrimary: false))
+            Button {
+                model.showsDetails.toggle()
+            } label: {
+                Label("⌘I", systemImage: "info.circle")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(ActionStyle(isPrimary: false, isOn: model.showsDetails))
+            .help("詳細を表示（⌘I）")
+        }
+    }
+}
+
+/// 絞り込みやモードの丸いボタン
+private struct ChipStyle: ButtonStyle {
+    var isOn: Bool
+    var onColor: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .foregroundStyle(isOn ? (onColor == .primary ? Color(nsColor: .windowBackgroundColor) : .white) : .primary)
+            .background(Capsule().fill(isOn ? onColor : Color.primary.opacity(0.08)))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// ペーストなどの操作ボタン
+private struct ActionStyle: ButtonStyle {
+    var isPrimary: Bool
+    var isOn = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .foregroundStyle(isPrimary ? .white : (isOn ? Color(nsColor: .windowBackgroundColor) : .primary))
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isPrimary ? Color.orange : (isOn ? Color.primary : Color.primary.opacity(0.08)))
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+// MARK: - 履歴のリスト
 
 private struct ItemListView: View {
     @ObservedObject var model: HistoryModel
@@ -90,7 +164,7 @@ private struct ItemListView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 4) {
                     if !model.pinned.isEmpty {
                         SectionHeader(title: "ピン留め")
                         ForEach(model.pinned) { item in
@@ -104,10 +178,14 @@ private struct ItemListView: View {
                         }
                     }
                     if model.pinned.isEmpty && model.others.isEmpty {
-                        EmptyState(isSearching: !model.query.isEmpty, isLoaded: model.isLoaded)
+                        EmptyState(
+                            text: !model.query.isEmpty || model.kindFilter != .all
+                                ? "一致する項目はありません"
+                                : (model.isLoaded ? "まだ履歴がありません" : "読み込み中…")
+                        )
                     }
                 }
-                .padding(8)
+                .padding(2)
             }
             .scrollIndicators(.automatic)
             .onChange(of: model.selectedID) { _, id in
@@ -135,33 +213,110 @@ private struct ItemListView: View {
     }
 }
 
+// MARK: - FIFO / LIFO のキュー
+
+private struct QueueListView: View {
+    @ObservedObject var model: HistoryModel
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 4) {
+                    SectionHeader(title: "\(model.queueMode == .lifo ? "LIFO" : "FIFO") のキュー（貼り付ける順）")
+                    ForEach(model.queueRows) { row in
+                        QueueRowView(row: row, isSelected: model.queueSelection == row.id)
+                            .id(row.id)
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.queueSelection = row.id }
+                    }
+                    if model.queueRows.isEmpty {
+                        EmptyState(text: "まだ何もありません。\nコピーすると、ここに順番に積まれます。")
+                    }
+                }
+                .padding(2)
+            }
+            .onChange(of: model.queueSelection) { _, index in
+                proxy.scrollTo(index)
+            }
+        }
+    }
+}
+
+private struct QueueRowView: View {
+    let row: QueueRow
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // 貼り付ける順番。10 件を超えると 2 桁以上になるので、丸ではなく横に伸びる札にする
+            Text("\(row.id + 1)")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .padding(.horizontal, 7)
+                .frame(minWidth: 30, minHeight: 26)
+                .foregroundStyle(row.id == 0 ? Color.white : Color.secondary)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(row.id == 0 ? Color.orange : Color.primary.opacity(0.08))
+                )
+                .fixedSize()
+            VStack(alignment: .leading, spacing: 3) {
+                Text(row.summary.title.isEmpty ? " " : row.summary.title)
+                    .font(.system(size: 13))
+                    .lineLimit(2)
+                HStack(spacing: 6) {
+                    Text(row.summary.kind.displayName)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(row.summary.kind.tint)
+                    Text(row.id == 0 ? "次の ⌘V で貼り付け" : "\(row.id + 1) 番目")
+                        .foregroundStyle(.secondary)
+                }
+                .font(.system(size: 11))
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(SelectionBackground(isSelected: isSelected))
+    }
+}
+
+// MARK: - 行
+
 private struct SectionHeader: View {
     let title: String
 
     var body: some View {
         Text(title)
-            .font(.caption.weight(.semibold))
+            .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(.secondary)
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 8)
             .padding(.top, 6)
             .padding(.bottom, 2)
     }
 }
 
 private struct EmptyState: View {
-    let isSearching: Bool
-    let isLoaded: Bool
+    let text: String
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: isSearching ? "magnifyingglass" : "doc.on.clipboard")
-                .font(.system(size: 28))
-                .foregroundStyle(.tertiary)
-            Text(isSearching ? "一致する項目はありません" : (isLoaded ? "まだ履歴がありません" : "読み込み中…"))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 80)
+        Text(text)
+            .font(.system(size: 13))
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 60)
+    }
+}
+
+private struct SelectionBackground: View {
+    let isSelected: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(isSelected ? (colorScheme == .dark ? Color.white.opacity(0.13) : Color.white) : Color.clear)
+            .shadow(color: isSelected && colorScheme == .light ? .black.opacity(0.10) : .clear, radius: 5, y: 2)
     }
 }
 
@@ -172,37 +327,37 @@ private struct ItemRow: View {
     let model: HistoryModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(alignment: .top, spacing: 10) {
             ItemIcon(item: item, model: model)
-                .frame(width: 26, height: 26)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 44, height: 44)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.title.isEmpty ? " " : item.title)
                     .font(.system(size: 13))
-                    .lineLimit(1)
+                    .lineLimit(2)
                     .truncationMode(.tail)
-                Text(subtitle)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 4)
-            if item.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-            }
-            if let shortcut {
-                Text("⌘\(shortcut)")
-                    .font(.system(size: 11, design: .rounded))
-                    .foregroundStyle(.tertiary)
+                HStack(spacing: 6) {
+                    Text(item.kind.displayName)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(item.kind.tint)
+                    Text(subtitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    if item.isPinned {
+                        Image(systemName: "pin.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    if let shortcut {
+                        Text("⌘\(shortcut)")
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .font(.system(size: 11))
             }
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .fill(isSelected ? Color.accentColor.opacity(0.28) : Color.clear)
-        )
+        .padding(.vertical, 9)
+        .background(SelectionBackground(isSelected: isSelected))
     }
 
     private var subtitle: String {
@@ -214,71 +369,40 @@ private struct ItemRow: View {
     }
 }
 
+/// 種類の色の四角。画像はサムネイル、それ以外は種類のアイコン（右下にコピー元のアプリ）
 private struct ItemIcon: View {
     let item: ClipSummary
     let model: HistoryModel
     @State private var thumbnail: NSImage?
 
     var body: some View {
-        Group {
+        ZStack(alignment: .bottomTrailing) {
             if item.kind == .image, let thumbnail {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
-            } else if let icon = AppIconCache.icon(bundleID: item.sourceBundleID) {
+                    .frame(width: 44, height: 44)
+                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            } else {
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(item.kind.tint.opacity(0.18))
+                    .overlay {
+                        Image(systemName: item.kind.symbolName)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(item.kind.tint)
+                    }
+            }
+            if let icon = AppIconCache.icon(bundleID: item.sourceBundleID) {
                 Image(nsImage: icon)
                     .resizable()
-                    .overlay(alignment: .bottomTrailing) {
-                        Image(systemName: item.kind.symbolName)
-                            .font(.system(size: 8, weight: .bold))
-                            .padding(2)
-                            .background(Circle().fill(.regularMaterial))
-                            .offset(x: 3, y: 3)
-                    }
-            } else {
-                Image(systemName: item.kind.symbolName)
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(width: 18, height: 18)
+                    .offset(x: 4, y: 4)
             }
         }
         .task(id: item.id) {
             if item.kind == .image {
                 thumbnail = await model.thumbnail(for: item.id)
             }
-        }
-    }
-}
-
-private struct FooterHints: View {
-    var body: some View {
-        HStack(spacing: 14) {
-            hint("⏎", "ペースト")
-            hint("⇧⏎", "書式なし")
-            hint("⌥⏎", "コピーのみ")
-            hint("⌘1–9", "直接ペースト")
-            hint("⌘P", "ピン留め")
-            hint("⌘⌫", "削除")
-            Spacer()
-            Text("Kasane")
-                .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundStyle(.tertiary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-    }
-
-    private func hint(_ key: String, _ label: String) -> some View {
-        HStack(spacing: 4) {
-            Text(key)
-                .font(.system(size: 11, weight: .medium, design: .rounded))
-                .padding(.horizontal, 5)
-                .padding(.vertical, 1)
-                .background(RoundedRectangle(cornerRadius: 4).fill(.quaternary))
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
         }
     }
 }
@@ -301,6 +425,17 @@ extension ClipKind {
         case .url: return "URL"
         case .image: return "画像"
         case .file: return "ファイル"
+        }
+    }
+
+    /// 種類ごとの色（モックと同じ）
+    var tint: Color {
+        switch self {
+        case .text: return Color(red: 0.23, green: 0.51, blue: 0.96)
+        case .richText: return Color(red: 0.55, green: 0.36, blue: 0.96)
+        case .url: return Color(red: 0.08, green: 0.72, blue: 0.65)
+        case .image: return Color(red: 0.98, green: 0.45, blue: 0.09)
+        case .file: return Color(red: 0.58, green: 0.64, blue: 0.72)
         }
     }
 }

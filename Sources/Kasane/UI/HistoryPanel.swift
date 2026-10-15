@@ -29,7 +29,7 @@ final class HistoryPanel: NSPanel {
 
 @MainActor
 final class HistoryPanelController: NSObject, NSWindowDelegate {
-    static let size = NSSize(width: 800, height: 500)
+    static let size = NSSize(width: 880, height: 560)
 
     private let panel: HistoryPanel
     private let model: HistoryModel
@@ -38,13 +38,16 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     init(model: HistoryModel) {
         self.model = model
-        panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: Self.size))
+        panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.size))
         super.init()
-        let hosting = NSHostingView(rootView: HistoryView(model: model))
-        hosting.frame = NSRect(origin: .zero, size: Self.size)
+        let hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
+        hosting.frame = NSRect(origin: .zero, size: HistoryPanelController.size)
         panel.contentView = hosting
         panel.delegate = self
     }
+
+    /// 表示・非表示が変わったとき（FIFO / LIFO 中の小さな表示の出し入れに使う）
+    var onVisibilityChange: ((Bool) -> Void)?
 
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
@@ -60,6 +63,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.alphaValue = 0
         panel.makeKeyAndOrderFront(nil)
         installKeyMonitor()
+        onVisibilityChange?(true)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -84,6 +88,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
+                self.onVisibilityChange?(false)
                 completion?()
             }
         })
@@ -153,6 +158,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 model.activateSelection(.paste)
             }
             return true
+        case 48 where model.queueMode != nil && flags.isDisjoint(with: [.command, .option, .control]): // Tab: キューと履歴の切り替え（FIFO / LIFO 中だけ）
+            model.toggleListMode()
+            return true
         case 53: // Esc: 検索語があれば消し、なければ閉じる
             if model.query.isEmpty {
                 hide()
@@ -169,6 +177,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         if flags.contains(.command), let characters = event.charactersIgnoringModifiers?.lowercased() {
             if let number = Int(characters), (1...9).contains(number) {
                 model.activate(index: number - 1, action: .paste)
+                return true
+            }
+            if characters == "i" {
+                model.showsDetails.toggle()
                 return true
             }
             if characters == "p" {
