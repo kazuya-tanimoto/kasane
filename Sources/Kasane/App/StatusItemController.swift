@@ -121,11 +121,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// 透明度・ぼかし・小さな表示の位置と文字の大きさ。設定画面ができるまではメニューで変える
+    /// アクセントカラー・透明度・ぼかし・小さな表示の位置と文字の大きさ。設定画面ができるまではメニューで変える
     private func appearanceItem() -> NSMenuItem {
         let appearance = AppearanceSettings.shared
         let menu = NSMenu()
 
+        menu.addItem(header("アクセントカラー"))
+        for accent in AccentColor.allCases {
+            let title = accent == .default ? "\(accent.displayName)（標準）" : accent.displayName
+            let entry = item(title, #selector(selectAccent(_:)))
+            entry.representedObject = accent.rawValue
+            entry.state = appearance.accent == accent ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
+        menu.addItem(.separator())
         menu.addItem(header("不透明度"))
         for percent in stride(from: 10, through: 100, by: 10) {
             let entry = item("\(percent)%", #selector(selectOpacity(_:)))
@@ -215,6 +226,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func selectBlur(_ sender: NSMenuItem) {
         guard let radius = sender.representedObject as? Int else { return }
         AppearanceSettings.shared.blurRadius = radius
+    }
+
+    @objc private func selectAccent(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let accent = AccentColor(rawValue: raw) else { return }
+        AppearanceSettings.shared.accent = accent
     }
 
     @objc private func selectHUDFontSize(_ sender: NSMenuItem) {

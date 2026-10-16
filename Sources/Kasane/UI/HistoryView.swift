@@ -44,6 +44,7 @@ struct HistoryView: View {
             minHeight: HistoryPanelController.minSize.height, maxHeight: .infinity
         )
         .background(PanelBackground(appearance: appearance))
+        .environment(\.kasaneAccent, appearance.accent)
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
@@ -94,6 +95,7 @@ struct WindowDragArea: NSViewRepresentable {
 
 private struct Toolbar: View {
     @ObservedObject var model: HistoryModel
+    @Environment(\.kasaneAccent) private var accent
 
     var body: some View {
         HStack(spacing: 6) {
@@ -104,7 +106,7 @@ private struct Toolbar: View {
                     Text("\(mode == .fifo ? "FIFO" : "LIFO") \(model.queueRows.count)")
                         .font(.system(size: 12, weight: .bold))
                 }
-                .buttonStyle(ChipStyle(isOn: model.isShowingQueue, onColor: .orange))
+                .buttonStyle(ChipStyle(isOn: model.isShowingQueue, onColor: accent.color, onText: accent.foreground))
                 .help("Tab でキューと履歴を切り替え")
                 Divider().frame(height: 18).padding(.horizontal, 4)
             }
@@ -115,25 +117,28 @@ private struct Toolbar: View {
             } else {
                 ForEach(KindFilter.allCases) { filter in
                     Button(filter.label) { model.kindFilter = filter }
-                        .buttonStyle(ChipStyle(isOn: model.kindFilter == filter, onColor: .primary))
+                        .buttonStyle(ChipStyle(
+                            isOn: model.kindFilter == filter,
+                            onColor: .primary, onText: Color(nsColor: .windowBackgroundColor)
+                        ))
                 }
             }
             // 空いている所をつかんでもウインドウを動かせる
             WindowDragArea()
                 .frame(minWidth: 8, maxWidth: .infinity, minHeight: 28, maxHeight: 28)
             Button("ペースト ⏎") { model.activateSelection(.paste) }
-                .buttonStyle(ActionStyle(isPrimary: true))
+                .buttonStyle(ActionStyle(isPrimary: true, accent: accent))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
-                .buttonStyle(ActionStyle(isPrimary: false))
+                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
             Button("コピー ⌥⏎") { model.activateSelection(.copyOnly) }
-                .buttonStyle(ActionStyle(isPrimary: false))
+                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
             Button {
                 model.showsDetails.toggle()
             } label: {
                 Label("⌘I", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(ActionStyle(isPrimary: false, isOn: model.showsDetails))
+            .buttonStyle(ActionStyle(isPrimary: false, isOn: model.showsDetails, accent: accent))
             .help("詳細を表示（⌘I）")
         }
     }
@@ -143,13 +148,14 @@ private struct Toolbar: View {
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
     var onColor: Color
+    var onText: Color
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? (onColor == .primary ? Color(nsColor: .windowBackgroundColor) : .white) : .primary)
+            .foregroundStyle(isOn ? onText : .primary)
             .background(Capsule().fill(isOn ? onColor : Color.primary.opacity(0.08)))
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
@@ -159,16 +165,17 @@ private struct ChipStyle: ButtonStyle {
 private struct ActionStyle: ButtonStyle {
     var isPrimary: Bool
     var isOn = false
+    var accent: AccentColor
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isPrimary ? .white : (isOn ? Color(nsColor: .windowBackgroundColor) : .primary))
+            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color(nsColor: .windowBackgroundColor) : .primary))
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isPrimary ? Color.orange : (isOn ? Color.primary : Color.primary.opacity(0.08)))
+                    .fill(isPrimary ? accent.color : (isOn ? Color.primary : Color.primary.opacity(0.08)))
             )
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
@@ -263,6 +270,7 @@ private struct QueueListView: View {
 private struct QueueRowView: View {
     let row: QueueRow
     let isSelected: Bool
+    @Environment(\.kasaneAccent) private var accent
 
     var body: some View {
         HStack(spacing: 10) {
@@ -272,10 +280,10 @@ private struct QueueRowView: View {
                 .monospacedDigit()
                 .padding(.horizontal, 7)
                 .frame(minWidth: 30, minHeight: 26)
-                .foregroundStyle(row.id == 0 ? Color.white : Color.secondary)
+                .foregroundStyle(row.id == 0 ? accent.foreground : Color.secondary)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(row.id == 0 ? Color.orange : Color.primary.opacity(0.08))
+                        .fill(row.id == 0 ? accent.color : Color.primary.opacity(0.08))
                 )
                 .fixedSize()
             VStack(alignment: .leading, spacing: 3) {

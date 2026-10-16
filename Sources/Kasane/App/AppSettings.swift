@@ -62,6 +62,11 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "blurRadius") }
     }
 
+    static var accentColor: AccentColor {
+        get { AccentColor(rawValue: defaults.string(forKey: "accentColor") ?? "") ?? .default }
+        set { defaults.set(newValue.rawValue, forKey: "accentColor") }
+    }
+
     /// FIFO / LIFO 中の小さな表示の文字の大きさ（pt）
     static var hudFontSize: Double {
         get {

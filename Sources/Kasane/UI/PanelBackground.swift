@@ -31,6 +31,9 @@ final class AppearanceSettings: ObservableObject {
     @Published var opacity: Double = AppSettings.panelOpacity {
         didSet { AppSettings.panelOpacity = opacity }
     }
+    @Published var accent: AccentColor = AppSettings.accentColor {
+        didSet { AppSettings.accentColor = accent }
+    }
     /// 背景のぼかしの半径（0 でぼかしなし）。色の濃さは変えず、ぼかしだけを変える
     @Published var blurRadius: Int = AppSettings.blurRadius {
         didSet { AppSettings.blurRadius = blurRadius }
