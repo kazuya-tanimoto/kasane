@@ -10,7 +10,7 @@ enum AccentColor: String, CaseIterable {
     // 設定に並べる順
     case matcha, seiji, ai, edoMurasaki, enji, rikyuNezumi, system, mono
 
-    static let `default` = AccentColor.seiji
+    static let `default` = AccentColor.ai
 
     var displayName: String {
         switch self {
