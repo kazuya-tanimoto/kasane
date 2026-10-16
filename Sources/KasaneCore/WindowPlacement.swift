@@ -1,4 +1,8 @@
 import Foundation
+#if canImport(CoreGraphics)
+// macOS では CGRect の width や midX は CoreGraphics にあり、Foundation だけでは見えない
+import CoreGraphics
+#endif
 
 /// 履歴ウインドウを置く位置と大きさの計算。AppKit に依存しないので Linux でもテストできる
 public enum WindowPlacement {
