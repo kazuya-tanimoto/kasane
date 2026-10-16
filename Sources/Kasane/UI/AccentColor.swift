@@ -47,15 +47,37 @@ enum AccentColor: String, CaseIterable {
     }
 
     /// 背景の上に文字としてアクセントカラーを使うときの色。
-    /// ダークでは暗い背景に沈む色（藍・江戸紫・臙脂など）があるので、白を 40% 混ぜて明るくする
+    /// ダークでは暗い背景に沈む色（藍・江戸紫・臙脂など）があるので、白を 40% 混ぜて明るくする。
+    /// ライトでは明るめの色（青磁・抹茶など）がウインドウの灰色の背景で読みにくいので、
+    /// コントラストが 4.5 以上になるまで黒を混ぜる
     var text: Color {
         let palette = palette
         return Color(nsColor: NSColor(name: nil) { appearance in
             let base = palette.map { NSColor(hex: Self.isDark(appearance) ? $0.dark : $0.light) }
                 ?? (NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue)
-            guard Self.isDark(appearance) else { return base }
-            return base.blended(withFraction: 0.4, of: .white) ?? base
+            if Self.isDark(appearance) {
+                return base.blended(withFraction: 0.4, of: .white) ?? base
+            }
+            // ライトのウインドウの背景（#ECECEC）の相対輝度
+            let backgroundLuminance = 0.84
+            var color = base
+            var fraction = 0.0
+            while (backgroundLuminance + 0.05) / (Self.luminance(color) + 0.05) < 4.5, fraction < 0.6 {
+                fraction += 0.05
+                color = base.blended(withFraction: fraction, of: .black) ?? base
+            }
+            return color
         })
+    }
+
+    /// WCAG の相対輝度
+    private static func luminance(_ color: NSColor) -> Double {
+        let c = color.usingColorSpace(.sRGB) ?? color
+        func linear(_ v: CGFloat) -> Double {
+            let v = Double(v)
+            return v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
+        }
+        return 0.2126 * linear(c.redComponent) + 0.7152 * linear(c.greenComponent) + 0.0722 * linear(c.blueComponent)
     }
 
     /// アクセントカラーの上に載せる文字の色

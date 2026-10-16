@@ -1,16 +1,16 @@
+#if canImport(Darwin)
 import CoreFoundation
 import Foundation
-import KasaneCore
 
 /// 日本語のテキストをローマ字の読みにする（`kaigi` で「会議」を検索できるようにするため）。
 ///
 /// macOS 標準の CFStringTokenizer のラテン文字変換を使う。辞書を同梱しなくてよいのが利点。
-/// 固有名詞は読みを誤ることがある。
-enum Romanizer {
+/// 固有名詞は読みを誤ることがある。macOS の機能なので、Linux では使えない
+public enum Romanizer {
     /// 長いテキストは先頭だけを変換して、保存時の負荷を抑える
-    static let maxLength = 2_000
+    public static let maxLength = 2_000
 
-    static func romaji(for text: String) -> String? {
+    public static func romaji(for text: String) -> String? {
         guard TextNormalizer.containsJapanese(text) else { return nil }
         let source = String(text.prefix(maxLength)) as CFString
         let range = CFRange(location: 0, length: CFStringGetLength(source))
@@ -35,3 +35,4 @@ enum Romanizer {
         return result.isEmpty ? nil : result
     }
 }
+#endif
