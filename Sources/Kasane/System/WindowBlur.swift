@@ -4,7 +4,7 @@ import AppKit
 ///
 /// macOS の公開 API には半径を指定する方法がない（NSVisualEffectView は素材を選ぶだけで、色の濃さも一緒に変わる）。
 /// そこで Ghostty や iTerm2 と同じく、非公開の CGSSetWindowBackgroundBlurRadius を実行時に探して使う。
-/// 将来の macOS で見つからなくなったら `isAvailable` が false になり、`PanelBackground` はシステムの素材に戻す
+/// 将来の macOS で見つからなくなったり呼び出しに失敗したりしたら、`PanelBackground` はシステムの素材に戻す
 @MainActor
 enum WindowBlur {
     private typealias ConnectionFunction = @convention(c) () -> Int32
@@ -29,7 +29,12 @@ enum WindowBlur {
     static func apply(radius: Int, to window: NSWindow) -> Bool {
         guard let functions, window.windowNumber > 0 else { return false }
         let radius = Int32(min(max(radius, 0), BlurPreset.maxRadius))
-        return functions.setRadius(functions.connection(), window.windowNumber, radius) == 0
+        let status = functions.setRadius(functions.connection(), window.windowNumber, radius)
+        if status != 0 {
+            NSLog("Kasane: CGSSetWindowBackgroundBlurRadius failed (%d)", status)
+        }
+        AppearanceSettings.shared.blurAPIDidRespond(succeeded: status == 0)
+        return status == 0
     }
 }
 
@@ -45,7 +50,11 @@ extension NSWindow {
         for type in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
             standardWindowButton(type)?.isHidden = true
         }
-        // タイトルバーの領域がクリックやダブルクリック（拡大）を横取りしないようにする
-        standardWindowButton(.closeButton)?.superview?.superview?.isHidden = true
+        // タイトルバーの領域がクリックやダブルクリック（拡大）を横取りしないようにする。
+        // 内部の View 構成に頼っているので、将来の macOS で別の View を隠さないよう名前を確かめる
+        if let container = standardWindowButton(.closeButton)?.superview?.superview,
+           String(describing: type(of: container)).contains("Titlebar") {
+            container.isHidden = true
+        }
     }
 }

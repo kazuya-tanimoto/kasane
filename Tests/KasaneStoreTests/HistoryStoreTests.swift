@@ -55,6 +55,8 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(b.item.id, a.item.id)
         XCTAssertEqual(c.item.id, a.item.id)
         XCTAssertEqual(c.item.copyCount, 3)
+        // 貼り付けるのは最後にコピーした形
+        XCTAssertEqual(try store.item(id: a.item.id!)?.text, "\n  そういうことですか。\r\n\n")
         XCTAssertEqual(try store.count(), 1)
     }
 

@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import KasaneCore
 import SwiftUI
 
 /// 履歴ウインドウ。Spotlight や Raycast と同じく、Kasane 自身はアクティブにならないパネルにする。
@@ -14,8 +15,9 @@ final class HistoryPanel: NSPanel {
             defer: false
         )
         hideTitlebar()
+        // 動かせるのは検索欄の周りと操作ボタンの横（`WindowDragArea`）だけ。
+        // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
-        isMovableByWindowBackground = true
         minSize = HistoryPanelController.minSize
         isFloatingPanel = true
         level = .floating
@@ -116,20 +118,16 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private func position() {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-        guard let frame = screen?.visibleFrame else { return }
-        let saved = AppSettings.historyWindowSize ?? Self.defaultSize
-        let size = NSSize(
-            width: min(max(saved.width, Self.minSize.width), frame.width),
-            height: min(max(saved.height, Self.minSize.height), frame.height)
-        )
-        let offset = AppSettings.historyWindowOffset ?? NSPoint(x: 0, y: frame.height * 0.06)
-        // 画面からはみ出さないようにする
-        let origin = NSPoint(
-            x: min(max(frame.midX + offset.x - size.width / 2, frame.minX), frame.maxX - size.width),
-            y: min(max(frame.midY + offset.y - size.height / 2, frame.minY), frame.maxY - size.height)
+        guard let visible = screen?.visibleFrame else { return }
+        let frame = WindowPlacement.frame(
+            in: visible,
+            savedSize: AppSettings.historyWindowSize,
+            savedOffset: AppSettings.historyWindowOffset,
+            defaultSize: Self.defaultSize,
+            minSize: Self.minSize
         )
         isPositioning = true
-        panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        panel.setFrame(frame, display: false)
         isPositioning = false
     }
 
@@ -146,7 +144,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         guard !isPositioning, panel.isVisible, !isHiding, let screen = panel.screen?.visibleFrame else { return }
         let frame = panel.frame
         AppSettings.historyWindowSize = frame.size
-        AppSettings.historyWindowOffset = NSPoint(x: frame.midX - screen.midX, y: frame.midY - screen.midY)
+        AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
     }
 
     func windowDidMove(_ notification: Notification) {

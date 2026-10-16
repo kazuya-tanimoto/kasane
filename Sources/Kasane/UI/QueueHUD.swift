@@ -56,6 +56,11 @@ final class QueueHUDController {
         position()
         panel.orderFrontRegardless()
         WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+        // 件数や文字の大きさの変更は次の描画で反映されるので、反映後の大きさでもう一度置き直す
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.panel.isVisible else { return }
+            self.position()
+        }
     }
 
     private func position() {
@@ -111,7 +116,7 @@ struct QueueHUDView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
                     Text("\(index + 1)")
                         .font(.system(size: size, weight: .bold, design: .rounded))
-                        .foregroundStyle(index == 0 ? appearance.accent.color : Color.secondary)
+                        .foregroundStyle(index == 0 ? Color.primary : Color.secondary)
                         .frame(width: 14 * scale, alignment: .leading)
                     Text(title)
                         .font(.system(size: size, weight: index == 0 ? .semibold : .regular))

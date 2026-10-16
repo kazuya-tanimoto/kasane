@@ -147,21 +147,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(header(WindowBlur.isAvailable ? "背景のぼかし（半径）" : "背景のぼかし"))
+        let canSetRadius = !appearance.usesSystemMaterial
+        menu.addItem(header(canSetRadius ? "背景のぼかし（半径）" : "背景のぼかし"))
         for radius in BlurPreset.radii {
-            // 半径を指定できない macOS では、ぼかしあり / なしだけになる
-            if !WindowBlur.isAvailable && radius != 0 && radius != BlurPreset.defaultRadius { continue }
+            // 半径を指定できないときは、ぼかしあり / なしだけになる
+            if !canSetRadius && radius != 0 && radius != BlurPreset.defaultRadius { continue }
             let title: String
             if radius == 0 {
                 title = "なし"
-            } else if !WindowBlur.isAvailable {
+            } else if !canSetRadius {
                 title = "あり"
             } else {
                 title = radius == BlurPreset.defaultRadius ? "\(radius)（標準）" : "\(radius)"
             }
             let entry = item(title, #selector(selectBlur(_:)))
             entry.representedObject = radius
-            entry.state = (WindowBlur.isAvailable ? appearance.blurRadius == radius : (appearance.blurRadius > 0) == (radius > 0)) ? .on : .off
+            entry.state = (canSetRadius ? appearance.blurRadius == radius : (appearance.blurRadius > 0) == (radius > 0)) ? .on : .off
             entry.indentationLevel = 1
             menu.addItem(entry)
         }

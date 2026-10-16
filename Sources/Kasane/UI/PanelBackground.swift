@@ -38,19 +38,28 @@ final class AppearanceSettings: ObservableObject {
     @Published var blurRadius: Int = AppSettings.blurRadius {
         didSet { AppSettings.blurRadius = blurRadius }
     }
+    /// 半径を指定できず、システムの素材でぼかすか。非公開 API が見つからないか、呼び出しに失敗したとき true
+    @Published private(set) var usesSystemMaterial = !WindowBlur.isAvailable
+
+    /// `WindowBlur.apply` の結果。失敗したらシステムの素材に切り替える
+    func blurAPIDidRespond(succeeded: Bool) {
+        if usesSystemMaterial == succeeded {
+            usesSystemMaterial = !succeeded
+        }
+    }
 }
 
 /// 履歴ウインドウと小さな表示の背景。
 ///
 /// ぼかしはウインドウ自体に半径を指定して作る（`WindowBlur`）。ここでは不透明度ぶんの色を重ねるだけ。
 /// 角丸と縁はシステムのウインドウが描く。
-/// 半径を指定できない macOS では、ぼかしありのときだけシステムの素材を敷く
+/// 半径を指定できないとき（`usesSystemMaterial`）は、ぼかしありのときだけシステムの素材を敷く
 struct PanelBackground: View {
     @ObservedObject var appearance: AppearanceSettings
 
     var body: some View {
         ZStack {
-            if !WindowBlur.isAvailable && appearance.blurRadius > 0 {
+            if appearance.usesSystemMaterial && appearance.blurRadius > 0 {
                 VisualEffectBackground(material: .popover)
             }
             Color(nsColor: .windowBackgroundColor)
