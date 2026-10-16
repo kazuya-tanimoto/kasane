@@ -29,6 +29,21 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertNil(FuzzyMatcher.score("kaigi", text: "明日の会議"))
     }
 
+    func testDoubleNMatchesSingleN() {
+        // 「ん」を nn と打っても当たる
+        XCTAssertNotNil(FuzzyMatcher.score("honn", text: "本", romaji: "hon"))
+        XCTAssertNotNil(FuzzyMatcher.score("zenn", text: "前日", romaji: "zenjitsu"))
+        XCTAssertNotNil(FuzzyMatcher.score("konnichiha", text: "こんにちは", romaji: "konnichiha"))
+        XCTAssertNotNil(FuzzyMatcher.score("konnnichiha", text: "こんにちは", romaji: "konnichiha"))
+        // 英語などの既存の一致は変わらない
+        XCTAssertNotNil(FuzzyMatcher.score("annual", text: "annual report"))
+    }
+
+    func testExactTermKeepsDoubleN() {
+        XCTAssertNotNil(FuzzyMatcher.score("'konnichiha", text: "こんにちは", romaji: "konnichiha"))
+        XCTAssertNil(FuzzyMatcher.score("'honn", text: "本", romaji: "hon"))
+    }
+
     func testJapaneseDirectMatch() {
         XCTAssertNotNil(FuzzyMatcher.score("会議", text: "明日の会議の資料"))
         XCTAssertNotNil(FuzzyMatcher.score("会資料", text: "明日の会議の資料"))
