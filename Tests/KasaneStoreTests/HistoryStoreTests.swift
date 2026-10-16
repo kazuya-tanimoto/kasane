@@ -78,6 +78,24 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(try store.count(), 1)
     }
 
+    func testPlainTextKeepsExistingRichText() throws {
+        var rich = textCapture("同じ文", extra: [.init(itemIndex: 0, type: "public.rtf", data: Data("{\\rtf1 同じ文}".utf8))])
+        rich.kind = .richText
+        let first = try store.save(rich, limit: 100, now: Date(timeIntervalSince1970: 100))
+        let id = try XCTUnwrap(first.item.id)
+        let again = try store.save(textCapture("同じ文\n"), limit: 100, now: Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(again.item.id, id)
+        XCTAssertFalse(again.isNew)
+        // 書式付きのまま。日時と回数だけ新しくなる
+        let item = try XCTUnwrap(try store.item(id: id))
+        XCTAssertEqual(item.kind, .richText)
+        XCTAssertEqual(item.text, "同じ文")
+        XCTAssertEqual(item.copyCount, 2)
+        XCTAssertEqual(item.copiedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(try store.representations(itemID: id).map(\.type), ["public.utf8-plain-text", "public.rtf"])
+        XCTAssertEqual(try store.count(), 1)
+    }
+
     func testURLIsNotMergedWithText() {
         var url = textCapture("https://example.com")
         url.kind = .url
