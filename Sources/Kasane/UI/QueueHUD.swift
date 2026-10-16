@@ -116,7 +116,7 @@ struct QueueHUDView: View {
                 HStack(alignment: .firstTextBaseline, spacing: 6 * scale) {
                     Text("\(index + 1)")
                         .font(.system(size: size, weight: .bold, design: .rounded))
-                        .foregroundStyle(index == 0 ? Color.primary : Color.secondary)
+                        .foregroundStyle(index == 0 ? appearance.accent.text : Color.secondary)
                         .frame(width: 14 * scale, alignment: .leading)
                     Text(title)
                         .font(.system(size: size, weight: index == 0 ? .semibold : .regular))

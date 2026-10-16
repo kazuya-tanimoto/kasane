@@ -46,6 +46,18 @@ enum AccentColor: String, CaseIterable {
         })
     }
 
+    /// 背景の上に文字としてアクセントカラーを使うときの色。
+    /// ダークでは暗い背景に沈む色（藍・江戸紫・臙脂など）があるので、白を 40% 混ぜて明るくする
+    var text: Color {
+        let palette = palette
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let base = palette.map { NSColor(hex: Self.isDark(appearance) ? $0.dark : $0.light) }
+                ?? (NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue)
+            guard Self.isDark(appearance) else { return base }
+            return base.blended(withFraction: 0.4, of: .white) ?? base
+        })
+    }
+
     /// アクセントカラーの上に載せる文字の色
     var foreground: Color {
         guard let palette else {

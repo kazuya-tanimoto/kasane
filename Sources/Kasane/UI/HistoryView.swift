@@ -117,10 +117,7 @@ private struct Toolbar: View {
             } else {
                 ForEach(KindFilter.allCases) { filter in
                     Button(filter.label) { model.kindFilter = filter }
-                        .buttonStyle(ChipStyle(
-                            isOn: model.kindFilter == filter,
-                            onColor: .primary, onText: Color(nsColor: .windowBackgroundColor)
-                        ))
+                        .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
                 }
             }
             // 空いている所をつかんでもウインドウを動かせる
@@ -144,21 +141,53 @@ private struct Toolbar: View {
     }
 }
 
-/// 絞り込みやモードの丸いボタン
+/// 絞り込みやモードの丸いボタン。
+/// 色を指定しないときは、選択中を macOS の切り替えボタンのように白く浮かせる（アクセントカラーはペーストと FIFO / LIFO だけに使う）
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
-    var onColor: Color
-    var onText: Color
+    var onColor: Color? = nil
+    var onText: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? onText : .primary)
-            .background(Capsule().fill(isOn ? onColor : Color.primary.opacity(0.08)))
+            .foregroundStyle(isOn ? (onText ?? Color.raisedText) : .primary)
+            .background {
+                if isOn, let onColor {
+                    Capsule().fill(onColor)
+                } else if isOn {
+                    RaisedFill(shape: Capsule())
+                } else {
+                    Capsule().fill(Color.primary.opacity(0.08))
+                }
+            }
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
+}
+
+/// 選択中のボタンの、白く浮いた背景（ライトは白＋影＋薄い輪郭、ダークは白 22%＋影）
+private struct RaisedFill<S: InsettableShape>: View {
+    let shape: S
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let isDark = colorScheme == .dark
+        shape
+            .fill(isDark ? Color.white.opacity(0.22) : Color.white)
+            .overlay(shape.strokeBorder(Color.black.opacity(isDark ? 0 : 0.08), lineWidth: 0.5))
+            .shadow(color: .black.opacity(isDark ? 0.3 : 0.16), radius: 1.5, y: 1)
+    }
+}
+
+private extension Color {
+    /// 白く浮いた背景に載せる文字の色（ライトは #1D1D1F、ダークは白）
+    static let raisedText = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? .white
+            : NSColor(srgbRed: 0x1D / 255, green: 0x1D / 255, blue: 0x1F / 255, alpha: 1)
+    })
 }
 
 /// ペーストなどの操作ボタン
@@ -172,11 +201,18 @@ private struct ActionStyle: ButtonStyle {
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color(nsColor: .windowBackgroundColor) : .primary))
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isPrimary ? accent.color : (isOn ? Color.primary : Color.primary.opacity(0.08)))
-            )
+            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
+            .background {
+                let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
+                if isPrimary {
+                    shape.fill(accent.color)
+                } else if isOn {
+                    // ⌘I の詳細がオンのときは、絞り込みの選択中と同じ見た目
+                    RaisedFill(shape: shape)
+                } else {
+                    shape.fill(Color.primary.opacity(0.08))
+                }
+            }
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
@@ -280,10 +316,12 @@ private struct QueueRowView: View {
                 .monospacedDigit()
                 .padding(.horizontal, 7)
                 .frame(minWidth: 30, minHeight: 26)
-                .foregroundStyle(row.id == 0 ? accent.foreground : Color.secondary)
+                // 次に貼るのは常に一番上なので、番号は色を付けずにほかと同じにする。
+                // 色付きにすると、選択中の項目と紛れる
+                .foregroundStyle(Color.secondary)
                 .background(
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(row.id == 0 ? accent.color : Color.primary.opacity(0.08))
+                        .fill(Color.primary.opacity(0.08))
                 )
                 .fixedSize()
             VStack(alignment: .leading, spacing: 3) {
@@ -294,8 +332,14 @@ private struct QueueRowView: View {
                     Text(row.summary.kind.displayName)
                         .fontWeight(.semibold)
                         .foregroundStyle(row.summary.kind.tint)
-                    Text(row.id == 0 ? "次の ⌘V で貼り付け" : "\(row.id + 1) 番目")
-                        .foregroundStyle(.secondary)
+                    if row.id == 0 {
+                        Text("次の ⌘V で貼り付け")
+                            .fontWeight(.semibold)
+                            .foregroundStyle(accent.text)
+                    } else {
+                        Text("\(row.id + 1) 番目")
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .font(.system(size: 11))
             }
