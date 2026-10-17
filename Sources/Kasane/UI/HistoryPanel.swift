@@ -15,7 +15,7 @@ final class HistoryPanel: NSPanel {
             defer: false
         )
         hideTitlebar()
-        // 動かせるのは検索欄の周りと操作ボタンの横（`WindowDragArea`）だけ。
+        // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
         minSize = HistoryPanelController.minSize
@@ -47,6 +47,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     /// 自分で位置を決めている間は、動かした・大きさを変えたとみなして保存しない
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
+    private let inputSource = InputSourceSwitcher()
+    /// 検索欄。開くときに英数に切り替える間だけフォーカスを外すので、戻す先として覚えておく
+    private weak var searchField: NSResponder?
+    /// 検索欄のフォーカスを外していて、まだ戻していない
+    private var focusDetached = false
 
     init(model: HistoryModel) {
         self.model = model
@@ -65,9 +70,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// 表示・非表示が変わったとき（FIFO / LIFO 中の小さな表示の出し入れに使う）
-    var onVisibilityChange: ((Bool) -> Void)?
-
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
 
@@ -80,15 +82,41 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         position()
         isHiding = false
         panel.alphaValue = 0
+        // 作業中のアプリが前面にいるうちに、英数に切り替える。
+        // 検索欄にフォーカスがあるまま切り替えると、macOS がカーソルの横に入力言語の表示を出す。
+        // その表示の描画を待つ間（約 0.5 秒）、ウインドウがアクティブな見た目にならない（2026-10-17、Mac で計測）。
+        // そこで検索欄のフォーカスを外してから切り替え、英数に変わってからフォーカスを戻す
+        detachSearchField()
+        let switching = inputSource.switchToASCII { [weak self] _ in
+            self?.reattachSearchField()
+        }
+        if !switching {
+            reattachSearchField()
+        }
         panel.makeKeyAndOrderFront(nil)
         WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
         installKeyMonitor()
-        onVisibilityChange?(true)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
+    }
+
+    /// 検索欄からフォーカスを外す。`reattachSearchField()` で戻す
+    private func detachSearchField() {
+        // 検索欄に入力中（フィールドエディタがフォーカスを持っている）のときだけ外す。戻す先がわからなければ触らない
+        guard !focusDetached, let field = (panel.firstResponder as? NSTextView)?.delegate as? NSResponder else { return }
+        searchField = field
+        _ = panel.makeFirstResponder(nil)
+        focusDetached = true
+    }
+
+    /// 外していたフォーカスを検索欄に戻す
+    private func reattachSearchField() {
+        guard focusDetached else { return }
+        focusDetached = false
+        _ = panel.makeFirstResponder(searchField)
     }
 
     /// フェードアウトして閉じる。閉じ終わってから `completion` を呼ぶ
@@ -99,6 +127,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         isHiding = true
         removeKeyMonitor()
+        // 検索欄にフォーカスがあるままフェードすると、2 回に 1 回ほど、隠す処理（orderOut）が
+        // 約 0.5 秒止まり、薄れかけたウインドウが残って見える（2026-10-17、Mac で計測）。
+        // フォーカスを外してからフェードすると起きなかったので、外してから閉じる（隠したあとで戻す）
+        detachSearchField()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -106,9 +138,14 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // フェード中に開き直していたら（show() が isHiding を戻している）、隠さない
+                guard self.isHiding else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
-                self.onVisibilityChange?(false)
+                // 次に開いたときのために、検索欄にフォーカスを戻しておく
+                self.reattachSearchField()
+                // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
+                self.inputSource.restore()
                 completion?()
             }
         })
@@ -184,6 +221,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// 処理したキーなら true（検索欄には渡さない）
     private func handleKey(_ event: NSEvent) -> Bool {
+        // 英数に変わる前にキーが押されたら、先に検索欄へフォーカスを戻して、打った文字を検索欄に届ける
+        reattachSearchField()
+        // 日本語の変換中は、Enter（確定）・↑↓（候補の選択）・Esc（取り消し）などを日本語入力に渡す。
+        // このモニタは日本語入力より先にキーを受け取るので、確かめないと確定の Enter で貼り付けてしまう
+        if let client = panel.firstResponder as? NSTextInputClient, client.hasMarkedText() {
+            return false
+        }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch Int(event.keyCode) {
         case 125: // ↓
@@ -206,9 +250,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             } else {
                 model.activateSelection(.paste)
             }
-            return true
-        case 48 where model.queueMode != nil && flags.isDisjoint(with: [.command, .option, .control]): // Tab: キューと履歴の切り替え（FIFO / LIFO 中だけ）
-            model.toggleListMode()
             return true
         case 53: // Esc: 検索語があれば消し、なければ閉じる
             if model.query.isEmpty {

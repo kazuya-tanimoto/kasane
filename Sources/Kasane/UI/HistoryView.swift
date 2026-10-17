@@ -5,9 +5,12 @@ import SwiftUI
 
 /// 履歴ウインドウ（デザインモック「C案 改訂版」）
 ///
+/// - 一番上: 「Kasane」の帯（つかんでウインドウを動かす）
 /// - 1行目: 検索欄
-/// - 2行目: モード（FIFO/LIFO 中のみ）、種類の絞り込み、操作ボタン、詳細の切り替え
-/// - 本体: 左に履歴かキューのリスト、右に大きなプレビュー（⌘I で詳細）
+/// - 2行目: 種類の絞り込み、操作ボタン、詳細の切り替え
+/// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
+///
+/// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
     @ObservedObject var model: HistoryModel
     @ObservedObject var appearance: AppearanceSettings
@@ -15,19 +18,14 @@ struct HistoryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            TitleBar()
             searchBar
             Toolbar(model: model)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             HStack(spacing: 12) {
-                Group {
-                    if model.isShowingQueue {
-                        QueueListView(model: model)
-                    } else {
-                        ItemListView(model: model)
-                    }
-                }
-                .frame(width: 350)
+                ItemListView(model: model)
+                    .frame(width: 350)
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
@@ -56,23 +54,38 @@ struct HistoryView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField(
-                model.isShowingQueue ? "入力すると履歴を検索します" : "履歴を検索",
-                text: $model.query
-            )
-            .textFieldStyle(.plain)
-            .font(.system(size: 19))
-            .focused($searchFocused)
-            if !model.isShowingQueue {
-                Text("\(model.pinned.count + model.others.count) 件")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
+                .allowsHitTesting(false)
+            TextField("履歴を検索", text: $model.query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 19))
+                .focused($searchFocused)
+            Text("\(model.pinned.count + model.others.count) 件")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
+        .padding(.top, 6)
         .padding(.bottom, 10)
         // 検索欄の周りをつかんでウインドウを動かせるようにする
+        .background(WindowDragArea())
+    }
+}
+
+/// ウインドウの一番上の帯。一般的な Mac のアプリのタイトルバーと同じ場所で、どこをつかんでもウインドウが動く
+private struct TitleBar: View {
+    var body: some View {
+        HStack {
+            Text("Kasane")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                // 文字の上でも、背景の WindowDragArea でつかめるようにする
+                .allowsHitTesting(false)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 28)
+        .frame(maxWidth: .infinity)
         .background(WindowDragArea())
     }
 }
@@ -99,26 +112,9 @@ private struct Toolbar: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if let mode = model.queueMode {
-                Button {
-                    model.toggleListMode()
-                } label: {
-                    Text("\(mode == .fifo ? "FIFO" : "LIFO") \(model.queueRows.count)")
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .buttonStyle(ChipStyle(isOn: model.isShowingQueue, onColor: accent.color, onText: accent.foreground))
-                .help("Tab でキューと履歴を切り替え")
-                Divider().frame(height: 18).padding(.horizontal, 4)
-            }
-            if model.isShowingQueue {
-                Text("⌘V で上から順に貼り付け · Tab で履歴に切り替え")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(KindFilter.allCases) { filter in
-                    Button(filter.label) { model.kindFilter = filter }
-                        .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
-                }
+            ForEach(KindFilter.allCases) { filter in
+                Button(filter.label) { model.kindFilter = filter }
+                    .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
             }
             // 空いている所をつかんでもウインドウを動かせる
             WindowDragArea()
@@ -127,7 +123,8 @@ private struct Toolbar: View {
                 .buttonStyle(ActionStyle(isPrimary: true, accent: accent))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
                 .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
-            Button("コピー ⌥⏎") { model.activateSelection(.copyOnly) }
+            // FIFO / LIFO 中の ⌥⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
+            Button(model.queueMode == nil ? "コピー ⌥⏎" : "キューに追加 ⌥⏎") { model.activateSelection(.copyOnly) }
                 .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
             Button {
                 model.showsDetails.toggle()
@@ -141,23 +138,19 @@ private struct Toolbar: View {
     }
 }
 
-/// 絞り込みやモードの丸いボタン。
-/// 色を指定しないときは、選択中を macOS の切り替えボタンのように白く浮かせる（アクセントカラーはペーストと FIFO / LIFO だけに使う）
+/// 絞り込みの丸いボタン。
+/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーはペーストと FIFO / LIFO だけに使う）
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
-    var onColor: Color? = nil
-    var onText: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? (onText ?? Color.raisedText) : .primary)
+            .foregroundStyle(isOn ? Color.raisedText : .primary)
             .background {
-                if isOn, let onColor {
-                    Capsule().fill(onColor)
-                } else if isOn {
+                if isOn {
                     RaisedFill(shape: Capsule())
                 } else {
                     Capsule().fill(Color.primary.opacity(0.08))
@@ -271,83 +264,6 @@ private struct ItemListView: View {
         .simultaneousGesture(TapGesture().onEnded {
             model.select(item.id)
         })
-    }
-}
-
-// MARK: - FIFO / LIFO のキュー
-
-private struct QueueListView: View {
-    @ObservedObject var model: HistoryModel
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    SectionHeader(title: "\(model.queueMode == .lifo ? "LIFO" : "FIFO") のキュー（貼り付ける順）")
-                    ForEach(model.queueRows) { row in
-                        QueueRowView(row: row, isSelected: model.queueSelection == row.id)
-                            .id(row.id)
-                            .contentShape(Rectangle())
-                            .onTapGesture { model.queueSelection = row.id }
-                    }
-                    if model.queueRows.isEmpty {
-                        EmptyState(text: "まだ何もありません。\nコピーすると、ここに順番に積まれます。")
-                    }
-                }
-                .padding(2)
-            }
-            .onChange(of: model.queueSelection) { _, index in
-                proxy.scrollTo(index)
-            }
-        }
-    }
-}
-
-private struct QueueRowView: View {
-    let row: QueueRow
-    let isSelected: Bool
-    @Environment(\.kasaneAccent) private var accent
-
-    var body: some View {
-        HStack(spacing: 10) {
-            // 貼り付ける順番。10 件を超えると 2 桁以上になるので、丸ではなく横に伸びる札にする
-            Text("\(row.id + 1)")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .padding(.horizontal, 7)
-                .frame(minWidth: 30, minHeight: 26)
-                // 次に貼るのは常に一番上なので、番号は色を付けずにほかと同じにする。
-                // 色付きにすると、選択中の項目と紛れる
-                .foregroundStyle(Color.secondary)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.08))
-                )
-                .fixedSize()
-            VStack(alignment: .leading, spacing: 3) {
-                Text(row.summary.title.isEmpty ? " " : row.summary.title)
-                    .font(.system(size: 13))
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    Text(row.summary.kind.displayName)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(row.summary.kind.tint)
-                    if row.id == 0 {
-                        Text("次の ⌘V で貼り付け")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(accent.text)
-                    } else {
-                        Text("\(row.id + 1) 番目")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .font(.system(size: 11))
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(SelectionBackground(isSelected: isSelected))
     }
 }
 

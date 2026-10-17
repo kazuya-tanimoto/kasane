@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: PasteboardMonitor!
     private var panel: HistoryPanelController!
     private var queue: QueueController!
-    private let queueHUD = QueueHUDController()
+    private lazy var queueHUD = QueueHUDController()
     private var statusItem: StatusItemController!
     private var onboarding: OnboardingWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
@@ -37,7 +37,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.load()
 
         panel = HistoryPanelController(model: model)
-        panel.onVisibilityChange = { [weak self] _ in self?.updateQueueHUD() }
 
         queue = QueueController(store: store, writer: writer)
         queue.isHistoryPanelKey = { [weak self] in self?.panel.isKey ?? false }
@@ -139,6 +138,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let item = try? store.item(id: itemID),
               let representations = try? store.representations(itemID: itemID)
         else { return }
+        // FIFO / LIFO 中の ⌥⏎ は、選んだ項目をキューに追加するだけ（クリップボードは変えない）。
+        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
+        if action == .copyOnly, queue.mode != nil {
+            queue.didCapture(itemID: itemID)
+            return
+        }
+
         // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
         let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
         writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
@@ -175,15 +181,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func queueDidChange() {
         let current = queue.queue
         statusItem?.update(queueMode: current?.mode, count: current?.count ?? 0)
-        model.updateQueue(current.map { QueueInfo(mode: $0.mode, itemIDs: $0.itemsInPasteOrder) })
+        if model.queueMode != current?.mode {
+            model.queueMode = current?.mode
+        }
         updateQueueHUD()
     }
 
-    /// 履歴ウインドウを閉じている間だけ、画面の隅にキュー（スタック）の中身を小さく出す
+    /// モード中は、履歴ウインドウの開閉に関係なく、画面の隅にキューの全件を出す
     private func updateQueueHUD() {
         let current = queue.queue
         let titles = current?.itemsInPasteOrder.map { model.summary(id: $0)?.title ?? "?" } ?? []
-        queueHUD.update(mode: current?.mode, titles: titles, visible: !panel.isVisible)
+        queueHUD.update(mode: current?.mode, titles: titles)
     }
 
     // MARK: - メニュー
