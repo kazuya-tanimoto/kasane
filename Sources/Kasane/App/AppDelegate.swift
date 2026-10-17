@@ -20,7 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let processingQueue = DispatchQueue(label: "io.github.kazuya-tanimoto.kasane.capture", qos: .utility)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        TimingLog.startWatching()
         do {
             store = try HistoryStore(directory: AppSettings.dataDirectory)
         } catch {
@@ -158,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + AppSettings.pasteDelay) {
-                MainActor.assumeIsolated { TimingLog.measure("post ⌘V") { Paster.postCommandV() } }
+                Paster.postCommandV()
             }
         }
         if action != .copyOnly {

@@ -29,12 +29,12 @@ final class InputSourceSwitcher {
     @discardableResult
     func switchToASCII(onSwitched: @escaping (_ switched: Bool) -> Void) -> Bool {
         guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return false }
-        let nonASCII = TimingLog.measure("read current input source") { !Self.isCurrentASCII() }
+        let nonASCII = !Self.isCurrentASCII()
         wasNonASCII = nonASCII
         guard nonASCII else { return false }
         // 切り替わった知らせを取りこぼさないよう、キーを送る前に待ち始める
         waitForSwitch(timeout: 0.3, onSwitched)
-        TimingLog.measure("post 英数 key") { Self.post(key: CGKeyCode(kVK_JIS_Eisu)) }
+        Self.post(key: CGKeyCode(kVK_JIS_Eisu))
         return true
     }
 
@@ -75,7 +75,7 @@ final class InputSourceSwitcher {
         self.wasNonASCII = nil
         if wasNonASCII {
             // ウインドウの中でかなキーを押していても、もう一度押すだけなので変わらない
-            TimingLog.measure("post かな key") { Self.post(key: CGKeyCode(kVK_JIS_Kana)) }
+            Self.post(key: CGKeyCode(kVK_JIS_Kana))
         } else if !Self.isCurrentASCII() {
             // 開く前は英数で、ウインドウの中でかなキーを押したときだけ戻す
             Self.post(key: CGKeyCode(kVK_JIS_Eisu))

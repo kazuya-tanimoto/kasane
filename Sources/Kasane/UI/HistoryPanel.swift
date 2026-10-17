@@ -52,8 +52,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private weak var searchField: NSResponder?
     /// 検索欄のフォーカスを外していて、まだ戻していない
     private var focusDetached = false
-    /// 一時的な計測用: 起動してから閉じた回数（閉じ方を回ごとに変える）
-    private var closeCount = 0
 
     init(model: HistoryModel) {
         self.model = model
@@ -80,9 +78,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        TimingLog.begin("open")
-        TimingLog.measure("prepareForShow") { model.prepareForShow() }
-        TimingLog.measure("position") { position() }
+        model.prepareForShow()
+        position()
         isHiding = false
         panel.alphaValue = 0
         // 作業中のアプリが前面にいるうちに、英数に切り替える。
@@ -90,23 +87,26 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         // その表示の描画を待つ間（約 0.5 秒）、ウインドウがアクティブな見た目にならない（2026-10-17、Mac で計測）。
         // そこで検索欄のフォーカスを外してから切り替え、英数に変わってからフォーカスを戻す
         detachSearchField()
-        let switching = inputSource.switchToASCII { [weak self] switched in
-            TimingLog.mark(switched ? "switched to 英数, focusing search field" : "no switch within 0.3s, focusing anyway")
+        let switching = inputSource.switchToASCII { [weak self] _ in
             self?.reattachSearchField()
         }
         if !switching {
             reattachSearchField()
         }
-        present()
-        scheduleWindowList()
+        panel.makeKeyAndOrderFront(nil)
+        WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+        installKeyMonitor()
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.12
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            panel.animator().alphaValue = 1
+        }
     }
 
     /// 検索欄からフォーカスを外す。`reattachSearchField()` で戻す
     private func detachSearchField() {
-        let responder = panel.firstResponder
-        TimingLog.mark("first responder = \(responder.map { String(describing: type(of: $0)) } ?? "nil")")
         // 検索欄に入力中（フィールドエディタがフォーカスを持っている）のときだけ外す。戻す先がわからなければ触らない
-        guard !focusDetached, let field = (responder as? NSTextView)?.delegate as? NSResponder else { return }
+        guard !focusDetached, let field = (panel.firstResponder as? NSTextView)?.delegate as? NSResponder else { return }
         searchField = field
         _ = panel.makeFirstResponder(nil)
         focusDetached = true
@@ -116,29 +116,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private func reattachSearchField() {
         guard focusDetached else { return }
         focusDetached = false
-        let ok = panel.makeFirstResponder(searchField)
-        TimingLog.mark("search field refocused = \(ok)")
-    }
-
-    /// 一時的な計測用: 開いて 0.8 秒たったら、Kasane のウインドウを全部ログに出す
-    private func scheduleWindowList() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
-            MainActor.assumeIsolated { TimingLog.listWindows("after open") }
-        }
-    }
-
-    private func present() {
-        TimingLog.measure("makeKeyAndOrderFront") { panel.makeKeyAndOrderFront(nil) }
-        TimingLog.measure("blur") { WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel) }
-        installKeyMonitor()
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            panel.animator().alphaValue = 1
-        }, completionHandler: {
-            MainActor.assumeIsolated { TimingLog.mark("fade in done") }
-        })
-        TimingLog.mark("show returned")
+        _ = panel.makeFirstResponder(searchField)
     }
 
     /// フェードアウトして閉じる。閉じ終わってから `completion` を呼ぶ
@@ -147,16 +125,12 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             completion?()
             return
         }
-        let condition = TimingLog.CloseCondition.forClose(closeCount)
-        closeCount += 1
-        TimingLog.begin("close")
-        TimingLog.mark("close condition = \(condition.rawValue)")
         isHiding = true
         removeKeyMonitor()
-        if condition == .unfocusFirst {
-            // 一時的な計測用: 閉じる前に検索欄のフォーカスを外す（隠したあとで戻す）
-            TimingLog.measure("unfocus") { detachSearchField() }
-        }
+        // 検索欄にフォーカスがあるままフェードすると、2 回に 1 回ほど、隠す処理（orderOut）が
+        // 約 0.5 秒止まり、薄れかけたウインドウが残って見える（2026-10-17、Mac で計測）。
+        // フォーカスを外してからフェードすると起きなかったので、外してから閉じる（隠したあとで戻す）
+        detachSearchField()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -164,20 +138,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                TimingLog.mark("fade out done")
-                self.finishHide(completion: completion)
+                self.panel.orderOut(nil)
+                self.isHiding = false
+                // 次に開いたときのために、検索欄にフォーカスを戻しておく
+                self.reattachSearchField()
+                // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
+                self.inputSource.restore()
+                completion?()
             }
         })
-    }
-
-    private func finishHide(completion: (() -> Void)?) {
-        TimingLog.measure("orderOut") { panel.orderOut(nil) }
-        isHiding = false
-        // 英数に変わる前に閉じたときなども、次に開いたときのために検索欄にフォーカスを戻しておく
-        reattachSearchField()
-        // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
-        TimingLog.measure("restore") { inputSource.restore() }
-        completion?()
     }
 
     /// マウスカーソルのある画面に置く。前に動かした・大きさを変えたときは、その位置と大きさを使う
@@ -221,17 +190,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         saveFrame()
     }
 
-    func windowDidBecomeKey(_ notification: Notification) {
-        TimingLog.mark("window became key")
-    }
-
-    func windowDidChangeOcclusionState(_ notification: Notification) {
-        TimingLog.mark(panel.occlusionState.contains(.visible) ? "window visible on screen" : "window off screen")
-    }
-
     // ウインドウの外をクリックしたら閉じる
     func windowDidResignKey(_ notification: Notification) {
-        TimingLog.mark("window resigned key")
         if panel.isVisible && !isHiding {
             hide()
         }
@@ -261,9 +221,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private func handleKey(_ event: NSEvent) -> Bool {
         // 英数に変わる前にキーが押されたら、先に検索欄へフォーカスを戻して、打った文字を検索欄に届ける
         reattachSearchField()
-        if [36, 53, 76].contains(Int(event.keyCode)) {
-            TimingLog.keyDelivered(event.keyCode == 53 ? "Esc" : "Enter", eventTime: event.timestamp)
-        }
         // 日本語の変換中は、Enter（確定）・↑↓（候補の選択）・Esc（取り消し）などを日本語入力に渡す。
         // このモニタは日本語入力より先にキーを受け取るので、確かめないと確定の Enter で貼り付けてしまう
         if let client = panel.firstResponder as? NSTextInputClient, client.hasMarkedText() {
