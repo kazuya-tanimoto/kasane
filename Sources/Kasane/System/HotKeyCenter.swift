@@ -95,7 +95,9 @@ final class HotKeyCenter {
             )
             guard status == noErr else { return status }
             let id = hotKeyID.id
+            let pressed = GetEventTime(event)
             MainActor.assumeIsolated {
+                TimingLog.keyDelivered("hotkey", eventTime: pressed)
                 HotKeyCenter.shared.handle(id: id)
             }
             return noErr

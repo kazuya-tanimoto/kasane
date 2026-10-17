@@ -4,9 +4,12 @@ import os
 
 /// 一時的な計測用。かなのときに履歴ウインドウの開閉が遅い原因を調べる（原因がわかって直したら消す）。
 ///
-/// 開く・閉じるごとに、ショートカットを受け取ってからの経過時間をログに出す。
-/// あわせて、メインスレッドが止まっていた時間と、入力方法が実際に切り替わった時刻も出す。
-/// 見るとき: `log show --last 2m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
+/// 開く・閉じるごとに、その始まりからの経過時間をログに出す。あわせて次も出す:
+/// - キーを押してから Kasane に届くまでの時間
+/// - ウインドウが実際に画面に出た・消えた時刻
+/// - 入力方法が実際に切り替わった時刻
+/// - メインスレッドが止まっていた時間（起動中ずっと見る）
+/// 見るとき: `log show --last 5m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
 @MainActor
 enum TimingLog {
     private static let logger = Logger(subsystem: "io.github.kazuya-tanimoto.kasane", category: "timing")
@@ -15,17 +18,27 @@ enum TimingLog {
     private static var count = 0
     private static var ticker: Timer?
     private static var lastTick = CFAbsoluteTimeGetCurrent()
-    private static var tickerUntil = CFAbsoluteTimeGetCurrent()
     private static var observer: NSObjectProtocol?
+
+    /// 起動時に呼ぶ。入力方法の切り替えの通知と、メインスレッドの見張りを始める
+    static func startWatching() {
+        installObserverIfNeeded()
+        watchMainThread()
+        write("started switch=\(AppSettings.switchesToASCIIOnOpen ? "on" : "off")")
+    }
 
     /// 開く・閉じるの始まり。ここからの経過時間を出す
     static func begin(_ name: String) {
-        installObserverIfNeeded()
         count += 1
         label = "\(name)#\(count)"
         start = CFAbsoluteTimeGetCurrent()
         write("\(label) begin switch=\(AppSettings.switchesToASCIIOnOpen ? "on" : "off")")
-        watchMainThread()
+    }
+
+    /// キーを押してから Kasane に届くまでの時間。`eventTime` は起動してからの秒数（`NSEvent.timestamp` と同じ）
+    static func keyDelivered(_ name: String, eventTime: TimeInterval) {
+        let delay = String(format: "%.1f", (ProcessInfo.processInfo.systemUptime - eventTime) * 1000)
+        write("key \(name) delivered \(delay)ms after it was pressed")
     }
 
     static func mark(_ event: String) {
@@ -50,11 +63,10 @@ enum TimingLog {
         String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000)
     }
 
-    /// 1 秒間、10ms ごとにメインスレッドが動いているか確かめる。40ms 以上止まっていたらログに出す
+    /// 10ms ごとにメインスレッドが動いているか確かめる。40ms 以上止まっていたらログに出す
     private static func watchMainThread() {
-        lastTick = CFAbsoluteTimeGetCurrent()
-        tickerUntil = lastTick + 1
         guard ticker == nil else { return }
+        lastTick = CFAbsoluteTimeGetCurrent()
         let timer = Timer(timeInterval: 0.01, repeats: true) { _ in
             MainActor.assumeIsolated {
                 let now = CFAbsoluteTimeGetCurrent()
@@ -63,10 +75,6 @@ enum TimingLog {
                     write("\(label) +\(elapsed())ms main thread blocked \(String(format: "%.0f", gap))ms")
                 }
                 lastTick = now
-                if now > tickerUntil {
-                    ticker?.invalidate()
-                    ticker = nil
-                }
             }
         }
         RunLoop.main.add(timer, forMode: .common)

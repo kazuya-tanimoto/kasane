@@ -165,6 +165,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         TimingLog.mark("window became key")
     }
 
+    func windowDidChangeOcclusionState(_ notification: Notification) {
+        TimingLog.mark(panel.occlusionState.contains(.visible) ? "window visible on screen" : "window off screen")
+    }
+
     // ウインドウの外をクリックしたら閉じる
     func windowDidResignKey(_ notification: Notification) {
         TimingLog.mark("window resigned key")
@@ -195,6 +199,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// 処理したキーなら true（検索欄には渡さない）
     private func handleKey(_ event: NSEvent) -> Bool {
+        if [36, 53, 76].contains(Int(event.keyCode)) {
+            TimingLog.keyDelivered(event.keyCode == 53 ? "Esc" : "Enter", eventTime: event.timestamp)
+        }
         // 日本語の変換中は、Enter（確定）・↑↓（候補の選択）・Esc（取り消し）などを日本語入力に渡す。
         // このモニタは日本語入力より先にキーを受け取るので、確かめないと確定の Enter で貼り付けてしまう
         if let client = panel.firstResponder as? NSTextInputClient, client.hasMarkedText() {
