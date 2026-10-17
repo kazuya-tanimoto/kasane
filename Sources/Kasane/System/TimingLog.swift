@@ -12,7 +12,7 @@ import os
 /// 見るとき: `log show --last 5m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
 @MainActor
 enum TimingLog {
-    /// 開くときに比べる条件。今は比べていない（いつも、ふだんどおり）
+    /// 開くときに比べる条件。開いた順に、ふだんどおりと focusAfterSwitch を交互にする
     enum Condition: String {
         /// ふだんどおり（開く直前に英数キー、閉じたあとにかなキー）
         case current
@@ -24,13 +24,11 @@ enum TimingLog {
         case waitBeforeShow
         /// ふだんどおりで、App Nap（使っていないアプリの動きを抑える macOS の仕組み）を止める
         case noAppNap
-
-        static let order: [Condition] = []
-        static let timesEach = 4
+        /// 検索欄からフォーカスを外してから英数キーを送り、英数に変わってから検索欄にフォーカスを戻す
+        case focusAfterSwitch
 
         static func forOpen(_ index: Int) -> Condition {
-            let block = index / timesEach
-            return block < order.count ? order[block] : .current
+            index % 2 == 0 ? .current : .focusAfterSwitch
         }
     }
 
@@ -41,8 +39,9 @@ enum TimingLog {
         /// フェードアウトせず、すぐ隠す
         case noFade
 
+        /// 今は比べていない（いつも、ふだんどおり）
         static func forClose(_ index: Int) -> CloseCondition {
-            index % 2 == 0 ? .fade : .noFade
+            .fade
         }
     }
 
@@ -87,6 +86,22 @@ enum TimingLog {
         let took = String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - before) * 1000)
         write("\(label) +\(elapsed())ms \(event) took=\(took)ms")
         return result
+    }
+
+    /// Kasane が持っているウインドウを全部出す（AppKit のウインドウと、画面に出ているウインドウの番号）
+    static func listWindows(_ when: String) {
+        for window in NSApp.windows {
+            write("\(label) \(when) NSWindow #\(window.windowNumber) \(type(of: window)) visible=\(window.isVisible) level=\(window.level.rawValue) frame=\(window.frame)")
+        }
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let all = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
+        for info in all where (info[kCGWindowOwnerPID as String] as? Int32) == pid {
+            let number = info[kCGWindowNumber as String] ?? "?"
+            let onScreen = info[kCGWindowIsOnscreen as String] ?? false
+            let layer = info[kCGWindowLayer as String] ?? "?"
+            let bounds = info[kCGWindowBounds as String] ?? "?"
+            write("\(label) \(when) CGWindow #\(number) onScreen=\(onScreen) layer=\(layer) bounds=\(bounds)")
+        }
     }
 
     private static func write(_ text: String) {

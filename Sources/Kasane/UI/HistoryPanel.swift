@@ -109,10 +109,48 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         case .noRestore:
             TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
             inputSource.skipRestore()
+        case .focusAfterSwitch:
+            let field = detachFocus()
+            let switched = TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
+            present()
+            if switched {
+                inputSource.waitForSwitch(timeout: 0.3) { [weak self] ok in
+                    TimingLog.mark(ok ? "switched to 英数, focusing search field" : "no switch within 0.3s, focusing anyway")
+                    self?.restoreFocus(field)
+                }
+            } else {
+                restoreFocus(field)
+            }
+            scheduleWindowList()
+            return
         case .current, .noAppNap:
             TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
         }
         present()
+        scheduleWindowList()
+    }
+
+    /// 一時的な計測用: 検索欄からフォーカスを外す。戻すときのために検索欄を返す
+    private func detachFocus() -> NSResponder? {
+        let responder = panel.firstResponder
+        let field = (responder as? NSTextView)?.delegate as? NSResponder ?? responder
+        TimingLog.mark("first responder = \(responder.map { String(describing: type(of: $0)) } ?? "nil"), field = \(field.map { String(describing: type(of: $0)) } ?? "nil")")
+        _ = panel.makeFirstResponder(nil)
+        return field
+    }
+
+    /// 一時的な計測用
+    private func restoreFocus(_ field: NSResponder?) {
+        guard panel.isVisible, !isHiding, let field else { return }
+        let ok = panel.makeFirstResponder(field)
+        TimingLog.mark("search field refocused = \(ok)")
+    }
+
+    /// 一時的な計測用: 開いて 0.8 秒たったら、Kasane のウインドウを全部ログに出す
+    private func scheduleWindowList() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            MainActor.assumeIsolated { TimingLog.listWindows("after open") }
+        }
     }
 
     private func present() {
