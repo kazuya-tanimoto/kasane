@@ -157,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + AppSettings.pasteDelay) {
-                Paster.postCommandV()
+                MainActor.assumeIsolated { TimingLog.measure("post ⌘V") { Paster.postCommandV() } }
             }
         }
         if action != .copyOnly {

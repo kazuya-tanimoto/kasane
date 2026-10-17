@@ -74,20 +74,24 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
-        model.prepareForShow()
-        position()
+        TimingLog.begin("open")
+        TimingLog.measure("prepareForShow") { model.prepareForShow() }
+        TimingLog.measure("position") { position() }
         isHiding = false
         panel.alphaValue = 0
         // 作業中のアプリが前面にいるうちに、英数に切り替える
-        inputSource.switchToASCII()
-        panel.makeKeyAndOrderFront(nil)
-        WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+        TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
+        TimingLog.measure("makeKeyAndOrderFront") { panel.makeKeyAndOrderFront(nil) }
+        TimingLog.measure("blur") { WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel) }
         installKeyMonitor()
-        NSAnimationContext.runAnimationGroup { context in
+        NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
-        }
+        }, completionHandler: {
+            MainActor.assumeIsolated { TimingLog.mark("fade in done") }
+        })
+        TimingLog.mark("show returned")
     }
 
     /// フェードアウトして閉じる。閉じ終わってから `completion` を呼ぶ
@@ -96,6 +100,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             completion?()
             return
         }
+        TimingLog.begin("close")
         isHiding = true
         removeKeyMonitor()
         NSAnimationContext.runAnimationGroup({ context in
@@ -105,10 +110,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.panel.orderOut(nil)
+                TimingLog.mark("fade out done")
+                TimingLog.measure("orderOut") { self.panel.orderOut(nil) }
                 self.isHiding = false
                 // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
-                self.inputSource.restore()
+                TimingLog.measure("restore") { self.inputSource.restore() }
                 completion?()
             }
         })
@@ -155,8 +161,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         saveFrame()
     }
 
+    func windowDidBecomeKey(_ notification: Notification) {
+        TimingLog.mark("window became key")
+    }
+
     // ウインドウの外をクリックしたら閉じる
     func windowDidResignKey(_ notification: Notification) {
+        TimingLog.mark("window resigned key")
         if panel.isVisible && !isHiding {
             hide()
         }

@@ -24,10 +24,10 @@ final class InputSourceSwitcher {
     /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）
     func switchToASCII() {
         guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return }
-        let nonASCII = !Self.isCurrentASCII()
+        let nonASCII = TimingLog.measure("read current input source") { !Self.isCurrentASCII() }
         wasNonASCII = nonASCII
         if nonASCII {
-            Self.post(key: CGKeyCode(kVK_JIS_Eisu))
+            TimingLog.measure("post 英数 key") { Self.post(key: CGKeyCode(kVK_JIS_Eisu)) }
         }
     }
 
@@ -37,7 +37,7 @@ final class InputSourceSwitcher {
         self.wasNonASCII = nil
         if wasNonASCII {
             // ウインドウの中でかなキーを押していても、もう一度押すだけなので変わらない
-            Self.post(key: CGKeyCode(kVK_JIS_Kana))
+            TimingLog.measure("post かな key") { Self.post(key: CGKeyCode(kVK_JIS_Kana)) }
         } else if !Self.isCurrentASCII() {
             // 開く前は英数で、ウインドウの中でかなキーを押したときだけ戻す
             Self.post(key: CGKeyCode(kVK_JIS_Eisu))
