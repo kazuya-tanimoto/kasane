@@ -21,13 +21,51 @@ final class InputSourceSwitcher {
     /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
     private var wasNonASCII: Bool?
 
-    /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）
-    func switchToASCII() {
-        guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return }
+    /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）。英数キーを送ったら true
+    @discardableResult
+    func switchToASCII() -> Bool {
+        guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return false }
         let nonASCII = TimingLog.measure("read current input source") { !Self.isCurrentASCII() }
         wasNonASCII = nonASCII
         if nonASCII {
             TimingLog.measure("post 英数 key") { Self.post(key: CGKeyCode(kVK_JIS_Eisu)) }
+        }
+        return nonASCII
+    }
+
+    /// 一時的な計測用: 今回は切り替えない（閉じたときも戻さない）
+    func skipThisTime() {
+        wasNonASCII = nil
+    }
+
+    /// 一時的な計測用: 英数には切り替えるが、閉じたときに戻さない
+    func skipRestore() {
+        wasNonASCII = nil
+    }
+
+    private var switchObserver: NSObjectProtocol?
+
+    /// 一時的な計測用: 入力方法が変わったら（`timeout` 秒たっても変わらなければそこで）`done` を呼ぶ
+    func waitForSwitch(timeout: TimeInterval, _ done: @escaping (Bool) -> Void) {
+        var finished = false
+        let finish: (Bool) -> Void = { [weak self] switched in
+            guard !finished else { return }
+            finished = true
+            if let observer = self?.switchObserver {
+                DistributedNotificationCenter.default().removeObserver(observer)
+                self?.switchObserver = nil
+            }
+            done(switched)
+        }
+        switchObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name(kTISNotifySelectedKeyboardInputSourceChanged as String),
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated { finish(true) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
+            MainActor.assumeIsolated { finish(false) }
         }
     }
 

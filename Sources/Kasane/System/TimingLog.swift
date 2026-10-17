@@ -12,6 +12,28 @@ import os
 /// 見るとき: `log show --last 5m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
 @MainActor
 enum TimingLog {
+    /// 比べる条件。起動してから開いた順に、4 回ずつ変える（20 回を過ぎたら、ふだんどおり）
+    enum Condition: String {
+        /// ふだんどおり（開く直前に英数キー、閉じたあとにかなキー）
+        case current
+        /// 英数に切り替えない（閉じたあとも戻さない）
+        case noSwitch
+        /// 開く直前に英数キーを送るが、閉じたあとにかなに戻さない
+        case noRestore
+        /// 英数キーを送り、英数に変わったのを確かめてからウインドウを出す
+        case waitBeforeShow
+        /// ふだんどおりで、App Nap（使っていないアプリの動きを抑える macOS の仕組み）を止める
+        case noAppNap
+
+        static let order: [Condition] = [.current, .noSwitch, .noRestore, .waitBeforeShow, .noAppNap]
+        static let timesEach = 4
+
+        static func forOpen(_ index: Int) -> Condition {
+            let block = index / timesEach
+            return block < order.count ? order[block] : .current
+        }
+    }
+
     private static let logger = Logger(subsystem: "io.github.kazuya-tanimoto.kasane", category: "timing")
     private static var start = CFAbsoluteTimeGetCurrent()
     private static var label = "-"

@@ -48,6 +48,12 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
     private let inputSource = InputSourceSwitcher()
+    /// 一時的な計測用: 起動してから開いた回数（比べる条件を回ごとに変える）
+    private var openCount = 0
+    /// 一時的な計測用: 英数に変わるのを待ってから出す条件で、待っている間
+    private var pendingShow = false
+    /// 一時的な計測用: App Nap を止める条件のときに持つ
+    private var appNapActivity: NSObjectProtocol?
 
     init(model: HistoryModel) {
         self.model = model
@@ -66,7 +72,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    var isVisible: Bool { panel.isVisible && !isHiding }
+    var isVisible: Bool { (panel.isVisible && !isHiding) || pendingShow }
     var isKey: Bool { panel.isKeyWindow }
 
     func toggle() {
@@ -74,13 +80,40 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     func show() {
+        guard !pendingShow else { return }
+        let condition = TimingLog.Condition.forOpen(openCount)
+        openCount += 1
         TimingLog.begin("open")
+        TimingLog.mark("condition = \(condition.rawValue)")
         TimingLog.measure("prepareForShow") { model.prepareForShow() }
         TimingLog.measure("position") { position() }
         isHiding = false
         panel.alphaValue = 0
         // 作業中のアプリが前面にいるうちに、英数に切り替える
-        TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
+        switch condition {
+        case .noSwitch:
+            inputSource.skipThisTime()
+        case .waitBeforeShow:
+            if TimingLog.measure("switchToASCII", { inputSource.switchToASCII() }) {
+                pendingShow = true
+                inputSource.waitForSwitch(timeout: 0.3) { [weak self] switched in
+                    guard let self, self.pendingShow else { return }
+                    self.pendingShow = false
+                    TimingLog.mark(switched ? "switched to 英数, now showing" : "no switch within 0.3s, showing anyway")
+                    self.present()
+                }
+                return
+            }
+        case .noRestore:
+            TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
+            inputSource.skipRestore()
+        case .current, .noAppNap:
+            TimingLog.measure("switchToASCII") { inputSource.switchToASCII() }
+        }
+        present()
+    }
+
+    private func present() {
         TimingLog.measure("makeKeyAndOrderFront") { panel.makeKeyAndOrderFront(nil) }
         TimingLog.measure("blur") { WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel) }
         installKeyMonitor()
@@ -96,6 +129,12 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// フェードアウトして閉じる。閉じ終わってから `completion` を呼ぶ
     func hide(completion: (() -> Void)? = nil) {
+        if pendingShow {
+            pendingShow = false
+            inputSource.restore()
+            completion?()
+            return
+        }
         guard panel.isVisible, !isHiding else {
             completion?()
             return
@@ -115,9 +154,25 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 self.isHiding = false
                 // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
                 TimingLog.measure("restore") { self.inputSource.restore() }
+                self.updateAppNapForNextOpen()
                 completion?()
             }
         })
+    }
+
+    /// 一時的な計測用: 次に開く回が App Nap を止める条件なら、閉じている間から止めておく
+    private func updateAppNapForNextOpen() {
+        let next = TimingLog.Condition.forOpen(openCount)
+        if next == .noAppNap, appNapActivity == nil {
+            appNapActivity = ProcessInfo.processInfo.beginActivity(
+                options: [.userInitiated, .latencyCritical], reason: "timing experiment"
+            )
+            TimingLog.mark("App Nap disabled for the next opens")
+        } else if next != .noAppNap, let activity = appNapActivity {
+            ProcessInfo.processInfo.endActivity(activity)
+            appNapActivity = nil
+            TimingLog.mark("App Nap allowed again")
+        }
     }
 
     /// マウスカーソルのある画面に置く。前に動かした・大きさを変えたときは、その位置と大きさを使う
