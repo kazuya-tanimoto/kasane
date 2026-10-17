@@ -138,6 +138,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // フェード中に開き直していたら（show() が isHiding を戻している）、隠さない
+                guard self.isHiding else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
                 // 次に開いたときのために、検索欄にフォーカスを戻しておく
