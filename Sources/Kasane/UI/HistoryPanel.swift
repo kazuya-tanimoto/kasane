@@ -50,6 +50,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private let inputSource = InputSourceSwitcher()
     /// 一時的な計測用: 起動してから開いた回数（比べる条件を回ごとに変える）
     private var openCount = 0
+    /// 一時的な計測用: 起動してから閉じた回数（閉じ方を回ごとに変える）
+    private var closeCount = 0
     /// 一時的な計測用: 英数に変わるのを待ってから出す条件で、待っている間
     private var pendingShow = false
     /// 一時的な計測用: App Nap を止める条件のときに持つ
@@ -139,9 +141,17 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             completion?()
             return
         }
+        let condition = TimingLog.CloseCondition.forClose(closeCount)
+        closeCount += 1
         TimingLog.begin("close")
+        TimingLog.mark("close condition = \(condition.rawValue)")
         isHiding = true
         removeKeyMonitor()
+        if condition == .noFade {
+            panel.alphaValue = 0
+            finishHide(completion: completion)
+            return
+        }
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -150,14 +160,18 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 TimingLog.mark("fade out done")
-                TimingLog.measure("orderOut") { self.panel.orderOut(nil) }
-                self.isHiding = false
-                // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
-                TimingLog.measure("restore") { self.inputSource.restore() }
-                self.updateAppNapForNextOpen()
-                completion?()
+                self.finishHide(completion: completion)
             }
         })
+    }
+
+    private func finishHide(completion: (() -> Void)?) {
+        TimingLog.measure("orderOut") { panel.orderOut(nil) }
+        isHiding = false
+        // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
+        TimingLog.measure("restore") { inputSource.restore() }
+        updateAppNapForNextOpen()
+        completion?()
     }
 
     /// 一時的な計測用: 次に開く回が App Nap を止める条件なら、閉じている間から止めておく

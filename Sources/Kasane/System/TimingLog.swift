@@ -12,7 +12,7 @@ import os
 /// 見るとき: `log show --last 5m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
 @MainActor
 enum TimingLog {
-    /// 比べる条件。起動してから開いた順に、4 回ずつ変える（20 回を過ぎたら、ふだんどおり）
+    /// 開くときに比べる条件。今は比べていない（いつも、ふだんどおり）
     enum Condition: String {
         /// ふだんどおり（開く直前に英数キー、閉じたあとにかなキー）
         case current
@@ -25,12 +25,24 @@ enum TimingLog {
         /// ふだんどおりで、App Nap（使っていないアプリの動きを抑える macOS の仕組み）を止める
         case noAppNap
 
-        static let order: [Condition] = [.current, .noSwitch, .noRestore, .waitBeforeShow, .noAppNap]
+        static let order: [Condition] = []
         static let timesEach = 4
 
         static func forOpen(_ index: Int) -> Condition {
             let block = index / timesEach
             return block < order.count ? order[block] : .current
+        }
+    }
+
+    /// 閉じるときに比べる条件。閉じた順に交互に変える
+    enum CloseCondition: String {
+        /// ふだんどおり（0.1 秒でフェードアウトしてから隠す）
+        case fade
+        /// フェードアウトせず、すぐ隠す
+        case noFade
+
+        static func forClose(_ index: Int) -> CloseCondition {
+            index % 2 == 0 ? .fade : .noFade
         }
     }
 
