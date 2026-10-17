@@ -38,6 +38,11 @@ enum AppSettings {
         return value > 0 ? value : 0.05
     }
 
+    /// 履歴ウインドウを開いたら英数に切り替え、閉じたら戻すか（初期値はオン）
+    static var switchesToASCIIOnOpen: Bool {
+        defaults.object(forKey: "switchesToASCIIOnOpen") as? Bool ?? true
+    }
+
     /// プレビューの下に詳細を出すか（⌘I）
     static var showsDetails: Bool {
         get { defaults.bool(forKey: "showsDetails") }

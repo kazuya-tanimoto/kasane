@@ -10,7 +10,9 @@ import Carbon
 /// 切り替えは、利用者が 英数 / かな キーを押したときと同じキーを送って行う。
 /// 入力方法を選び直す API（TISSelectInputSource）は日本語入力との切り替えに時間がかかり、
 /// ウインドウの開閉が目に見えて遅くなったため（2026-10-17、Mac で確認）。
-/// 英数 / かな キーは日本語入力（ことえり、Google 日本語入力など）が自分で処理するので速い
+/// 英数 / かな キーは日本語入力（ことえり、Google 日本語入力など）が自分で処理する。
+/// ただし、かな入力のまま開くと表示に遅れが出ることがある（2026-10-17 調査中）。
+/// `defaults write io.github.kazuya-tanimoto.kasane switchesToASCIIOnOpen -bool false` で切り替えをやめられる
 @MainActor
 final class InputSourceSwitcher {
     /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
@@ -18,7 +20,7 @@ final class InputSourceSwitcher {
 
     /// ウインドウがキーウインドウになった直後に呼ぶ（送ったキーをウインドウの日本語入力が受け取る）
     func switchToASCII() {
-        guard wasNonASCII == nil else { return }
+        guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return }
         let nonASCII = !Self.isCurrentASCII()
         wasNonASCII = nonASCII
         if nonASCII {
