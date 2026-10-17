@@ -12,36 +12,15 @@ import os
 /// 見るとき: `log show --last 5m --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane"' --style compact`
 @MainActor
 enum TimingLog {
-    /// 開くときに比べる条件。開いた順に、ふだんどおりと focusAfterSwitch を交互にする
-    enum Condition: String {
-        /// ふだんどおり（開く直前に英数キー、閉じたあとにかなキー）
-        case current
-        /// 英数に切り替えない（閉じたあとも戻さない）
-        case noSwitch
-        /// 開く直前に英数キーを送るが、閉じたあとにかなに戻さない
-        case noRestore
-        /// 英数キーを送り、英数に変わったのを確かめてからウインドウを出す
-        case waitBeforeShow
-        /// ふだんどおりで、App Nap（使っていないアプリの動きを抑える macOS の仕組み）を止める
-        case noAppNap
-        /// 検索欄からフォーカスを外してから英数キーを送り、英数に変わってから検索欄にフォーカスを戻す
-        case focusAfterSwitch
-
-        static func forOpen(_ index: Int) -> Condition {
-            index % 2 == 0 ? .current : .focusAfterSwitch
-        }
-    }
-
     /// 閉じるときに比べる条件。閉じた順に交互に変える
     enum CloseCondition: String {
         /// ふだんどおり（0.1 秒でフェードアウトしてから隠す）
         case fade
-        /// フェードアウトせず、すぐ隠す
-        case noFade
+        /// 検索欄のフォーカスを外してから、フェードアウトして隠す
+        case unfocusFirst
 
-        /// 今は比べていない（いつも、ふだんどおり）
         static func forClose(_ index: Int) -> CloseCondition {
-            .fade
+            index % 2 == 0 ? .fade : .unfocusFirst
         }
     }
 

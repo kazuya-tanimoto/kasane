@@ -21,40 +21,33 @@ final class InputSourceSwitcher {
     /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
     private var wasNonASCII: Bool?
 
-    /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）。英数キーを送ったら true
+    private var switchObserver: NSObjectProtocol?
+    private var waitID = 0
+
+    /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）。
+    /// 英数キーを送ったら true を返し、英数に変わったら（0.3 秒たっても変わらなければそこで）`onSwitched` を呼ぶ
     @discardableResult
-    func switchToASCII() -> Bool {
+    func switchToASCII(onSwitched: @escaping (_ switched: Bool) -> Void) -> Bool {
         guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return false }
         let nonASCII = TimingLog.measure("read current input source") { !Self.isCurrentASCII() }
         wasNonASCII = nonASCII
-        if nonASCII {
-            TimingLog.measure("post 英数 key") { Self.post(key: CGKeyCode(kVK_JIS_Eisu)) }
-        }
-        return nonASCII
+        guard nonASCII else { return false }
+        // 切り替わった知らせを取りこぼさないよう、キーを送る前に待ち始める
+        waitForSwitch(timeout: 0.3, onSwitched)
+        TimingLog.measure("post 英数 key") { Self.post(key: CGKeyCode(kVK_JIS_Eisu)) }
+        return true
     }
 
-    /// 一時的な計測用: 今回は切り替えない（閉じたときも戻さない）
-    func skipThisTime() {
-        wasNonASCII = nil
-    }
-
-    /// 一時的な計測用: 英数には切り替えるが、閉じたときに戻さない
-    func skipRestore() {
-        wasNonASCII = nil
-    }
-
-    private var switchObserver: NSObjectProtocol?
-
-    /// 一時的な計測用: 入力方法が変わったら（`timeout` 秒たっても変わらなければそこで）`done` を呼ぶ
-    func waitForSwitch(timeout: TimeInterval, _ done: @escaping (Bool) -> Void) {
+    private func waitForSwitch(timeout: TimeInterval, _ done: @escaping (Bool) -> Void) {
+        stopWaiting()
+        waitID += 1
+        let id = waitID
         var finished = false
+        // 前に待ち始めた分が後から終わっても、今の待ちには触らない
         let finish: (Bool) -> Void = { [weak self] switched in
-            guard !finished else { return }
+            guard let self, !finished, self.waitID == id else { return }
             finished = true
-            if let observer = self?.switchObserver {
-                DistributedNotificationCenter.default().removeObserver(observer)
-                self?.switchObserver = nil
-            }
+            self.stopWaiting()
             done(switched)
         }
         switchObserver = DistributedNotificationCenter.default().addObserver(
@@ -67,6 +60,13 @@ final class InputSourceSwitcher {
         DispatchQueue.main.asyncAfter(deadline: .now() + timeout) {
             MainActor.assumeIsolated { finish(false) }
         }
+    }
+
+    private func stopWaiting() {
+        if let switchObserver {
+            DistributedNotificationCenter.default().removeObserver(switchObserver)
+        }
+        switchObserver = nil
     }
 
     /// ウインドウを閉じたあとに呼ぶ（キーは前面に戻ったアプリの日本語入力が受け取る）
