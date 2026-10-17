@@ -63,8 +63,21 @@ public enum FuzzyMatcher {
                     w = w.dropFirst()
                 }
                 guard !w.isEmpty else { return nil }
-                return Term(chars: Array(w.utf16), exact: exact)
+                let chars = Array(w.utf16)
+                return Term(chars: exact ? chars : collapsingDoubleN(chars), exact: exact)
             }
+    }
+
+    /// 「ん」を nn と打つ人が多いので、あいまい検索の語では n の連続を 1 文字にする（「honn」で「hon」（本）に一致させる）。
+    /// 部分列での一致なので、n を減らしても一致していたものが外れることはない。完全一致の語はそのまま
+    static func collapsingDoubleN(_ chars: [UInt16]) -> [UInt16] {
+        let n = UInt16(UInt8(ascii: "n"))
+        var out: [UInt16] = []
+        out.reserveCapacity(chars.count)
+        for c in chars where !(c == n && out.last == n) {
+            out.append(c)
+        }
+        return out
     }
 
     /// クエリに一致した候補を、スコアの高い順に返す。同点なら元の並び順（新しい順）を保つ

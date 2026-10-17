@@ -48,6 +48,60 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(types, ["public.utf8-plain-text", "public.html"])
     }
 
+    func testDuplicateIgnoresSurroundingWhitespaceAndLineEndings() throws {
+        let a = try store.save(textCapture("そういうことですか。"), limit: 100)
+        let b = try store.save(textCapture("そういうことですか。\n"), limit: 100)
+        let c = try store.save(textCapture("\n  そういうことですか。\r\n\n"), limit: 100)
+        XCTAssertEqual(b.item.id, a.item.id)
+        XCTAssertEqual(c.item.id, a.item.id)
+        XCTAssertEqual(c.item.copyCount, 3)
+        // 貼り付けるのは最後にコピーした形
+        XCTAssertEqual(try store.item(id: a.item.id!)?.text, "\n  そういうことですか。\r\n\n")
+        XCTAssertEqual(try store.count(), 1)
+    }
+
+    func testDifferentLinesAreNotMerged() throws {
+        _ = try store.save(textCapture("1行目"), limit: 100)
+        _ = try store.save(textCapture("1行目\n2行目"), limit: 100)
+        _ = try store.save(textCapture("1行目\r\n2行目"), limit: 100)
+        XCTAssertEqual(try store.count(), 2)
+    }
+
+    func testRichTextMergesWithPlainText() throws {
+        let plain = try store.save(textCapture("同じ文"), limit: 100)
+        var rich = textCapture("同じ文", extra: [.init(itemIndex: 0, type: "public.rtf", data: Data("{\\rtf1 同じ文}".utf8))])
+        rich.kind = .richText
+        let again = try store.save(rich, limit: 100)
+        XCTAssertEqual(again.item.id, plain.item.id)
+        XCTAssertEqual(again.item.kind, .richText)
+        XCTAssertEqual(try store.item(id: plain.item.id!)?.kind, .richText)
+        XCTAssertEqual(try store.count(), 1)
+    }
+
+    func testPlainTextKeepsExistingRichText() throws {
+        var rich = textCapture("同じ文", extra: [.init(itemIndex: 0, type: "public.rtf", data: Data("{\\rtf1 同じ文}".utf8))])
+        rich.kind = .richText
+        let first = try store.save(rich, limit: 100, now: Date(timeIntervalSince1970: 100))
+        let id = try XCTUnwrap(first.item.id)
+        let again = try store.save(textCapture("同じ文\n"), limit: 100, now: Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(again.item.id, id)
+        XCTAssertFalse(again.isNew)
+        // 書式付きのまま。日時と回数だけ新しくなる
+        let item = try XCTUnwrap(try store.item(id: id))
+        XCTAssertEqual(item.kind, .richText)
+        XCTAssertEqual(item.text, "同じ文")
+        XCTAssertEqual(item.copyCount, 2)
+        XCTAssertEqual(item.copiedAt, Date(timeIntervalSince1970: 200))
+        XCTAssertEqual(try store.representations(itemID: id).map(\.type), ["public.utf8-plain-text", "public.rtf"])
+        XCTAssertEqual(try store.count(), 1)
+    }
+
+    func testURLIsNotMergedWithText() {
+        var url = textCapture("https://example.com")
+        url.kind = .url
+        XCTAssertNotEqual(url.contentHash, textCapture("https://example.com").contentHash)
+    }
+
     func testPruneKeepsPinned() throws {
         let t0 = Date(timeIntervalSince1970: 1_000)
         let first = try store.save(textCapture("1"), limit: 2, now: t0)

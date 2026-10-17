@@ -139,8 +139,21 @@ public struct Capture: Sendable {
         self.pixelHeight = pixelHeight
     }
 
+    /// 重複をまとめるためのキー。
+    /// テキストは前後の空白・改行と改行コードの違いを無視する（ターミナルからのコピーは末尾の改行が毎回違うことが多いため）。
+    /// テキストとリッチテキストは、文字が同じなら同じものとして扱う
     public var contentHash: String {
-        ContentHash.make(kind: kind, data: primaryData)
+        switch kind {
+        case .text, .richText, .url:
+            guard let text else { return ContentHash.make(kind: kind, data: primaryData) }
+            let normalized = text
+                .replacingOccurrences(of: "\r\n", with: "\n")
+                .replacingOccurrences(of: "\r", with: "\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return ContentHash.make(kind: kind == .url ? .url : .text, data: Data(normalized.utf8))
+        case .image, .file:
+            return ContentHash.make(kind: kind, data: primaryData)
+        }
     }
 
     public var byteSize: Int {

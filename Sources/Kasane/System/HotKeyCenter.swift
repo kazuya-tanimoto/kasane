@@ -68,8 +68,10 @@ final class HotKeyCenter {
         nextID += 1
         var ref: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: OSType(0x4B53_4E45), id: id) // 'KSNE'
+        // 排他で登録する: 他のアプリが同じキーをすでに登録していれば失敗するので、ぶつかりを検出できる
         let status = RegisterEventHotKey(
-            hotKey.keyCode, hotKey.modifiers, hotKeyID, GetApplicationEventTarget(), 0, &ref
+            hotKey.keyCode, hotKey.modifiers, hotKeyID, GetApplicationEventTarget(),
+            OptionBits(kEventHotKeyExclusive), &ref
         )
         guard status == noErr, let ref else { return false }
         refs.append(ref)

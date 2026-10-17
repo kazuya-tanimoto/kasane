@@ -11,7 +11,7 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
     ],
     targets: [
-        // OS に依存しないロジック（あいまい検索、FIFO/LIFO キュー）。Linux でもテストできる
+        // OS に依存しないロジック（あいまい検索、FIFO/LIFO キュー）。Linux でもテストできる（ローマ字の読みの作成だけは macOS 専用）
         .target(
             name: "KasaneCore",
             swiftSettings: [.swiftLanguageMode(.v5)]
