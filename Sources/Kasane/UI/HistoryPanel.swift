@@ -15,7 +15,7 @@ final class HistoryPanel: NSPanel {
             defer: false
         )
         hideTitlebar()
-        // 動かせるのは検索欄の周りと操作ボタンの横（`WindowDragArea`）だけ。
+        // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
         minSize = HistoryPanelController.minSize
@@ -47,6 +47,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     /// 自分で位置を決めている間は、動かした・大きさを変えたとみなして保存しない
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
+    private let inputSource = InputSourceSwitcher()
 
     init(model: HistoryModel) {
         self.model = model
@@ -65,9 +66,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
     }
 
-    /// 表示・非表示が変わったとき（FIFO / LIFO 中の小さな表示の出し入れに使う）
-    var onVisibilityChange: ((Bool) -> Void)?
-
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
 
@@ -83,7 +81,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
         installKeyMonitor()
-        onVisibilityChange?(true)
+        inputSource.switchToASCII()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -99,6 +97,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         isHiding = true
         removeKeyMonitor()
+        // 貼り付け先のアプリに戻る前に、開く前の入力方法に戻す
+        inputSource.restore()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -108,7 +108,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
-                self.onVisibilityChange?(false)
                 completion?()
             }
         })
@@ -184,6 +183,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// 処理したキーなら true（検索欄には渡さない）
     private func handleKey(_ event: NSEvent) -> Bool {
+        // 日本語の変換中は、Enter（確定）・↑↓（候補の選択）・Esc（取り消し）などを日本語入力に渡す。
+        // このモニタは日本語入力より先にキーを受け取るので、確かめないと確定の Enter で貼り付けてしまう
+        if let client = panel.firstResponder as? NSTextInputClient, client.hasMarkedText() {
+            return false
+        }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch Int(event.keyCode) {
         case 125: // ↓
@@ -206,9 +210,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             } else {
                 model.activateSelection(.paste)
             }
-            return true
-        case 48 where model.queueMode != nil && flags.isDisjoint(with: [.command, .option, .control]): // Tab: キューと履歴の切り替え（FIFO / LIFO 中だけ）
-            model.toggleListMode()
             return true
         case 53: // Esc: 検索語があれば消し、なければ閉じる
             if model.query.isEmpty {

@@ -67,7 +67,7 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "accentColor") }
     }
 
-    /// FIFO / LIFO 中の小さな表示の文字の大きさ（pt）
+    /// FIFO / LIFO 中の小さいウインドウの文字の大きさ（pt）
     static var hudFontSize: Double {
         get {
             let value = defaults.object(forKey: "hudFontSize") as? Double ?? 12

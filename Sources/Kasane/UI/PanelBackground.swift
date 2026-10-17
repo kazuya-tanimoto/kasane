@@ -9,7 +9,7 @@ enum BlurPreset {
     static let maxRadius = 64
 }
 
-/// FIFO / LIFO 中の小さな表示を出す位置
+/// FIFO / LIFO 中の小さいウインドウを出す位置
 enum HUDPosition: String, CaseIterable {
     case topRight, topLeft, bottomRight, bottomLeft
 
@@ -49,7 +49,7 @@ final class AppearanceSettings: ObservableObject {
     }
 }
 
-/// 履歴ウインドウと小さな表示の背景。
+/// 履歴ウインドウと小さいウインドウの背景。
 ///
 /// ぼかしはウインドウ自体に半径を指定して作る（`WindowBlur`）。ここでは不透明度ぶんの色を重ねるだけ。
 /// 角丸と縁はシステムのウインドウが描く。
