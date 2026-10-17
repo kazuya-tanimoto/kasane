@@ -11,14 +11,17 @@ import Carbon
 /// 入力方法を選び直す API（TISSelectInputSource）は日本語入力との切り替えに時間がかかり、
 /// ウインドウの開閉が目に見えて遅くなったため（2026-10-17、Mac で確認）。
 /// 英数 / かな キーは日本語入力（ことえり、Google 日本語入力など）が自分で処理する。
-/// ただし、かな入力のまま開くと表示に遅れが出ることがある（2026-10-17 調査中）。
+///
+/// キーは Kasane のウインドウではなく、前面にある作業中のアプリに送る。Kasane のウインドウで
+/// 日本語入力を切り替えると、その処理を待つ間ウインドウの表示が遅れたため（2026-10-17、Mac で確認）。
+/// 日本語入力の英数 / かなは全部のアプリで共通なので、作業中のアプリで切り替えれば Kasane でも英数になる。
 /// `defaults write io.github.kazuya-tanimoto.kasane switchesToASCIIOnOpen -bool false` で切り替えをやめられる
 @MainActor
 final class InputSourceSwitcher {
     /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
     private var wasNonASCII: Bool?
 
-    /// ウインドウがキーウインドウになった直後に呼ぶ（送ったキーをウインドウの日本語入力が受け取る）
+    /// ウインドウを出す直前に呼ぶ（キーは前面にある作業中のアプリの日本語入力が受け取る）
     func switchToASCII() {
         guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return }
         let nonASCII = !Self.isCurrentASCII()
@@ -41,6 +44,14 @@ final class InputSourceSwitcher {
         }
     }
 
+    /// 前面にある、Kasane 以外のアプリ
+    private static var workingAppPID: pid_t? {
+        guard let app = NSWorkspace.shared.frontmostApplication,
+              app.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        else { return nil }
+        return app.processIdentifier
+    }
+
     private static func isCurrentASCII() -> Bool {
         guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
               let pointer = TISGetInputSourceProperty(current, kTISPropertyInputSourceIsASCIICapable)
@@ -48,8 +59,10 @@ final class InputSourceSwitcher {
         return CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(pointer).takeUnretainedValue())
     }
 
-    /// 英数 / かな キーを 1 回押したことにする。アクセシビリティ権限がないと送れない（そのときは何もしない）
+    /// 作業中のアプリで英数 / かな キーを 1 回押したことにする。
+    /// 作業中のアプリがなければ、キーウインドウに送る。アクセシビリティ権限がないと送れない（そのときは何もしない）
     private static func post(key: CGKeyCode) {
+        let pid = workingAppPID
         let source = CGEventSource(stateID: .combinedSessionState)
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)
@@ -57,7 +70,11 @@ final class InputSourceSwitcher {
         for event in [down, up] {
             event.flags = []
             event.setIntegerValueField(.eventSourceUserData, value: Paster.syntheticEventMarker)
-            event.post(tap: .cgSessionEventTap)
+            if let pid {
+                event.postToPid(pid)
+            } else {
+                event.post(tap: .cgSessionEventTap)
+            }
         }
     }
 }

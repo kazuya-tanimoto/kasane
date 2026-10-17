@@ -78,14 +78,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         position()
         isHiding = false
         panel.alphaValue = 0
+        // 作業中のアプリが前面にいるうちに、英数に切り替える
+        inputSource.switchToASCII()
         panel.makeKeyAndOrderFront(nil)
         WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
         installKeyMonitor()
-        // 検索欄にフォーカスが移ってから（SwiftUI の反映は次の描画）、英数に切り替える
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.isVisible else { return }
-            self.inputSource.switchToASCII()
-        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
