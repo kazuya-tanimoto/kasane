@@ -81,7 +81,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
         installKeyMonitor()
-        inputSource.switchToASCII()
+        // 検索欄にフォーカスが移ってから（SwiftUI の反映は次の描画）、英数に切り替える
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isVisible else { return }
+            self.inputSource.switchToASCII()
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
@@ -97,8 +101,6 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         isHiding = true
         removeKeyMonitor()
-        // 貼り付け先のアプリに戻る前に、開く前の入力方法に戻す
-        inputSource.restore()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -108,6 +110,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 guard let self else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
+                // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
+                self.inputSource.restore()
                 completion?()
             }
         })

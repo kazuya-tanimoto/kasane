@@ -5,62 +5,57 @@ import Carbon
 ///
 /// Kasane はローマ字で日本語の項目も検索できるので、英数のまま打てば大半の検索ができる。
 /// 閉じたら開く前の入力方法に戻す。ウインドウは前のアプリを前面に残したまま開くので、
-/// 戻さないと貼り付け先のアプリまで英数のままになる
+/// 戻さないと貼り付け先のアプリまで英数のままになる。
+///
+/// 切り替えは、利用者が 英数 / かな キーを押したときと同じキーを送って行う。
+/// 入力方法を選び直す API（TISSelectInputSource）は日本語入力との切り替えに時間がかかり、
+/// ウインドウの開閉が目に見えて遅くなったため（2026-10-17、Mac で確認）。
+/// 英数 / かな キーは日本語入力（ことえり、Google 日本語入力など）が自分で処理するので速い
 @MainActor
 final class InputSourceSwitcher {
-    /// 開く前の入力方法。閉じたときに戻す
-    private var saved: TISInputSource?
+    /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
+    private var wasNonASCII: Bool?
 
+    /// ウインドウがキーウインドウになった直後に呼ぶ（送ったキーをウインドウの日本語入力が受け取る）
     func switchToASCII() {
-        guard saved == nil, let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue() else { return }
-        saved = current
-        guard !Self.bool(current, kTISPropertyInputSourceIsASCIICapable),
-              let ascii = Self.asciiSource(near: current)
-        else { return }
-        let status = TISSelectInputSource(ascii)
-        if status != noErr {
-            NSLog("Kasane: TISSelectInputSource failed (%d)", status)
+        guard wasNonASCII == nil else { return }
+        let nonASCII = !Self.isCurrentASCII()
+        wasNonASCII = nonASCII
+        if nonASCII {
+            Self.post(key: CGKeyCode(kVK_JIS_Eisu))
         }
     }
 
+    /// ウインドウを閉じたあとに呼ぶ（キーは前面に戻ったアプリの日本語入力が受け取る）
     func restore() {
-        guard let saved else { return }
-        self.saved = nil
-        // ウインドウの中でかなキーなどで切り替えていても、開く前の入力方法に戻す
-        if let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
-           Self.string(current, kTISPropertyInputSourceID) == Self.string(saved, kTISPropertyInputSourceID) {
-            return
+        guard let wasNonASCII else { return }
+        self.wasNonASCII = nil
+        if wasNonASCII {
+            // ウインドウの中でかなキーを押していても、もう一度押すだけなので変わらない
+            Self.post(key: CGKeyCode(kVK_JIS_Kana))
+        } else if !Self.isCurrentASCII() {
+            // 開く前は英数で、ウインドウの中でかなキーを押したときだけ戻す
+            Self.post(key: CGKeyCode(kVK_JIS_Eisu))
         }
-        TISSelectInputSource(saved)
     }
 
-    /// 切り替え先の英数の入力方法。同じ日本語入力の「英字」があればそれを選ぶ
-    /// （ABC などに切り替えると、メニューバーの入力方法そのものが変わってしまうため）
-    private static func asciiSource(near current: TISInputSource) -> TISInputSource? {
-        let filter = [
-            kTISPropertyInputSourceIsSelectCapable as String: true,
-            kTISPropertyInputSourceIsEnabled as String: true,
-        ] as CFDictionary
-        let bundleID = string(current, kTISPropertyBundleID)
-        if bundleID != nil, let list = TISCreateInputSourceList(filter, false)?.takeRetainedValue() {
-            let sources = list as! [TISInputSource]
-            let sameMethod = sources.first { source in
-                string(source, kTISPropertyBundleID) == bundleID
-                    && string(source, kTISPropertyInputSourceCategory) == (kTISCategoryKeyboardInputSource as String)
-                    && bool(source, kTISPropertyInputSourceIsASCIICapable)
-            }
-            if let sameMethod { return sameMethod }
-        }
-        return TISCopyCurrentASCIICapableKeyboardInputSource()?.takeRetainedValue()
-    }
-
-    private static func string(_ source: TISInputSource, _ key: CFString) -> String? {
-        guard let pointer = TISGetInputSourceProperty(source, key) else { return nil }
-        return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
-    }
-
-    private static func bool(_ source: TISInputSource, _ key: CFString) -> Bool {
-        guard let pointer = TISGetInputSourceProperty(source, key) else { return false }
+    private static func isCurrentASCII() -> Bool {
+        guard let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              let pointer = TISGetInputSourceProperty(current, kTISPropertyInputSourceIsASCIICapable)
+        else { return true }
         return CFBooleanGetValue(Unmanaged<CFBoolean>.fromOpaque(pointer).takeUnretainedValue())
+    }
+
+    /// 英数 / かな キーを 1 回押したことにする。アクセシビリティ権限がないと送れない（そのときは何もしない）
+    private static func post(key: CGKeyCode) {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        guard let down = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false)
+        else { return }
+        for event in [down, up] {
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: Paster.syntheticEventMarker)
+            event.post(tap: .cgSessionEventTap)
+        }
     }
 }
