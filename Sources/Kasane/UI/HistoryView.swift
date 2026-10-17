@@ -54,6 +54,7 @@ struct HistoryView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
             TextField("履歴を検索", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 19))
@@ -61,6 +62,7 @@ struct HistoryView: View {
             Text("\(model.pinned.count + model.others.count) 件")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+                .allowsHitTesting(false)
         }
         .padding(.horizontal, 20)
         .padding(.top, 6)
@@ -77,6 +79,8 @@ private struct TitleBar: View {
             Text("Kasane")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.secondary)
+                // 文字の上でも、背景の WindowDragArea でつかめるようにする
+                .allowsHitTesting(false)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)

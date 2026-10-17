@@ -138,16 +138,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let item = try? store.item(id: itemID),
               let representations = try? store.representations(itemID: itemID)
         else { return }
-        // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
-        let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
-        writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
-
-        // FIFO / LIFO 中の ⌥⏎ は、⌘C でコピーしたときと同じくキューに追加する。
+        // FIFO / LIFO 中の ⌥⏎ は、選んだ項目をキューに追加するだけ（クリップボードは変えない）。
         // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
         if action == .copyOnly, queue.mode != nil {
             queue.didCapture(itemID: itemID)
             return
         }
+
+        // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
+        let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
+        writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
 
         panel.hide { [weak self] in
             guard action != .copyOnly else { return }
