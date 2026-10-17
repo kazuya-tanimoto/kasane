@@ -15,6 +15,8 @@ struct HistoryView: View {
     @ObservedObject var model: HistoryModel
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
+    /// 一時的な計測用: 見た目がアクティブになった時刻をログに出す
+    @Environment(\.controlActiveState) private var activeState
 
     var body: some View {
         VStack(spacing: 0) {
@@ -46,6 +48,12 @@ struct HistoryView: View {
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
+        }
+        .onChange(of: activeState) {
+            TimingLog.mark("looks active = \(activeState)")
+        }
+        .onChange(of: searchFocused) {
+            TimingLog.mark("search field focused = \(searchFocused)")
         }
     }
 
