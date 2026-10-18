@@ -282,10 +282,24 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 return true
             }
             if let action = Self.editAction(characters, flags: flags) {
+                if action == #selector(NSText.paste(_:)), pasteAsOneLine() {
+                    return true
+                }
                 return NSApp.sendAction(action, to: nil, from: nil)
             }
         }
         return false
+    }
+
+    /// 検索欄に、改行やタブを空白に置き換えて 1 行で貼り付ける。
+    /// 検索欄は 1 行なので、改行を含む文字をそのまま貼ると表示が崩れる（2026-10-18、Mac で確認）。
+    /// 空白は検索の区切り（AND）になるので、行ごとの語がそれぞれ検索語になる。貼り付けられなければ false
+    private func pasteAsOneLine() -> Bool {
+        guard let editor = panel.firstResponder as? NSTextView, editor.isEditable,
+              let text = NSPasteboard.general.string(forType: .string)
+        else { return false }
+        editor.insertText(TextNormalizer.singleLine(text), replacementRange: editor.selectedRange())
+        return true
     }
 
     /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。

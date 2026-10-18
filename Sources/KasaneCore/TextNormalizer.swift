@@ -17,6 +17,13 @@ public enum TextNormalizer {
         return s
     }
 
+    /// 検索欄に貼り付ける文字を 1 行にする。改行とタブを空白 1 つに置き換え、前後の空白を除く
+    public static func singleLine(_ text: String) -> String {
+        text.split(whereSeparator: { $0.isNewline || $0 == "\t" })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
     /// 日本語（かな・漢字）を含むかどうか。ローマ字の読みを作るかの判定に使う
     public static func containsJapanese(_ text: String) -> Bool {
         text.unicodeScalars.contains { scalar in
