@@ -276,14 +276,14 @@ private struct ItemListView: View {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
                     // 見出しは出さず、ピン留めとそれ以外の間に線を 1 本引くだけにする（2026-10-18 決定。
-                    // ピン留めの段は自分でピン留めしたときにしか出ないので、見出しがなくても分かる）
-                    ForEach(model.pinned) { item in
-                        row(item)
-                    }
-                    if !model.pinned.isEmpty && !model.others.isEmpty {
-                        PinDivider()
-                    }
-                    ForEach(model.others) { item in
+                    // ピン留めの段は自分でピン留めしたときにしか出ないので、見出しがなくても分かる）。
+                    // ピン留めとそれ以外を 1 つの ForEach で描く。別々の ForEach にすると、ピン留めした行が
+                    // 移った先で描き直されず、ピン留めする直前の見た目（選択中の背景、ピンの印なし）のまま残った（2026-10-18、Mac で確認）
+                    let firstOtherID = model.pinned.isEmpty ? nil : model.others.first?.id
+                    ForEach(model.visible) { item in
+                        if item.id == firstOtherID {
+                            PinDivider()
+                        }
                         row(item)
                     }
                     if model.pinned.isEmpty && model.others.isEmpty {
