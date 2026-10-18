@@ -60,9 +60,16 @@ final class HotKeyCenter {
     private var nextID: UInt32 = 1
     private var handlerInstalled = false
 
-    /// 登録に失敗した（他のアプリが同じキーを使っている）ときは false
+    enum Registration {
+        case registered
+        /// 他のアプリが同じキーを使っている
+        case inUse
+        /// macOS が受け付けないキー（macOS 15.0〜15.1 では ⌥ や ⇧ だけのキーが登録できなかった）
+        case rejected(OSStatus)
+    }
+
     @discardableResult
-    func register(_ hotKey: HotKey, handler: @escaping () -> Void) -> Bool {
+    func register(_ hotKey: HotKey, handler: @escaping () -> Void) -> Registration {
         installHandlerIfNeeded()
         let id = nextID
         nextID += 1
@@ -73,10 +80,12 @@ final class HotKeyCenter {
             hotKey.keyCode, hotKey.modifiers, hotKeyID, GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &ref
         )
-        guard status == noErr, let ref else { return false }
+        guard status == noErr, let ref else {
+            return status == OSStatus(eventHotKeyExistsErr) ? .inUse : .rejected(status)
+        }
         refs.append(ref)
         handlers[id] = handler
-        return true
+        return .registered
     }
 
     fileprivate func handle(id: UInt32) {

@@ -82,11 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         func register(_ name: String, _ fallback: String, _ handler: @escaping () -> Void) -> String {
             let spec = AppSettings.hotKey(name, default: fallback)
             guard let hotKey = HotKeyCenter.HotKey(spec) ?? HotKeyCenter.HotKey(fallback) else { return "" }
-            if !center.register(hotKey, handler: handler) {
+            switch center.register(hotKey, handler: handler) {
+            case .registered:
+                return hotKey.displayString
+            case .inUse:
                 NSLog("Kasane: hotkey \(spec) is already in use")
                 return "（\(hotKey.displayString) は使用中）"
+            case .rejected(let status):
+                NSLog("Kasane: hotkey \(spec) was rejected (\(status))")
+                return "（\(hotKey.displayString) は macOS で使えません）"
             }
-            return hotKey.displayString
         }
         let keys = Self.defaultHotKeys
         return .init(
