@@ -6,7 +6,8 @@ import KasaneStore
 /// FIFO / LIFO モード。
 ///
 /// 仕組み:
-/// - モード中にコピーされた項目をキューに積む（通常の履歴にも保存される）
+/// - モード中にコピーされた項目をキューに積む（通常の履歴にも保存される）。
+///   積んだ時点の中身をキューが持つので、あとで履歴から消えてもキューは変わらない（2026-10-18 決定）
 /// - ⌘V の keyDown を CGEventTap で受け取り、そのイベントを貼り付け先のアプリへ渡す「前に」
 ///   クリップボードをキューの次の項目に書き換える。イベント自体は変更も破棄もせずにそのまま流す
 /// - キューが空になったらモードを終える
@@ -17,7 +18,7 @@ import KasaneStore
 /// 代わりに、モード中だけはすべてのキー入力がこのコールバックを通る（処理は数マイクロ秒）。
 @MainActor
 final class QueueController {
-    private(set) var queue: PasteQueue<Int64>?
+    private(set) var queue: PasteQueue<QueuedClip>?
 
     /// キューやモードが変わったとき
     var onChange: (() -> Void)?
@@ -63,21 +64,13 @@ final class QueueController {
         onChange?()
     }
 
-    /// 新しいコピーを保存したあとに呼ぶ
+    /// 新しいコピーを保存したあとに呼ぶ。その時点の中身をキューに積む
     func didCapture(itemID: Int64) {
-        guard queue != nil else { return }
-        queue?.push(itemID)
-        onChange?()
-    }
-
-    /// 履歴から削除された項目をキューからも外す
-    func remove(itemIDs: Set<Int64>) {
-        guard var current = queue else { return }
-        let remaining = current.items.filter { !itemIDs.contains($0) }
-        guard remaining.count != current.items.count else { return }
-        current = PasteQueue(mode: current.mode)
-        remaining.forEach { current.push($0) }
-        queue = current
+        guard queue != nil,
+              let item = try? store.item(id: itemID),
+              let representations = try? store.representations(itemID: itemID)
+        else { return }
+        queue?.push(QueuedClip(itemID: itemID, title: item.title, text: item.text, representations: representations))
         onChange?()
     }
 
@@ -129,13 +122,10 @@ final class QueueController {
               !(isHistoryPanelKey?() ?? false)
         else { return }
 
-        guard let itemID = current.popNext() else { return }
+        guard let clip = current.popNext() else { return }
         queue = current
-        if let item = try? store.item(id: itemID),
-           let representations = try? store.representations(itemID: itemID) {
-            writer.write(representations, plainText: item.text, plainTextOnly: false)
-        }
-        onPasted?(itemID)
+        writer.write(clip.representations, plainText: clip.text, plainTextOnly: false)
+        onPasted?(clip.itemID)
         if current.isEmpty {
             // 最後の1件を貼り付けたらモードを終える。タップの後始末はこのコールバックを抜けてから
             DispatchQueue.main.async { [weak self] in
@@ -155,6 +145,19 @@ final class QueueController {
             && !flags.contains(.maskAlternate)
             && !flags.contains(.maskControl)
     }
+}
+
+/// キューに積んだ 1 件。積んだ時点の中身を持つ
+struct QueuedClip: Equatable {
+    /// 同じ項目を 2 回積んでも別のものとして扱う
+    let id = UUID()
+    /// 履歴の項目。貼った回数を数えるのに使う（履歴から消えていたら数えない）
+    let itemID: Int64
+    let title: String
+    let text: String?
+    let representations: [Capture.Representation]
+
+    static func == (lhs: QueuedClip, rhs: QueuedClip) -> Bool { lhs.id == rhs.id }
 }
 
 private let queueEventTapCallback: CGEventTapCallBack = { _, type, event, refcon in

@@ -243,7 +243,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             model.moveSelection(8)
             return true
         case 36, 76: // ⏎ / テンキーの Enter
-            if flags.contains(.option) {
+            // ⌥⏎ や ⌃⏎ では何もしない。前のコピーのキー（⌥⏎）を押したときに、貼り付けてしまわないようにする
+            guard flags.isDisjoint(with: [.option, .control]) else { return true }
+            if flags.contains(.command) {
                 model.activateSelection(.copyOnly)
             } else if flags.contains(.shift) {
                 model.activateSelection(.plainText)
@@ -275,6 +277,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             }
             if characters == "p" {
                 model.togglePinSelection()
+                return true
+            }
+            // ⌘D でも消せる。⌘⌫ はキーボードによって押しにくいため（2026-10-18、Kazuya さんの要望）
+            if characters == "d", flags.isDisjoint(with: [.shift, .option, .control]) {
+                model.deleteSelection()
                 return true
             }
             if characters == "w" {

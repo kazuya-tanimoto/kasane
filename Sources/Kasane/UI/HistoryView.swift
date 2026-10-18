@@ -15,6 +15,7 @@ struct HistoryView: View {
     @ObservedObject var model: HistoryModel
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,8 +50,11 @@ struct HistoryView: View {
         }
     }
 
+    /// 検索欄。角丸の薄い塗りの中が文字を打つ場所で、塗りの外をつかむとウインドウが動く
+    /// （2026-10-18 決定。詳細はデザインの ui-tweaks-2026-10-18.md）
     private var searchBar: some View {
-        HStack(spacing: 12) {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
@@ -59,14 +63,17 @@ struct HistoryView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 19))
                 .focused($searchFocused)
-            Text("\(model.pinned.count + model.others.count) 件")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .allowsHitTesting(false)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 6)
-        .padding(.bottom, 10)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 13)
+        .background(shape.fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)))
+        // 塗りの中は、文字の上でなくてもクリックで検索欄に入れる
+        .contentShape(shape)
+        .onTapGesture { searchFocused = true }
+        .pointerStyle(.horizontalText)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         // 検索欄の周りをつかんでウインドウを動かせるようにする
         .background(WindowDragArea())
     }
@@ -75,15 +82,12 @@ struct HistoryView: View {
 /// ウインドウの一番上の帯。一般的な Mac のアプリのタイトルバーと同じ場所で、どこをつかんでもウインドウが動く
 private struct TitleBar: View {
     var body: some View {
-        HStack {
-            Text("Kasane")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.secondary)
-                // 文字の上でも、背景の WindowDragArea でつかめるようにする
-                .allowsHitTesting(false)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 14)
+        // 中央に 13pt（Mac の標準のウインドウタイトルと同じ大きさ）。2026-10-18 決定
+        Text("Kasane")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Color.primary.opacity(0.85))
+            // 文字の上でも、背景の WindowDragArea でつかめるようにする
+            .allowsHitTesting(false)
         .frame(height: 28)
         .frame(maxWidth: .infinity)
         .background(WindowDragArea())
@@ -123,8 +127,8 @@ private struct Toolbar: View {
                 .buttonStyle(ActionStyle(isPrimary: true, accent: accent))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
                 .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
-            // FIFO / LIFO 中の ⌥⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
-            Button(model.queueMode == nil ? "コピー ⌥⏎" : "キューに追加 ⌥⏎") { model.activateSelection(.copyOnly) }
+            // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
+            Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
                 .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
             Button {
                 model.showsDetails.toggle()

@@ -8,7 +8,7 @@ enum PasteAction {
     case paste
     /// 書式なしで自動ペーストする（⇧⏎）
     case plainText
-    /// クリップボードにコピーするだけ（⌥⏎）
+    /// クリップボードにコピーするだけ（⌘⏎）
     case copyOnly
 }
 
@@ -74,7 +74,7 @@ final class HistoryModel: ObservableObject {
     @Published var selectedID: Int64? {
         didSet { if selectedID != oldValue { loadPreview() } }
     }
-    /// FIFO / LIFO 中のモード。ウインドウには通常の履歴を出し、「コピー ⌥⏎」の表示だけを変える
+    /// FIFO / LIFO 中のモード。ウインドウには通常の履歴を出し、「コピー ⌘⏎」の表示だけを変える
     @Published var queueMode: QueueMode?
     @Published private(set) var preview: PreviewContent?
     @Published private(set) var sortOrder: HistorySortOrder
@@ -88,7 +88,6 @@ final class HistoryModel: ObservableObject {
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
     var onActivate: ((Int64, PasteAction) -> Void)?
-    var onDelete: (([Int64]) -> Void)?
 
     let store: HistoryStore
 
@@ -284,7 +283,6 @@ final class HistoryModel: ObservableObject {
         try? store.delete(itemID: id)
         remove(ids: [id])
         selectedID = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
-        onDelete?([id])
     }
 
     // MARK: - プレビュー
