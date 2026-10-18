@@ -296,6 +296,17 @@ public final class HistoryStore: @unchecked Sendable {
     }
 
     /// 貼り付けた回数を数える（使用回数順のソートに使う）
+    /// 履歴から選んでクリップボードに入れた。⌘C でコピーし直したときと同じく、コピー日時と回数を更新する
+    /// （コピー日時順で一番上に来る。2026-10-18 決定）
+    public func recordReuse(itemID: Int64, now: Date = Date()) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE item SET copiedAt = ?, copyCount = copyCount + 1 WHERE id = ?",
+                arguments: [now, itemID]
+            )
+        }
+    }
+
     public func recordPaste(itemID: Int64, now: Date = Date()) throws {
         try dbQueue.write { db in
             try db.execute(

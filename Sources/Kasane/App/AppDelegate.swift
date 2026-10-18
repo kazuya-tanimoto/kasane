@@ -148,6 +148,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
         let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
         writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
+        // 選んだ項目はコピーし直したものとして、コピー日時順の一番上に移す（2026-10-18 決定。
+        // ⌘C でコピーし直したときと同じ動きにし、一番上と今のクリップボードの中身を合わせる）
+        let now = Date()
+        try? store.recordReuse(itemID: itemID, now: now)
+        model.didReuse(id: itemID, at: now)
 
         panel.hide { [weak self] in
             guard action != .copyOnly else { return }

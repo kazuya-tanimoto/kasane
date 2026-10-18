@@ -160,6 +160,13 @@ final class HistoryModel: ObservableObject {
     }
 
     /// 貼り付け回数を増やす（DB の更新は呼び出し側）
+    /// 履歴から選んでクリップボードに入れた項目を、コピーし直したものとして扱う
+    func didReuse(id: Int64, at date: Date) {
+        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return }
+        summaries[index].copiedAt = date
+        rebuild()
+    }
+
     func didPaste(id: Int64) {
         guard let index = summaries.firstIndex(where: { $0.id == id }) else { return }
         summaries[index].pasteCount += 1

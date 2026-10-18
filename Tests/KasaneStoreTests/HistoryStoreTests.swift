@@ -140,6 +140,15 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["B", "A"])
     }
 
+    func testReuseMovesItemToTopOfRecent() throws {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let a = try store.save(textCapture("A"), limit: 100, now: t0)
+        _ = try store.save(textCapture("B"), limit: 100, now: t0.addingTimeInterval(1))
+        XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["B", "A"])
+        try store.recordReuse(itemID: a.item.id!, now: t0.addingTimeInterval(2))
+        XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["A", "B"])
+    }
+
     func testDeleteAllKeepsPinned() throws {
         let a = try store.save(textCapture("A"), limit: 100)
         _ = try store.save(textCapture("B"), limit: 100)
