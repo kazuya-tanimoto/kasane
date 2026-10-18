@@ -111,7 +111,7 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "hasCompletedOnboarding") }
     }
 
-    /// グローバルショートカット。`defaults write <bundle id> hotkey.history "ctrl+cmd+v"` の形で上書きできる
+    /// グローバルショートカット。`defaults write <bundle id> hotkey.history "opt+v"` の形で上書きできる
     static func hotKey(_ name: String, default value: String) -> String {
         defaults.string(forKey: "hotkey.\(name)") ?? value
     }

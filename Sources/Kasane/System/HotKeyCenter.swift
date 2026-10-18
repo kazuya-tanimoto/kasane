@@ -8,7 +8,7 @@ final class HotKeyCenter {
         var keyCode: UInt32
         var modifiers: UInt32
 
-        /// "ctrl+cmd+v" のような文字列から作る
+        /// "opt+cmd+f" のような文字列から作る
         init?(_ string: String) {
             var modifiers: UInt32 = 0
             var keyCode: UInt32?

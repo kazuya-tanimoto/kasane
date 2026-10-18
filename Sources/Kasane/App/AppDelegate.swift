@@ -5,7 +5,7 @@ import KasaneStore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ショートカットの初期値（仮）。どれも `defaults write` で変えられる。設定画面は v1 の仕上げで作る
-    static let defaultHotKeys = (history: "ctrl+cmd+v", fifo: "ctrl+opt+cmd+f", lifo: "ctrl+opt+cmd+l")
+    static let defaultHotKeys = (history: "opt+v", fifo: "opt+cmd+f", lifo: "opt+cmd+l")
 
     private var store: HistoryStore!
     private var model: HistoryModel!
