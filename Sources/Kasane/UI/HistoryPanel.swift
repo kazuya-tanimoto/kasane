@@ -281,7 +281,26 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 hide()
                 return true
             }
+            if let action = Self.editAction(characters, flags: flags) {
+                return NSApp.sendAction(action, to: nil, from: nil)
+            }
         }
         return false
+    }
+
+    /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。
+    /// Kasane はメニューバーにメニューを出さないので「編集」メニューがなく、
+    /// ふつうのアプリのようにはこれらのキーが検索欄に届かない
+    private static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
+        guard flags.isDisjoint(with: [.option, .control]) else { return nil }
+        let shift = flags.contains(.shift)
+        switch characters {
+        case "v" where !shift: return #selector(NSText.paste(_:))
+        case "c" where !shift: return #selector(NSText.copy(_:))
+        case "x" where !shift: return #selector(NSText.cut(_:))
+        case "a" where !shift: return #selector(NSText.selectAll(_:))
+        case "z": return shift ? Selector(("redo:")) : Selector(("undo:"))
+        default: return nil
+        }
     }
 }
