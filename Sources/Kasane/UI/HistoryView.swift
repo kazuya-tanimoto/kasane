@@ -223,17 +223,16 @@ private struct ItemListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    if !model.pinned.isEmpty {
-                        SectionHeader(title: "ピン留め")
-                        ForEach(model.pinned) { item in
-                            row(item)
-                        }
+                    // 見出しは出さず、ピン留めとそれ以外の間に線を 1 本引くだけにする（2026-10-18 決定。
+                    // ピン留めの段は自分でピン留めしたときにしか出ないので、見出しがなくても分かる）
+                    ForEach(model.pinned) { item in
+                        row(item)
                     }
-                    if !model.others.isEmpty {
-                        SectionHeader(title: model.query.isEmpty ? "履歴" : "検索結果")
-                        ForEach(model.others) { item in
-                            row(item)
-                        }
+                    if !model.pinned.isEmpty && !model.others.isEmpty {
+                        PinDivider()
+                    }
+                    ForEach(model.others) { item in
+                        row(item)
                     }
                     if model.pinned.isEmpty && model.others.isEmpty {
                         EmptyState(
@@ -273,16 +272,16 @@ private struct ItemListView: View {
 
 // MARK: - 行
 
-private struct SectionHeader: View {
-    let title: String
+/// ピン留めとそれ以外の履歴の境目の線（両方あるときだけ出す）
+private struct PinDivider: View {
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
+        Rectangle()
+            .fill(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.14))
+            .frame(height: 1)
             .padding(.horizontal, 8)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+            .padding(.vertical, 6)
     }
 }
 
