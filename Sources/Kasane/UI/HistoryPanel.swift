@@ -40,13 +40,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     static let defaultSize = NSSize(width: 880, height: 560)
     static let minSize = NSSize(width: 720, height: 420)
 
-    private let panel: HistoryPanel
+    private var panel: HistoryPanel
+    private let hosting: NSHostingView<HistoryView>
     private let model: HistoryModel
     private var keyMonitor: Any?
     private var isHiding = false
     /// 自分で位置を決めている間は、動かした・大きさを変えたとみなして保存しない
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
+    private var blurState = WindowBlurState()
     private let inputSource = InputSourceSwitcher()
     /// 検索欄。開くときに英数に切り替える間だけフォーカスを外すので、戻す先として覚えておく
     private weak var searchField: NSResponder?
@@ -56,8 +58,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     init(model: HistoryModel) {
         self.model = model
         panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.defaultSize))
+        hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
         super.init()
-        let hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
         hosting.sizingOptions = [.minSize]
         // タイトルバーは隠しているので、その分の余白を空けない
         hosting.safeAreaRegions = []
@@ -65,8 +67,40 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
         panel.delegate = self
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
-            guard let self else { return }
-            WindowBlur.apply(radius: radius, to: self.panel)
+            self?.applyBlur(radius)
+        }
+    }
+
+    /// ぼかしの半径を付ける。なしから半径を付けるときは、角丸を保つためにウインドウを作り直す（`WindowBlurState`）
+    private func applyBlur(_ radius: Int) {
+        guard blurState.needsNewWindow(for: radius) else {
+            blurState.apply(radius, to: panel)
+            return
+        }
+        let old = panel
+        let wasOpen = old.isVisible && !isHiding
+        let wasKey = old.isKeyWindow
+        // 検索欄に入力中なら、フォーカスはウインドウの持つフィールドエディタにあるので、検索欄そのものを覚える
+        let focused = ((old.firstResponder as? NSTextView)?.delegate as? NSView) ?? (old.firstResponder as? NSView)
+        // 古いウインドウが閉じたことを、外をクリックしたとき（windowDidResignKey）と取り違えないよう先に外す
+        old.delegate = nil
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = HistoryPanel(contentRect: old.frame)
+        panel.setFrame(old.frame, display: false)
+        panel.contentView = hosting
+        panel.delegate = self
+        blurState = WindowBlurState()
+        // 起動したときと同じく、出す前に半径を付ける
+        blurState.apply(radius, to: panel)
+        guard wasOpen else { return }
+        if wasKey {
+            panel.makeKeyAndOrderFront(nil)
+            if let focused {
+                _ = panel.makeFirstResponder(focused)
+            }
+        } else {
+            panel.orderFront(nil)
         }
     }
 
@@ -94,7 +128,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             reattachSearchField()
         }
         panel.makeKeyAndOrderFront(nil)
-        WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+        applyBlur(AppearanceSettings.shared.blurRadius)
         installKeyMonitor()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12

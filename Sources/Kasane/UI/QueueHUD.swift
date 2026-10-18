@@ -12,29 +12,16 @@ import SwiftUI
 /// - 文字の大きさは設定で変えられ、表示の大きさもそれに合わせる
 @MainActor
 final class QueueHUDController {
-    private let panel: QueueHUDPanel
+    private var panel: QueueHUDPanel
     private let hosting: NSHostingView<QueueHUDView>
     /// 高さを測るためだけのもの。スクロールのない中身を、画面に出さずに測る
     private let measuring: NSHostingController<QueueHUDContent>
     private var blurObserver: AnyCancellable?
+    private var blurState = WindowBlurState()
     private let margin: CGFloat = 16
 
     init() {
-        panel = QueueHUDPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 260, height: 80),
-            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        panel.hideTitlebar()
-        panel.level = .statusBar
-        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        panel.isOpaque = false
-        panel.backgroundColor = .clear
-        panel.hasShadow = true
-        panel.hidesOnDeactivate = false
-        panel.isReleasedWhenClosed = false
-        panel.isMovable = false
+        panel = QueueHUDPanel(contentRect: NSRect(x: 0, y: 0, width: 260, height: 80))
         let empty = QueueHUDContent(mode: .fifo, titles: [], fontSize: AppSettings.hudFontSize)
         hosting = NSHostingView(rootView: QueueHUDView(content: empty, appearance: .shared))
         // 大きさはこちらで決める（`position()`）。SwiftUI 側からウインドウの大きさを変えさせない
@@ -44,8 +31,28 @@ final class QueueHUDController {
         measuring = NSHostingController(rootView: empty)
         measuring.sizingOptions = []
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
-            guard let self else { return }
-            WindowBlur.apply(radius: radius, to: self.panel)
+            self?.applyBlur(radius)
+        }
+    }
+
+    /// ぼかしの半径を付ける。なしから半径を付けるときは、角丸を保つためにウインドウを作り直す（`WindowBlurState`）
+    private func applyBlur(_ radius: Int) {
+        guard blurState.needsNewWindow(for: radius) else {
+            blurState.apply(radius, to: panel)
+            return
+        }
+        let old = panel
+        let wasVisible = old.isVisible
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = QueueHUDPanel(contentRect: old.frame)
+        panel.setFrame(old.frame, display: false)
+        panel.contentView = hosting
+        blurState = WindowBlurState()
+        // 起動したときと同じく、出す前に半径を付ける
+        blurState.apply(radius, to: panel)
+        if wasVisible {
+            panel.orderFrontRegardless()
         }
     }
 
@@ -67,7 +74,7 @@ final class QueueHUDController {
         position(content: content)
         if !panel.isVisible {
             panel.orderFrontRegardless()
-            WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+            applyBlur(AppearanceSettings.shared.blurRadius)
         }
     }
 
@@ -96,6 +103,24 @@ final class QueueHUDController {
 /// クリックは受け止めるが、キーウインドウにはならないパネル。
 /// キーウインドウになると、作業中のアプリ（や履歴ウインドウ）からキー入力を奪ってしまう
 final class QueueHUDPanel: NSPanel {
+    init(contentRect: NSRect) {
+        super.init(
+            contentRect: contentRect,
+            styleMask: [.titled, .nonactivatingPanel, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        hideTitlebar()
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = true
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        isMovable = false
+    }
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
