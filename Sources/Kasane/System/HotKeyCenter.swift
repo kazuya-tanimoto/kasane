@@ -64,7 +64,7 @@ final class HotKeyCenter {
         case registered
         /// 他のアプリが同じキーを使っている
         case inUse
-        /// macOS が受け付けないキー（macOS 15.0〜15.1 では ⌥ や ⇧ だけのキーが登録できなかった）
+        /// macOS が受け付けないキー（macOS 15.0 で ⌥ や ⇧ だけのキーが登録できなくなった。15.2 のベータで戻したと Apple の開発者フォーラムで回答あり）
         case rejected(OSStatus)
     }
 
