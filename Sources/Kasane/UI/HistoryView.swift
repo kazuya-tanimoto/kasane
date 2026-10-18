@@ -7,8 +7,9 @@ import SwiftUI
 ///
 /// - 一番上: 「Kasane」の帯（つかんでウインドウを動かす）
 /// - 1行目: 検索欄
-/// - 2行目: 種類の絞り込み、操作ボタン、詳細の切り替え
+/// - 2行目: 種類の絞り込み
 /// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
+/// - 一番下: 選んだ項目への操作ボタン
 ///
 /// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
@@ -37,6 +38,7 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
+            ActionBar(model: model)
         }
         .frame(
             minWidth: HistoryPanelController.minSize.width, maxWidth: .infinity,
@@ -108,11 +110,10 @@ struct WindowDragArea: NSViewRepresentable {
     }
 }
 
-// MARK: - ツールバー（1行）
+// MARK: - 絞り込み（1行）
 
 private struct Toolbar: View {
     @ObservedObject var model: HistoryModel
-    @Environment(\.kasaneAccent) private var accent
 
     var body: some View {
         HStack(spacing: 6) {
@@ -123,27 +124,70 @@ private struct Toolbar: View {
             // 空いている所をつかんでもウインドウを動かせる
             WindowDragArea()
                 .frame(minWidth: 8, maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+        }
+    }
+}
+
+// MARK: - 操作ボタン（一番下の帯）
+
+/// 選んだ項目への操作ボタン。上の段（探す）と場所を分け、絞り込みのボタンと取り違えにくくする。
+/// ピン留めと削除の入口もここに置く（右クリックのメニューは作らない。2026-10-18 決定）
+private struct ActionBar: View {
+    @ObservedObject var model: HistoryModel
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
+        HStack(spacing: 6) {
+            // 空いている所をつかんでもウインドウを動かせる
+            WindowDragArea()
+                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 26, maxHeight: 26)
             Button("ペースト ⏎") { model.activateSelection(.paste) }
-                .buttonStyle(ActionStyle(isPrimary: true, accent: accent))
+                .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
-                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
+                .buttonStyle(ActionStyle())
             // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
             Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
-                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
+                .buttonStyle(ActionStyle())
+            Button {
+                model.togglePinSelection()
+            } label: {
+                Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(ActionStyle(isOn: isPinned))
+            .help(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）")
+            // ⌘⌫ でも消せるが、ボタンには ⌘D だけ書く（1 つの方がすぐ読める）
+            Button {
+                model.deleteSelection()
+            } label: {
+                Label("⌘D", systemImage: "trash")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(ActionStyle())
+            .help("削除（⌘D・⌘⌫）")
             Button {
                 model.showsDetails.toggle()
             } label: {
                 Label("⌘I", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(ActionStyle(isPrimary: false, isOn: model.showsDetails, accent: accent))
+            .buttonStyle(ActionStyle(isOn: model.showsDetails))
             .help("詳細を表示（⌘I）")
+        }
+        .padding(.vertical, 9)
+        .padding(.horizontal, 16)
+        .background(WindowDragArea())
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
+                .frame(height: 1)
         }
     }
 }
 
 /// 絞り込みの丸いボタン。
-/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーはペーストと FIFO / LIFO だけに使う）
+/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーは FIFO / LIFO の小さいウインドウだけに使う）
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
 
@@ -187,30 +231,38 @@ private extension Color {
     })
 }
 
-/// ペーストなどの操作ボタン
+/// ペーストなどの操作ボタン。
+/// ペーストも他と同じ色にし、太字で区別する（色付きのボタンは「選ばれている」ように見えるため。2026-10-18 決定）
 private struct ActionStyle: ButtonStyle {
-    var isPrimary: Bool
+    var isPrimary = false
+    /// ピン留め中や ⌘I の詳細がオンのとき、絞り込みの選択中と同じく白く浮かせる
     var isOn = false
-    var accent: AccentColor
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
+            .foregroundStyle(isOn ? Color.raisedText : .primary)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                if isPrimary {
-                    shape.fill(accent.color)
-                } else if isOn {
-                    // ⌘I の詳細がオンのときは、絞り込みの選択中と同じ見た目
+                if isOn {
                     RaisedFill(shape: shape)
                 } else {
-                    shape.fill(Color.primary.opacity(0.08))
+                    ActionFill(shape: shape)
                 }
             }
             .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// 操作ボタンのふだんの背景（ライトは黒 7%、ダークは白 12%）
+private struct ActionFill<S: Shape>: View {
+    let shape: S
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        shape.fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07))
     }
 }
 
