@@ -99,6 +99,8 @@ final class HistoryModel: ObservableObject {
     private var summaryByID: [Int64: ClipSummary] = [:]
     private var searchTask: Task<Void, Never>?
     private var lastAppliedQuery: String?
+    /// 次に並びを入れ替えたあとで、選択中の項目までスクロールする（検索中は並びがあとから届くため）
+    private var scrollsAfterApply = false
     private var previewTask: Task<Void, Never>?
     private let thumbnailCache = NSCache<NSNumber, NSImage>()
 
@@ -208,6 +210,10 @@ final class HistoryModel: ObservableObject {
         let otherList = list.filter { !$0.isPinned }
         pinned = pinnedList
         others = otherList
+        if scrollsAfterApply {
+            scrollsAfterApply = false
+            scrollToken += 1
+        }
         let key = query + "\u{0}" + kindFilter.rawValue
         let queryChanged = lastAppliedQuery != key
         lastAppliedQuery = key
@@ -279,14 +285,10 @@ final class HistoryModel: ObservableObject {
             summaries[index].isPinned = pinned
             summaries[index].pinnedAt = pinned ? Date() : nil
         }
+        // ピン留めした項目はピン留めの段に移る。選択は同じ項目のままなので、並び替えたあとでスクロールして見える所に出す
+        selectedID = pinned ? id : (next ?? id)
+        scrollsAfterApply = pinned
         rebuild()
-        if pinned {
-            // ピン留めした項目はピン留めの段に移る。選択は同じ項目のままなので、スクロールして見える所に出す
-            selectedID = id
-            scrollToken += 1
-        } else {
-            selectedID = next ?? id
-        }
     }
 
     func deleteSelection() {
