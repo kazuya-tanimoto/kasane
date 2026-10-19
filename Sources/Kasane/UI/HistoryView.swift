@@ -135,6 +135,7 @@ private struct Toolbar: View {
 private struct ActionBar: View {
     @ObservedObject var model: HistoryModel
     @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var tooltips = TooltipState()
 
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
@@ -150,30 +151,33 @@ private struct ActionBar: View {
             Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
                 .buttonStyle(ActionStyle())
             Button {
+                tooltips.dismiss()
                 model.togglePinSelection()
             } label: {
                 Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
                     .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle(isOn: isPinned))
-            .help(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）")
+            .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
             // ⌘⌫ でも消せるが、ボタンには ⌘D だけ書く（1 つの方がすぐ読める）
             Button {
+                tooltips.dismiss()
                 model.deleteSelection()
             } label: {
                 Label("⌘D", systemImage: "trash")
                     .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle())
-            .help("削除（⌘D・⌘⌫）")
+            .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
             Button {
+                tooltips.dismiss()
                 model.showsDetails.toggle()
             } label: {
                 Label("⌘I", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle(isOn: model.showsDetails))
-            .help("詳細を表示（⌘I）")
+            .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
         .padding(.vertical, 9)
         .padding(.horizontal, 16)
@@ -183,6 +187,114 @@ private struct ActionBar: View {
                 .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
                 .frame(height: 1)
         }
+        // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
+        .onChange(of: model.focusToken) { tooltips.dismiss() }
+    }
+}
+
+// MARK: - ボタンの説明（ツールチップ）
+
+/// ボタンの説明を出す時機を決める。
+///
+/// macOS 標準のツールチップ（`.help`）は、Kasane では出るまで 2〜3 秒かかり、文字も小さかった（2026-10-19、Kazuya さん）。
+/// 標準のものは文字の大きさを変えられないので、自前で描く。決めたことは design/tooltip-unpin-2026-10-19.md
+@MainActor
+private final class TooltipState: ObservableObject {
+    /// 止まって迷ったときにはすぐ出し、帯の上を動かしている途中では出さない長さ
+    static let delay: Duration = .milliseconds(500)
+    /// 説明が消えてからこの秒数のうちに別のボタンへ移ったら、待たずに出す（ボタンを順に見ていくとき）
+    static let quickSwitchWindow: TimeInterval = 1
+
+    @Published private(set) var shownID: String?
+    private var pendingID: String?
+    private var pending: Task<Void, Never>?
+    private var lastHiddenAt = Date.distantPast
+
+    func hover(_ id: String, inside: Bool) {
+        if inside {
+            cancelPending()
+            if shownID != nil || Date().timeIntervalSince(lastHiddenAt) < Self.quickSwitchWindow {
+                shownID = id
+                return
+            }
+            pendingID = id
+            pending = Task { [weak self] in
+                try? await Task.sleep(for: Self.delay)
+                guard !Task.isCancelled, let self, self.pendingID == id else { return }
+                self.pendingID = nil
+                self.shownID = id
+            }
+        } else {
+            // 隣のボタンに入ったあとで、前のボタンから出た知らせが届くことがある。そのときは消さない
+            if pendingID == id { cancelPending() }
+            if shownID == id {
+                shownID = nil
+                lastHiddenAt = Date()
+            }
+        }
+    }
+
+    /// ボタンを押したときや、開き直したときに消す。続けて別のボタンに移っても、すぐには出さない
+    func dismiss() {
+        cancelPending()
+        shownID = nil
+        lastHiddenAt = .distantPast
+    }
+
+    private func cancelPending() {
+        pending?.cancel()
+        pending = nil
+        pendingID = nil
+    }
+}
+
+private extension View {
+    func tooltip(_ text: String, id: String, state: TooltipState) -> some View {
+        modifier(Tooltip(text: text, id: id, state: state))
+    }
+}
+
+/// ボタンのすぐ上に、右端をそろえて説明を出す（右端のボタンでもウインドウの外にはみ出さない）
+private struct Tooltip: ViewModifier {
+    let text: String
+    let id: String
+    @ObservedObject var state: TooltipState
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { state.hover(id, inside: $0) }
+            // `.help` は VoiceOver が読む説明も兼ねていたので、その分をここで渡す
+            .accessibilityHint(Text(text))
+            .overlay(alignment: .topTrailing) {
+                if state.shownID == id {
+                    TooltipLabel(text: text)
+                        .fixedSize()
+                        .alignmentGuide(.top) { $0[.bottom] + 6 }
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+private struct TooltipLabel: View {
+    let text: String
+
+    var body: some View {
+        // ボタンの文字（`ActionStyle`）と同じ 12pt
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
     }
 }
 
@@ -299,6 +411,10 @@ private struct ItemListView: View {
             .scrollIndicators(.automatic)
             .onChange(of: model.selectedID) { _, id in
                 guard let id else { return }
+                proxy.scrollTo(id)
+            }
+            .onChange(of: model.scrollToken) {
+                guard let id = model.selectedID else { return }
                 proxy.scrollTo(id)
             }
         }

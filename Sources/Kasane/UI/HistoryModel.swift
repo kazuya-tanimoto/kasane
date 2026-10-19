@@ -84,6 +84,8 @@ final class HistoryModel: ObservableObject {
     }
     /// 値が変わるたびに検索欄にフォーカスを当てる
     @Published private(set) var focusToken = 0
+    /// 選んだ項目が変わらなくても、そこまでスクロールさせたいときに増やす
+    @Published private(set) var scrollToken = 0
     @Published private(set) var isLoaded = false
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
@@ -266,13 +268,25 @@ final class HistoryModel: ObservableObject {
     func togglePinSelection() {
         guard let id = currentItemID, let summary = summaryByID[id] else { return }
         let pinned = !summary.isPinned
+        // ピン留めを外した項目は、コピーした日時の位置（ずっと下のこともある）に移る。選択まで一緒に移ると見失うので、
+        // 外す前にすぐ下にあった項目（なければすぐ上）を選ぶ。続けて ⌘P を押せば上から順に外していける（2026-10-19、Kazuya さん）
+        let list = visible
+        let next = list.firstIndex { $0.id == id }.flatMap { index in
+            index + 1 < list.count ? list[index + 1].id : (index > 0 ? list[index - 1].id : nil)
+        }
         try? store.setPinned(pinned, itemID: id)
         if let index = summaries.firstIndex(where: { $0.id == id }) {
             summaries[index].isPinned = pinned
             summaries[index].pinnedAt = pinned ? Date() : nil
         }
         rebuild()
-        selectedID = id
+        if pinned {
+            // ピン留めした項目はピン留めの段に移る。選択は同じ項目のままなので、スクロールして見える所に出す
+            selectedID = id
+            scrollToken += 1
+        } else {
+            selectedID = next ?? id
+        }
     }
 
     func deleteSelection() {
