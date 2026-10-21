@@ -55,11 +55,11 @@ public enum TextNormalizer {
             if character.isNewline {
                 flush()
             } else {
-                let character: Character = character == "\t" ? " " : character
+                let normalized: Character = character == "\t" ? " " : character
                 // 行頭の空白は、あとで取るので数えずに捨てる（字下げの深い行でも読み進められる）
-                if !lineHasText && character == " " { continue }
+                if !lineHasText && normalized == " " { continue }
                 lineHasText = true
-                line.append(character)
+                line.append(normalized)
                 lineLength += 1
                 // 1 行がとても長いときも、上限を越えたらそこで切り上げる
                 if resultLength + 1 + lineLength > maxLength {

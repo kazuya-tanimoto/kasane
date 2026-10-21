@@ -184,11 +184,13 @@ final class HistoryStoreTests: XCTestCase {
                 """
             try db.execute(sql: insert, arguments: ["text", "会議", "会議\n\n  10時から", "a"])
             try db.execute(sql: insert, arguments: ["image", "画像 10×10", nil, "b"])
+            try db.execute(sql: insert, arguments: ["richText", "見出し", "見出し\n本文", "c"])
+            try db.execute(sql: insert, arguments: ["url", "https://example.com", "https://example.com\n", "d"])
         }
         try HistoryStore.migrator.migrate(db)
         let titles = try db.read { db in
             try String.fetchAll(db, sql: "SELECT title FROM item ORDER BY contentHash")
         }
-        XCTAssertEqual(titles, ["会議 10時から", "画像 10×10"], "画像の見出しは変えない")
+        XCTAssertEqual(titles, ["会議 10時から", "画像 10×10", "見出し 本文", "https://example.com"], "画像の見出しは変えない")
     }
 }
