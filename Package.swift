@@ -40,7 +40,10 @@ let package = Package(
         ),
         .testTarget(
             name: "KasaneStoreTests",
-            dependencies: ["KasaneStore"],
+            dependencies: [
+                "KasaneStore",
+                .product(name: "GRDB", package: "GRDB.swift"),
+            ],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

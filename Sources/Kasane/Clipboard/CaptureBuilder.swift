@@ -49,13 +49,9 @@ enum CaptureBuilder {
         return capture
     }
 
-    /// リストに出す1行目。先頭の空行は飛ばす
+    /// リストに出す見出し。改行は空白にして 1 行につなぐ（2026-10-21。作り方は TextNormalizer.listTitle）
     static func title(for text: String) -> String {
-        let line = text.split(whereSeparator: \.isNewline)
-            .lazy
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { !$0.isEmpty } ?? ""
-        return String(line.prefix(200))
+        TextNormalizer.listTitle(text)
     }
 
     static func isWebURL(_ text: String) -> Bool {

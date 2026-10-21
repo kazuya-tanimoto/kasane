@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 import KasaneCore
 @testable import KasaneStore
 
@@ -170,5 +171,24 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNotEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .url, data: d))
         XCTAssertNotEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .text, data: Data("y".utf8)))
         XCTAssertEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .text, data: Data("x".utf8)))
+    }
+
+    /// 2026-10-21 より前に保存した履歴は、見出しが「最初の 1 行」のまま。移行で、改行を空白にした見出しに作り直す
+    func testMigrationRebuildsOldListTitles() throws {
+        let db = try DatabaseQueue()
+        try HistoryStore.migrator.migrate(db, upTo: "v1")
+        try db.write { db in
+            let insert = """
+                INSERT INTO item (kind, title, text, contentHash, byteSize, createdAt, copiedAt, copyCount, pasteCount, isPinned)
+                VALUES (?, ?, ?, ?, 0, '2026-10-20 00:00:00', '2026-10-20 00:00:00', 1, 0, 0)
+                """
+            try db.execute(sql: insert, arguments: ["text", "会議", "会議\n\n  10時から", "a"])
+            try db.execute(sql: insert, arguments: ["image", "画像 10×10", nil, "b"])
+        }
+        try HistoryStore.migrator.migrate(db)
+        let titles = try db.read { db in
+            try String.fetchAll(db, sql: "SELECT title FROM item ORDER BY contentHash")
+        }
+        XCTAssertEqual(titles, ["会議 10時から", "画像 10×10"], "画像の見出しは変えない")
     }
 }
