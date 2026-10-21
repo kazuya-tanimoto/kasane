@@ -339,7 +339,11 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         guard let editor = panel.firstResponder as? NSTextView, editor.isEditable,
               let text = NSPasteboard.general.string(forType: .string)
         else { return false }
+        // insertText はキーで打った文字と同じ扱いで、直前に打った文字とまとめて取り消される。
+        // ふつうの貼り付けと同じく、⌘Z で貼った分だけが消えるよう、前後で区切る
+        editor.breakUndoCoalescing()
         editor.insertText(TextNormalizer.singleLine(text), replacementRange: editor.selectedRange())
+        editor.breakUndoCoalescing()
         return true
     }
 
