@@ -181,12 +181,13 @@ private struct ActionBar: View {
         }
         .padding(.vertical, 9)
         .padding(.horizontal, 16)
-        .background(WindowDragArea())
-        .overlay(alignment: .top) {
+        // 上端の線は背景に置く（手前に置くと、ボタンの上に出す説明を横切る）
+        .background(alignment: .top) {
             Rectangle()
                 .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
                 .frame(height: 1)
         }
+        .background(WindowDragArea())
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
     }
