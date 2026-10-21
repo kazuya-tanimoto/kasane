@@ -1,7 +1,24 @@
 import XCTest
 @testable import KasaneCore
 
-final class TextNormalizerLineTests: XCTestCase {
+final class TextNormalizerTests: XCTestCase {
+    func testExpandRomaji() {
+        XCTAssertEqual(TextNormalizer.expandRomaji("tōkyō"), "toukyou")
+        XCTAssertEqual(TextNormalizer.expandRomaji("Kaigi"), "kaigi")
+        XCTAssertEqual(TextNormalizer.expandRomaji("shin'yō"), "shinyou")
+    }
+
+    func testContainsJapanese() {
+        XCTAssertTrue(TextNormalizer.containsJapanese("会議"))
+        XCTAssertTrue(TextNormalizer.containsJapanese("かいぎ"))
+        XCTAssertTrue(TextNormalizer.containsJapanese("カイギ"))
+        XCTAssertFalse(TextNormalizer.containsJapanese("meeting 123"))
+    }
+
+    func testNewlinesBecomeSpaces() {
+        XCTAssertEqual(TextNormalizer.normalize("A\nB\tC"), "a b c")
+    }
+
     func testSingleLineJoinsLinesWithOneSpace() {
         XCTAssertEqual(TextNormalizer.singleLine("明日の会議\n10時から\r\n3階"), "明日の会議 10時から 3階")
     }
