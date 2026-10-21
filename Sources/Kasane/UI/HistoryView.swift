@@ -267,9 +267,11 @@ private struct Tooltip: ViewModifier {
             .accessibilityHint(Text(text))
             .overlay(alignment: .topTrailing) {
                 if state.shownID == id {
+                    // 上端をボタンの上端にそろえてから、説明の高さ＋6pt だけ上にずらす。
+                    // `alignmentGuide(.top)` で持ち上げる書き方は、Kazuya さんの Mac で効かず、ボタンに重なった（2026-10-21）
                     TooltipLabel(text: text)
                         .fixedSize()
-                        .alignmentGuide(.top) { $0[.bottom] + 6 }
+                        .offset(y: -(TooltipLabel.height + 6))
                         .allowsHitTesting(false)
                 }
             }
@@ -277,6 +279,9 @@ private struct Tooltip: ViewModifier {
 }
 
 private struct TooltipLabel: View {
+    /// 上にずらす量をこの値で決めるので、高さは固定にする（12pt の 1 行が収まる）
+    static let height: CGFloat = 22
+
     let text: String
 
     var body: some View {
@@ -284,8 +289,9 @@ private struct TooltipLabel: View {
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
+            .lineLimit(1)
             .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .frame(height: Self.height)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(Color(nsColor: .windowBackgroundColor))
