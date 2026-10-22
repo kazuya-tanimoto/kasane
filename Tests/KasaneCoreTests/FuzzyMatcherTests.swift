@@ -121,6 +121,60 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertNotNil(FuzzyMatcher.score("lazy dog", text: long))
     }
 
+    func testRepeatedLetterIsNotUsedTwice() {
+        XCTAssertNil(FuzzyMatcher.score("aa", text: "a"))
+        XCTAssertNotNil(FuzzyMatcher.score("aa", text: "aa"))
+    }
+
+    func testCompactMatchLaterInTheFieldIsScored() {
+        // 「ab xx aab」: 先頭の a から始めると幅 9 で 2 倍（6 文字）を超える。後ろの「aab」（幅 3）で当たる
+        let text = Array("ab xx aab".utf16)
+        let pattern = Array("aab".utf16)
+        let expected = Self.referenceScore(pattern, text, maxSpan: 6)
+        XCTAssertNotNil(expected)
+        XCTAssertEqual(FuzzyMatcher.fuzzyMatch(pattern, in: text, maxSpan: 6), expected)
+    }
+
+    /// 1 回なめる作りが、総当たりで探した「幅に収まるいちばん早い終わりと、その終わりでいちばん遅い開始位置」と
+    /// 同じ範囲を選ぶこと（当たるかどうかとスコアが一致する）を、固定の乱数で確かめる
+    func testOnePassMatchAgreesWithBruteForce() {
+        var seed: UInt64 = 2026_10_22
+        func next(_ bound: Int) -> Int {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            return Int((seed >> 33) % UInt64(bound))
+        }
+        let letters = Array("abc".utf16)
+        for _ in 0..<5_000 {
+            let text = (0..<next(21)).map { _ in letters[next(3)] }
+            let pattern = (0..<(1 + next(4))).map { _ in letters[next(3)] }
+            let maxSpan = pattern.count * (2 + next(5))
+            XCTAssertEqual(
+                FuzzyMatcher.fuzzyMatch(pattern, in: text, maxSpan: maxSpan),
+                Self.referenceScore(pattern, text, maxSpan: maxSpan),
+                "語 \(String(decoding: pattern, as: UTF16.self))、項目 \(String(decoding: text, as: UTF16.self))、幅 \(maxSpan)"
+            )
+        }
+    }
+
+    /// 総当たりの参照: 終わりを前から順に、開始位置をその終わりの近くから順に試す
+    private static func referenceScore(_ pattern: [UInt16], _ text: [UInt16], maxSpan: Int) -> Int? {
+        let m = pattern.count
+        guard m > 0, !text.isEmpty else { return nil }
+        func fits(_ start: Int, _ end: Int) -> Bool {
+            var k = 0
+            for i in start...end where k < m && text[i] == pattern[k] { k += 1 }
+            return k == m && text[start] == pattern[0] && text[end] == pattern[m - 1]
+        }
+        for end in 0..<text.count {
+            for start in stride(from: end, through: max(0, end - maxSpan + 1), by: -1) where fits(start, end) {
+                return text.withUnsafeBufferPointer { t in
+                    pattern.withUnsafeBufferPointer { p in FuzzyMatcher.calculateScore(p, t, start, end + 1) }
+                }
+            }
+        }
+        return nil
+    }
+
     func testExactTermIgnoresSpanSetting() {
         XCTAssertNotNil(FuzzyMatcher.score("'push", text: "git push", spanRatio: 2))
     }
