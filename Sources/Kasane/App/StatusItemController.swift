@@ -25,7 +25,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let actions: Actions
-    private let shortcuts: Shortcuts
+    /// メニューは開くたびに作り直すので、変えれば次に開いたときから出る
+    var shortcuts: Shortcuts
     private var queueMode: QueueMode?
     private var queueCount = 0
 

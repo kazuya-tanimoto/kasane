@@ -4,9 +4,6 @@ import KasaneStore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// ショートカットの初期値（仮）。どれも `defaults write` で変えられる。設定画面は v1 の仕上げで作る
-    static let defaultHotKeys = (history: "opt+v", fifo: "opt+cmd+f", lifo: "opt+cmd+l")
-
     private var store: HistoryStore!
     private var model: HistoryModel!
     private let writer = PasteboardWriter()
@@ -15,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var queue: QueueController!
     private lazy var queueHUD = QueueHUDController()
     private var statusItem: StatusItemController!
+    private var shortcuts: ShortcutController!
     private var onboarding: OnboardingWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
     private let processingQueue = DispatchQueue(label: "io.github.kazuya-tanimoto.kasane.capture", qos: .utility)
@@ -46,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onCapture = { [weak self] raw in self?.process(raw) }
         monitor.start()
 
-        let shortcuts = registerHotKeys()
+        shortcuts = ShortcutController { [weak self] slot in self?.hotKeyPressed(slot) }
         statusItem = StatusItemController(
             actions: .init(
                 showHistory: { [weak self] in self?.panel.show() },
@@ -65,8 +63,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 showOnboarding: { [weak self] in self?.showOnboarding() },
                 clearHistory: { [weak self] in self?.confirmClearHistory() }
             ),
-            shortcuts: shortcuts
+            shortcuts: menuShortcuts()
         )
+        shortcuts.onChange = { [weak self] in
+            guard let self else { return }
+            self.statusItem.shortcuts = self.menuShortcuts()
+        }
 
         if !AppSettings.hasCompletedOnboarding
             || !Permissions.isAccessibilityTrusted
@@ -77,27 +79,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - ショートカット
 
-    private func registerHotKeys() -> StatusItemController.Shortcuts {
-        let center = HotKeyCenter.shared
-        func register(_ name: String, _ fallback: String, _ handler: @escaping () -> Void) -> String {
-            let spec = AppSettings.hotKey(name, default: fallback)
-            guard let hotKey = HotKeyCenter.HotKey(spec) ?? HotKeyCenter.HotKey(fallback) else { return "" }
-            switch center.register(hotKey, handler: handler) {
-            case .registered:
-                return hotKey.displayString
-            case .inUse:
-                NSLog("Kasane: hotkey \(spec) is already in use")
-                return "（\(hotKey.displayString) は使用中）"
-            case .rejected(let status):
-                NSLog("Kasane: hotkey \(spec) was rejected (\(status))")
-                return "（\(hotKey.displayString) は macOS で使えません）"
-            }
+    private func hotKeyPressed(_ slot: ShortcutSlot) {
+        switch slot {
+        case .history: panel.toggle()
+        case .fifo: toggleQueue(.fifo)
+        case .lifo: toggleQueue(.lifo)
         }
-        let keys = Self.defaultHotKeys
-        return .init(
-            history: register("history", keys.history) { [weak self] in self?.panel.toggle() },
-            fifo: register("fifo", keys.fifo) { [weak self] in self?.toggleQueue(.fifo) },
-            lifo: register("lifo", keys.lifo) { [weak self] in self?.toggleQueue(.lifo) }
+    }
+
+    private func menuShortcuts() -> StatusItemController.Shortcuts {
+        .init(
+            history: shortcuts.menuTitle(.history),
+            fifo: shortcuts.menuTitle(.fifo),
+            lifo: shortcuts.menuTitle(.lifo)
         )
     }
 

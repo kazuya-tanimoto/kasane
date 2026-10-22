@@ -1,91 +1,43 @@
 import AppKit
 import Carbon.HIToolbox
+import KasaneCore
 
 /// グローバルショートカット。Carbon の RegisterEventHotKey を使う（アクセシビリティ権限は不要）
 @MainActor
-final class HotKeyCenter {
-    struct HotKey: Equatable {
-        var keyCode: UInt32
-        var modifiers: UInt32
-
-        /// "opt+cmd+f" のような文字列から作る
-        init?(_ string: String) {
-            var modifiers: UInt32 = 0
-            var keyCode: UInt32?
-            for part in string.lowercased().split(separator: "+").map({ $0.trimmingCharacters(in: .whitespaces) }) {
-                switch part {
-                case "cmd", "command", "⌘": modifiers |= UInt32(cmdKey)
-                case "ctrl", "control", "⌃": modifiers |= UInt32(controlKey)
-                case "opt", "option", "alt", "⌥": modifiers |= UInt32(optionKey)
-                case "shift", "⇧": modifiers |= UInt32(shiftKey)
-                default: keyCode = Self.keyCodes[part]
-                }
-            }
-            guard let keyCode, modifiers != 0 else { return nil }
-            self.keyCode = keyCode
-            self.modifiers = modifiers
-        }
-
-        /// メニューに表示する記号（⌃⌥⇧⌘ の順）
-        var displayString: String {
-            var s = ""
-            if modifiers & UInt32(controlKey) != 0 { s += "⌃" }
-            if modifiers & UInt32(optionKey) != 0 { s += "⌥" }
-            if modifiers & UInt32(shiftKey) != 0 { s += "⇧" }
-            if modifiers & UInt32(cmdKey) != 0 { s += "⌘" }
-            let key = Self.keyCodes.first { $0.value == keyCode }?.key ?? "?"
-            return s + key.uppercased()
-        }
-
-        static let keyCodes: [String: UInt32] = [
-            "a": UInt32(kVK_ANSI_A), "b": UInt32(kVK_ANSI_B), "c": UInt32(kVK_ANSI_C), "d": UInt32(kVK_ANSI_D),
-            "e": UInt32(kVK_ANSI_E), "f": UInt32(kVK_ANSI_F), "g": UInt32(kVK_ANSI_G), "h": UInt32(kVK_ANSI_H),
-            "i": UInt32(kVK_ANSI_I), "j": UInt32(kVK_ANSI_J), "k": UInt32(kVK_ANSI_K), "l": UInt32(kVK_ANSI_L),
-            "m": UInt32(kVK_ANSI_M), "n": UInt32(kVK_ANSI_N), "o": UInt32(kVK_ANSI_O), "p": UInt32(kVK_ANSI_P),
-            "q": UInt32(kVK_ANSI_Q), "r": UInt32(kVK_ANSI_R), "s": UInt32(kVK_ANSI_S), "t": UInt32(kVK_ANSI_T),
-            "u": UInt32(kVK_ANSI_U), "v": UInt32(kVK_ANSI_V), "w": UInt32(kVK_ANSI_W), "x": UInt32(kVK_ANSI_X),
-            "y": UInt32(kVK_ANSI_Y), "z": UInt32(kVK_ANSI_Z),
-            "0": UInt32(kVK_ANSI_0), "1": UInt32(kVK_ANSI_1), "2": UInt32(kVK_ANSI_2), "3": UInt32(kVK_ANSI_3),
-            "4": UInt32(kVK_ANSI_4), "5": UInt32(kVK_ANSI_5), "6": UInt32(kVK_ANSI_6), "7": UInt32(kVK_ANSI_7),
-            "8": UInt32(kVK_ANSI_8), "9": UInt32(kVK_ANSI_9),
-            "space": UInt32(kVK_Space), ";": UInt32(kVK_ANSI_Semicolon), ",": UInt32(kVK_ANSI_Comma),
-            ".": UInt32(kVK_ANSI_Period), "/": UInt32(kVK_ANSI_Slash),
-        ]
-    }
-
+final class HotKeyCenter: ShortcutRegistrar {
     static let shared = HotKeyCenter()
 
     private var handlers: [UInt32: () -> Void] = [:]
-    private var refs: [EventHotKeyRef] = []
+    private var refs: [UInt32: EventHotKeyRef] = [:]
     private var nextID: UInt32 = 1
     private var handlerInstalled = false
 
-    enum Registration {
-        case registered
-        /// 他のアプリが同じキーを使っている
-        case inUse
-        /// macOS が受け付けないキー（macOS 15.0 で ⌥ や ⇧ だけのキーが登録できなくなった。15.2 のベータで戻したと Apple の開発者フォーラムで回答あり）
-        case rejected(OSStatus)
-    }
-
-    @discardableResult
-    func register(_ hotKey: HotKey, handler: @escaping () -> Void) -> Registration {
+    /// 登録する。戻り値の番号で外す
+    func register(_ shortcut: Shortcut, handler: @escaping () -> Void) -> Result<UInt32, ShortcutRegistrationError> {
         installHandlerIfNeeded()
         let id = nextID
         nextID += 1
         var ref: EventHotKeyRef?
         let hotKeyID = EventHotKeyID(signature: OSType(0x4B53_4E45), id: id) // 'KSNE'
-        // 排他で登録する: 他のアプリが同じキーをすでに登録していれば失敗するので、ぶつかりを検出できる
+        // 排他で登録する: 他のアプリが同じキーをすでに登録していれば失敗するので、ぶつかりを検出できる。
+        // macOS 15.0 では ⌥ や ⇧ だけのキーが登録できなくなった（15.2 のベータで戻したと Apple の開発者フォーラムで回答あり）
         let status = RegisterEventHotKey(
-            hotKey.keyCode, hotKey.modifiers, hotKeyID, GetApplicationEventTarget(),
+            shortcut.keyCode, shortcut.modifiers.rawValue, hotKeyID, GetApplicationEventTarget(),
             OptionBits(kEventHotKeyExclusive), &ref
         )
         guard status == noErr, let ref else {
-            return status == OSStatus(eventHotKeyExistsErr) ? .inUse : .rejected(status)
+            return .failure(status == OSStatus(eventHotKeyExistsErr) ? .inUse : .rejected(status))
         }
-        refs.append(ref)
+        refs[id] = ref
         handlers[id] = handler
-        return .registered
+        return .success(id)
+    }
+
+    func unregister(_ id: UInt32) {
+        if let ref = refs.removeValue(forKey: id) {
+            UnregisterEventHotKey(ref)
+        }
+        handlers[id] = nil
     }
 
     fileprivate func handle(id: UInt32) {
@@ -111,3 +63,39 @@ final class HotKeyCenter {
         }, 1, &spec, nil, nil)
     }
 }
+
+extension HotKeyCenter {
+    /// 今のキーボード配列で、そのキーを修飾キーなしで押したときの文字。分からなければ nil。
+    /// 日本語入力のときは、その下の英字の配列を使う（ローマ字入力でも記号の位置は配列どおり）
+    static func keyLabel(_ keyCode: UInt32) -> String? {
+        let sources: [() -> Unmanaged<TISInputSource>?] = [
+            { TISCopyCurrentKeyboardLayoutInputSource() },
+            { TISCopyCurrentASCIICapableKeyboardLayoutInputSource() },
+        ]
+        for copySource in sources {
+            guard let source = copySource()?.takeRetainedValue(),
+                  let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData)
+            else { continue }
+            let data = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
+            let label: String? = data.withUnsafeBytes { buffer in
+                guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return nil }
+                var deadKeyState: UInt32 = 0
+                var length = 0
+                var chars = [UniChar](repeating: 0, count: 4)
+                let status = UCKeyTranslate(
+                    layout, UInt16(keyCode), UInt16(kUCKeyActionDisplay), 0, UInt32(LMGetKbdType()),
+                    OptionBits(kUCKeyTranslateNoDeadKeysMask), &deadKeyState, chars.count, &length, &chars
+                )
+                guard status == noErr, length > 0 else { return nil }
+                return String(utf16CodeUnits: chars, count: length)
+            }
+            if let label { return label }
+        }
+        return nil
+    }
+
+    static func displayString(_ shortcut: Shortcut) -> String {
+        shortcut.displayString(keyLabel: { keyLabel($0) })
+    }
+}
+
