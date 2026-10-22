@@ -29,22 +29,27 @@ final class SearchBenchmarkTests: XCTestCase {
             return String(text.prefix(SearchCandidate.maxFieldLength))
         }
         let candidates = (0..<10_000).map { SearchCandidate(id: Int64($0), text: paragraph(), romaji: paragraph()) }
+        // 最初の 1 回は準備の分だけ遅くなるので、測る前に 1 回流しておく
+        _ = FuzzyMatcher.search("make test", in: candidates)
 
-        // 1 文字ずつ打ったときの各回の時間を測り、一番遅い回を出す
-        let query = "make test"
-        let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
-        for looseness in SearchLooseness.allCases {
-            var slowest = 0.0
-            var hits = 0
-            for prefix in prefixes {
-                let start = DispatchTime.now().uptimeNanoseconds
-                let results = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
-                let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
-                if ms > slowest { slowest = ms }
-                if prefix == query { hits = results.count }
+        // 1 文字ずつ打ったときの各回の時間を測り、一番遅い回を出す。
+        // 「make test」はほぼすべての項目に当たる場合。「taqz」は当たらない場合で、
+        // よく出る「t」のたびに幅の上限まで調べるので、幅を広げたときに一番遅くなる
+        for query in ["make test", "taqz"] {
+            let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+            for looseness in SearchLooseness.allCases {
+                var slowest = 0.0
+                var hits = 0
+                for prefix in prefixes {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    let results = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
+                    let ms = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                    if ms > slowest { slowest = ms }
+                    if prefix == query { hits = results.count }
+                }
+                print(String(format: "検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、一致 %d 件",
+                             query, looseness.displayName, looseness.spanRatio, slowest, hits))
             }
-            print(String(format: "検索の速さ %@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、「%@」の一致 %d 件",
-                         looseness.displayName, looseness.spanRatio, slowest, query, hits))
         }
     }
 }
