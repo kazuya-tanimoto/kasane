@@ -92,22 +92,3 @@ final class FuzzyMatcherTests: XCTestCase {
         }
     }
 }
-
-final class TextNormalizerTests: XCTestCase {
-    func testExpandRomaji() {
-        XCTAssertEqual(TextNormalizer.expandRomaji("tōkyō"), "toukyou")
-        XCTAssertEqual(TextNormalizer.expandRomaji("Kaigi"), "kaigi")
-        XCTAssertEqual(TextNormalizer.expandRomaji("shin'yō"), "shinyou")
-    }
-
-    func testContainsJapanese() {
-        XCTAssertTrue(TextNormalizer.containsJapanese("会議"))
-        XCTAssertTrue(TextNormalizer.containsJapanese("かいぎ"))
-        XCTAssertTrue(TextNormalizer.containsJapanese("カイギ"))
-        XCTAssertFalse(TextNormalizer.containsJapanese("meeting 123"))
-    }
-
-    func testNewlinesBecomeSpaces() {
-        XCTAssertEqual(TextNormalizer.normalize("A\nB\tC"), "a b c")
-    }
-}

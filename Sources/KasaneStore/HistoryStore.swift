@@ -66,6 +66,20 @@ public final class HistoryStore: @unchecked Sendable {
                 t.column("filePath", .text)
             }
         }
+        // リストの見出しを「最初の 1 行」から「改行を空白にして 1 行につないだもの」に変えた（2026-10-21）。
+        // すでに保存している履歴の見出しも作り直す。あとで型を変えても壊れないよう、SQL と Row だけで読み書きする
+        migrator.registerMigration("v2-list-title") { db in
+            var titles: [(id: Int64, title: String)] = []
+            // 本文は数 MB のこともあるので、まとめて読まずに 1 件ずつ読む
+            let rows = try Row.fetchCursor(db, sql: "SELECT id, text FROM item WHERE kind IN ('text', 'richText', 'url') AND text IS NOT NULL")
+            while let row = try rows.next() {
+                let text: String = row["text"]
+                titles.append((row["id"], TextNormalizer.listTitle(text)))
+            }
+            for entry in titles {
+                try db.execute(sql: "UPDATE item SET title = ? WHERE id = ?", arguments: [entry.title, entry.id])
+            }
+        }
         return migrator
     }
 
@@ -291,6 +305,17 @@ public final class HistoryStore: @unchecked Sendable {
             try db.execute(
                 sql: "UPDATE item SET isPinned = ?, pinnedAt = ? WHERE id = ?",
                 arguments: [pinned, pinned ? now : nil, itemID]
+            )
+        }
+    }
+
+    /// 履歴から選んでコピーし直した（⌘⏎）。⌘C でコピーし直したときと同じく、コピー日時と回数を更新する
+    /// （コピー日時順で一番上に来る。2026-10-18 決定）
+    public func recordReuse(itemID: Int64, now: Date = Date()) throws {
+        try dbQueue.write { db in
+            try db.execute(
+                sql: "UPDATE item SET copiedAt = ?, copyCount = copyCount + 1 WHERE id = ?",
+                arguments: [now, itemID]
             )
         }
     }

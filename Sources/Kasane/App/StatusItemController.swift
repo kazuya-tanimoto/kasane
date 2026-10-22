@@ -121,7 +121,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// アクセントカラー・透明度・ぼかし・小さな表示の位置と文字の大きさ。設定画面ができるまではメニューで変える
+    /// アクセントカラー・透明度・ぼかし・小さいウインドウの位置と文字の大きさ。設定画面ができるまではメニューで変える
     private func appearanceItem() -> NSMenuItem {
         let appearance = AppearanceSettings.shared
         let menu = NSMenu()
@@ -168,7 +168,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(header("FIFO / LIFO の小さな表示の位置"))
+        menu.addItem(header("FIFO / LIFO の小さいウインドウの位置"))
         for position in HUDPosition.allCases {
             let entry = item(position.displayName, #selector(selectHUDPosition(_:)))
             entry.representedObject = position.rawValue
@@ -178,7 +178,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(header("FIFO / LIFO の小さな表示の文字の大きさ"))
+        menu.addItem(header("FIFO / LIFO の小さいウインドウの文字の大きさ"))
         for size in [11.0, 12, 14, 16, 18, 20] {
             let entry = item(size == 12 ? "12 pt（標準）" : "\(Int(size)) pt", #selector(selectHUDFontSize(_:)))
             entry.representedObject = size

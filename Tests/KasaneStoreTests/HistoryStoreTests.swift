@@ -1,4 +1,5 @@
 import XCTest
+import GRDB
 import KasaneCore
 @testable import KasaneStore
 
@@ -140,6 +141,15 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["B", "A"])
     }
 
+    func testReuseMovesItemToTopOfRecent() throws {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        let a = try store.save(textCapture("A"), limit: 100, now: t0)
+        _ = try store.save(textCapture("B"), limit: 100, now: t0.addingTimeInterval(1))
+        XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["B", "A"])
+        try store.recordReuse(itemID: a.item.id!, now: t0.addingTimeInterval(2))
+        XCTAssertEqual(try store.loadIndex(sort: .recent).map(\.summary.title), ["A", "B"])
+    }
+
     func testDeleteAllKeepsPinned() throws {
         let a = try store.save(textCapture("A"), limit: 100)
         _ = try store.save(textCapture("B"), limit: 100)
@@ -161,5 +171,26 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNotEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .url, data: d))
         XCTAssertNotEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .text, data: Data("y".utf8)))
         XCTAssertEqual(ContentHash.make(kind: .text, data: d), ContentHash.make(kind: .text, data: Data("x".utf8)))
+    }
+
+    /// 2026-10-21 より前に保存した履歴は、見出しが「最初の 1 行」のまま。移行で、改行を空白にした見出しに作り直す
+    func testMigrationRebuildsOldListTitles() throws {
+        let db = try DatabaseQueue()
+        try HistoryStore.migrator.migrate(db, upTo: "v1")
+        try db.write { db in
+            let insert = """
+                INSERT INTO item (kind, title, text, contentHash, byteSize, createdAt, copiedAt, copyCount, pasteCount, isPinned)
+                VALUES (?, ?, ?, ?, 0, '2026-10-20 00:00:00', '2026-10-20 00:00:00', 1, 0, 0)
+                """
+            try db.execute(sql: insert, arguments: ["text", "会議", "会議\n\n  10時から", "a"])
+            try db.execute(sql: insert, arguments: ["image", "画像 10×10", nil, "b"])
+            try db.execute(sql: insert, arguments: ["richText", "見出し", "見出し\n本文", "c"])
+            try db.execute(sql: insert, arguments: ["url", "https://example.com", "https://example.com\n", "d"])
+        }
+        try HistoryStore.migrator.migrate(db)
+        let titles = try db.read { db in
+            try String.fetchAll(db, sql: "SELECT title FROM item ORDER BY contentHash")
+        }
+        XCTAssertEqual(titles, ["会議 10時から", "画像 10×10", "見出し 本文", "https://example.com"], "画像の見出しは変えない")
     }
 }

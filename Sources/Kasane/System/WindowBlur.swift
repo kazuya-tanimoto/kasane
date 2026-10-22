@@ -38,6 +38,31 @@ enum WindowBlur {
     }
 }
 
+/// 1 つのウインドウに指定したぼかしの半径を覚えておき、なしから半径を付けるときにウインドウの作り直しを求める。
+///
+/// なし にしたウインドウ（0 を指定したウインドウや、なし の設定で作って出したウインドウ）に、あとから半径を付けると、
+/// ぼかしが角丸で切り抜かれず角が四角くなる
+/// （macOS 26。2026-10-18 に Mac で確認: 10 で起動すると、20 や なし に変えても角丸のまま。なし から 10 や 20 にすると四角）。
+/// 10 で起動したとき、つまり作りたてのウインドウに出す前から半径を付けたときは角丸になるので、同じ順にするため作り直す
+@MainActor
+struct WindowBlurState {
+    /// 指定した半径。nil はまだ何も指定していない作りたてのウインドウ
+    private var radius: Int?
+
+    /// `radius` を付けるのに、ウインドウを作り直す必要があるか
+    func needsNewWindow(for radius: Int) -> Bool {
+        radius > 0 && self.radius == 0
+    }
+
+    /// 作りたてのウインドウにはぼかしがないので、0 は指定せずに覚えるだけにする
+    mutating func apply(_ radius: Int, to window: NSWindow) {
+        if radius > 0 || self.radius != nil {
+            WindowBlur.apply(radius: radius, to: window)
+        }
+        self.radius = radius
+    }
+}
+
 extension NSWindow {
     /// タイトルバーを見せずに、システムの角丸のウインドウにする。
     ///

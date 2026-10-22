@@ -38,6 +38,11 @@ enum AppSettings {
         return value > 0 ? value : 0.05
     }
 
+    /// 履歴ウインドウを開いたら英数に切り替え、閉じたら戻すか（初期値はオン）
+    static var switchesToASCIIOnOpen: Bool {
+        defaults.object(forKey: "switchesToASCIIOnOpen") as? Bool ?? true
+    }
+
     /// プレビューの下に詳細を出すか（⌘I）
     static var showsDetails: Bool {
         get { defaults.bool(forKey: "showsDetails") }
@@ -67,7 +72,7 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "accentColor") }
     }
 
-    /// FIFO / LIFO 中の小さな表示の文字の大きさ（pt）
+    /// FIFO / LIFO 中の小さいウインドウの文字の大きさ（pt）
     static var hudFontSize: Double {
         get {
             let value = defaults.object(forKey: "hudFontSize") as? Double ?? 12
@@ -106,7 +111,7 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "hasCompletedOnboarding") }
     }
 
-    /// グローバルショートカット。`defaults write <bundle id> hotkey.history "ctrl+cmd+v"` の形で上書きできる
+    /// グローバルショートカット。`defaults write <bundle id> hotkey.history "opt+v"` の形で上書きできる
     static func hotKey(_ name: String, default value: String) -> String {
         defaults.string(forKey: "hotkey.\(name)") ?? value
     }

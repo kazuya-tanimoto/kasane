@@ -8,15 +8,8 @@ enum PasteAction {
     case paste
     /// 書式なしで自動ペーストする（⇧⏎）
     case plainText
-    /// クリップボードにコピーするだけ（⌥⏎）
+    /// クリップボードにコピーするだけ（⌘⏎）
     case copyOnly
-}
-
-/// FIFO / LIFO モードの状態（履歴ウインドウと隅の小さな表示で使う）
-struct QueueInfo: Equatable {
-    var mode: QueueMode
-    /// 貼り付ける順に並べた項目の ID（同じ項目が2回入ることもある）
-    var itemIDs: [Int64]
 }
 
 /// 種類での絞り込み
@@ -46,19 +39,6 @@ enum KindFilter: String, CaseIterable, Identifiable {
     }
 }
 
-/// 左のリストに出すもの。FIFO / LIFO 中はキューが既定になる
-enum ListMode {
-    case history
-    case queue
-}
-
-/// キューの1行
-struct QueueRow: Identifiable, Equatable {
-    /// キューの中での位置（0 が次に貼り付けるもの）
-    let id: Int
-    let summary: ClipSummary
-}
-
 /// プレビューに出す内容
 struct PreviewContent {
     var item: ClipItem
@@ -83,8 +63,6 @@ final class HistoryModel: ObservableObject {
     @Published var query = "" {
         didSet {
             guard query != oldValue else { return }
-            // キューの表示中に文字を入れたら、履歴の検索に切り替える
-            if !query.isEmpty, listMode == .queue { listMode = .history }
             runSearch()
         }
     }
@@ -96,14 +74,8 @@ final class HistoryModel: ObservableObject {
     @Published var selectedID: Int64? {
         didSet { if selectedID != oldValue { loadPreview() } }
     }
-    @Published private(set) var listMode: ListMode = .history {
-        didSet { if listMode != oldValue { loadPreview() } }
-    }
-    @Published private(set) var queueRows: [QueueRow] = []
-    @Published var queueSelection = 0 {
-        didSet { if queueSelection != oldValue { loadPreview() } }
-    }
-    @Published private(set) var queueMode: QueueMode?
+    /// FIFO / LIFO 中のモード。ウインドウには通常の履歴を出し、「コピー ⌘⏎」の表示だけを変える
+    @Published var queueMode: QueueMode?
     @Published private(set) var preview: PreviewContent?
     @Published private(set) var sortOrder: HistorySortOrder
     /// プレビューの下に詳細（種類、コピー元など）を出すか。⌘I で切り替える
@@ -112,11 +84,12 @@ final class HistoryModel: ObservableObject {
     }
     /// 値が変わるたびに検索欄にフォーカスを当てる
     @Published private(set) var focusToken = 0
+    /// 選んだ項目が変わらなくても、そこまでスクロールさせたいときに増やす
+    @Published private(set) var scrollToken = 0
     @Published private(set) var isLoaded = false
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
     var onActivate: ((Int64, PasteAction) -> Void)?
-    var onDelete: (([Int64]) -> Void)?
 
     let store: HistoryStore
 
@@ -124,9 +97,10 @@ final class HistoryModel: ObservableObject {
     private var candidates: [SearchCandidate] = []
     private var candidateByID: [Int64: SearchCandidate] = [:]
     private var summaryByID: [Int64: ClipSummary] = [:]
-    private var queueInfo: QueueInfo?
     private var searchTask: Task<Void, Never>?
     private var lastAppliedQuery: String?
+    /// 次に並びを入れ替えたあとで、選択中の項目までスクロールする（検索中は並びがあとから届くため）
+    private var scrollsAfterApply = false
     private var previewTask: Task<Void, Never>?
     private let thumbnailCache = NSCache<NSNumber, NSImage>()
 
@@ -139,15 +113,8 @@ final class HistoryModel: ObservableObject {
     /// 履歴の表示中の順（ピン留め → それ以外）。キーボードでの移動と ⌘1〜9 に使う
     var visible: [ClipSummary] { pinned + others }
 
-    var isShowingQueue: Bool { listMode == .queue }
-
     /// プレビューと操作の対象になっている項目
-    var currentItemID: Int64? {
-        switch listMode {
-        case .history: return selectedID
-        case .queue: return queueRows.indices.contains(queueSelection) ? queueRows[queueSelection].summary.id : nil
-        }
-    }
+    var currentItemID: Int64? { selectedID }
 
     // MARK: - 索引
 
@@ -195,6 +162,13 @@ final class HistoryModel: ObservableObject {
         rebuild()
     }
 
+    /// 履歴から ⌘⏎ でコピーした項目を、コピーし直したものとして扱う（DB の更新は呼び出し側）
+    func didReuse(id: Int64, at date: Date) {
+        guard let index = summaries.firstIndex(where: { $0.id == id }) else { return }
+        summaries[index].copiedAt = date
+        rebuild()
+    }
+
     /// 貼り付け回数を増やす（DB の更新は呼び出し側）
     func didPaste(id: Int64) {
         guard let index = summaries.firstIndex(where: { $0.id == id }) else { return }
@@ -208,38 +182,7 @@ final class HistoryModel: ObservableObject {
         summaries.sort(by: sortOrder.areInIncreasingOrder)
         summaryByID = Dictionary(summaries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         candidates = summaries.compactMap { candidateByID[$0.id] }
-        rebuildQueueRows()
         runSearch()
-    }
-
-    // MARK: - FIFO / LIFO
-
-    /// キューが変わったときに呼ぶ。モードが始まったら左のリストをキューに切り替える
-    func updateQueue(_ info: QueueInfo?) {
-        let started = queueInfo == nil && info != nil
-        queueInfo = info
-        queueMode = info?.mode
-        rebuildQueueRows()
-        if info == nil {
-            listMode = .history
-        } else if started {
-            listMode = .queue
-            queueSelection = 0
-        }
-        queueSelection = min(queueSelection, max(queueRows.count - 1, 0))
-        if listMode == .queue { loadPreview() }
-    }
-
-    private func rebuildQueueRows() {
-        queueRows = (queueInfo?.itemIDs ?? []).enumerated().compactMap { index, id in
-            summaryByID[id].map { QueueRow(id: index, summary: $0) }
-        }
-    }
-
-    /// Tab: キューと履歴の表示を切り替える（FIFO / LIFO 中だけ）
-    func toggleListMode() {
-        guard queueMode != nil else { return }
-        listMode = listMode == .queue ? .history : .queue
     }
 
     // MARK: - 検索
@@ -267,6 +210,10 @@ final class HistoryModel: ObservableObject {
         let otherList = list.filter { !$0.isPinned }
         pinned = pinnedList
         others = otherList
+        if scrollsAfterApply {
+            scrollsAfterApply = false
+            scrollToken += 1
+        }
         let key = query + "\u{0}" + kindFilter.rawValue
         let queryChanged = lastAppliedQuery != key
         lastAppliedQuery = key
@@ -285,20 +232,11 @@ final class HistoryModel: ObservableObject {
         if !query.isEmpty { query = "" }
         if kindFilter != .all { kindFilter = .all }
         selectedID = visible.first?.id
-        if queueMode != nil {
-            listMode = .queue
-            queueSelection = 0
-        }
         loadPreview()
         focusToken += 1
     }
 
     func moveSelection(_ delta: Int) {
-        if listMode == .queue {
-            guard !queueRows.isEmpty else { return }
-            queueSelection = min(max(queueSelection + delta, 0), queueRows.count - 1)
-            return
-        }
         let list = visible
         guard !list.isEmpty else { return }
         let current = list.firstIndex { $0.id == selectedID } ?? -1
@@ -320,11 +258,6 @@ final class HistoryModel: ObservableObject {
 
     /// ⌘1〜⌘9: 表示中の上から n 番目
     func activate(index: Int, action: PasteAction) {
-        if listMode == .queue {
-            guard queueRows.indices.contains(index) else { return }
-            onActivate?(queueRows[index].summary.id, action)
-            return
-        }
         let list = visible
         guard list.indices.contains(index) else { return }
         onActivate?(list[index].id, action)
@@ -341,24 +274,31 @@ final class HistoryModel: ObservableObject {
     func togglePinSelection() {
         guard let id = currentItemID, let summary = summaryByID[id] else { return }
         let pinned = !summary.isPinned
+        // ピン留めを外した項目は、コピーした日時の位置（ずっと下のこともある）に移る。選択まで一緒に移ると見失うので、
+        // 外す前にすぐ下にあった項目（なければすぐ上）を選ぶ。続けて ⌘P を押せば上から順に外していける（2026-10-19、Kazuya さん）
+        let list = visible
+        let next = list.firstIndex { $0.id == id }.flatMap { index in
+            index + 1 < list.count ? list[index + 1].id : (index > 0 ? list[index - 1].id : nil)
+        }
         try? store.setPinned(pinned, itemID: id)
         if let index = summaries.firstIndex(where: { $0.id == id }) {
             summaries[index].isPinned = pinned
             summaries[index].pinnedAt = pinned ? Date() : nil
         }
+        // ピン留めした項目はピン留めの段に移る。選択は同じ項目のままなので、並び替えたあとでスクロールして見える所に出す
+        selectedID = pinned ? id : (next ?? id)
+        scrollsAfterApply = pinned
         rebuild()
-        if listMode == .history { selectedID = id }
     }
 
     func deleteSelection() {
-        guard listMode == .history, let id = selectedID else { return }
+        guard let id = selectedID else { return }
         // 検索中は remove(ids:) のあと検索が非同期でやり直されるので、次に選ぶ項目は消す前に決めておく
         let remaining = visible.filter { $0.id != id }
         let index = visible.firstIndex { $0.id == id } ?? 0
         try? store.delete(itemID: id)
         remove(ids: [id])
         selectedID = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
-        onDelete?([id])
     }
 
     // MARK: - プレビュー

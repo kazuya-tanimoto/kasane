@@ -15,7 +15,7 @@ final class HistoryPanel: NSPanel {
             defer: false
         )
         hideTitlebar()
-        // 動かせるのは検索欄の周りと操作ボタンの横（`WindowDragArea`）だけ。
+        // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
         minSize = HistoryPanelController.minSize
@@ -40,19 +40,26 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     static let defaultSize = NSSize(width: 880, height: 560)
     static let minSize = NSSize(width: 720, height: 420)
 
-    private let panel: HistoryPanel
+    private var panel: HistoryPanel
+    private let hosting: NSHostingView<HistoryView>
     private let model: HistoryModel
     private var keyMonitor: Any?
     private var isHiding = false
     /// 自分で位置を決めている間は、動かした・大きさを変えたとみなして保存しない
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
+    private var blurState = WindowBlurState()
+    private let inputSource = InputSourceSwitcher()
+    /// 検索欄。開くときに英数に切り替える間だけフォーカスを外すので、戻す先として覚えておく
+    private weak var searchField: NSResponder?
+    /// 検索欄のフォーカスを外していて、まだ戻していない
+    private var focusDetached = false
 
     init(model: HistoryModel) {
         self.model = model
         panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.defaultSize))
+        hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
         super.init()
-        let hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
         hosting.sizingOptions = [.minSize]
         // タイトルバーは隠しているので、その分の余白を空けない
         hosting.safeAreaRegions = []
@@ -60,13 +67,42 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.contentView = hosting
         panel.delegate = self
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
-            guard let self else { return }
-            WindowBlur.apply(radius: radius, to: self.panel)
+            self?.applyBlur(radius)
         }
     }
 
-    /// 表示・非表示が変わったとき（FIFO / LIFO 中の小さな表示の出し入れに使う）
-    var onVisibilityChange: ((Bool) -> Void)?
+    /// ぼかしの半径を付ける。なしから半径を付けるときは、角丸を保つためにウインドウを作り直す（`WindowBlurState`）
+    private func applyBlur(_ radius: Int) {
+        guard blurState.needsNewWindow(for: radius) else {
+            blurState.apply(radius, to: panel)
+            return
+        }
+        let old = panel
+        let wasOpen = old.isVisible && !isHiding
+        let wasKey = old.isKeyWindow
+        // 検索欄に入力中なら、フォーカスはウインドウの持つフィールドエディタにあるので、検索欄そのものを覚える
+        let focused = ((old.firstResponder as? NSTextView)?.delegate as? NSView) ?? (old.firstResponder as? NSView)
+        // 古いウインドウが閉じたことを、外をクリックしたとき（windowDidResignKey）と取り違えないよう先に外す
+        old.delegate = nil
+        old.orderOut(nil)
+        old.contentView = nil
+        panel = HistoryPanel(contentRect: old.frame)
+        panel.setFrame(old.frame, display: false)
+        panel.contentView = hosting
+        panel.delegate = self
+        blurState = WindowBlurState()
+        // 起動したときと同じく、出す前に半径を付ける
+        blurState.apply(radius, to: panel)
+        guard wasOpen else { return }
+        if wasKey {
+            panel.makeKeyAndOrderFront(nil)
+            if let focused {
+                _ = panel.makeFirstResponder(focused)
+            }
+        } else {
+            panel.orderFront(nil)
+        }
+    }
 
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
@@ -80,15 +116,41 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         position()
         isHiding = false
         panel.alphaValue = 0
+        // 作業中のアプリが前面にいるうちに、英数に切り替える。
+        // 検索欄にフォーカスがあるまま切り替えると、macOS がカーソルの横に入力言語の表示を出す。
+        // その表示の描画を待つ間（約 0.5 秒）、ウインドウがアクティブな見た目にならない（2026-10-17、Mac で計測）。
+        // そこで検索欄のフォーカスを外してから切り替え、英数に変わってからフォーカスを戻す
+        detachSearchField()
+        let switching = inputSource.switchToASCII { [weak self] _ in
+            self?.reattachSearchField()
+        }
+        if !switching {
+            reattachSearchField()
+        }
         panel.makeKeyAndOrderFront(nil)
-        WindowBlur.apply(radius: AppearanceSettings.shared.blurRadius, to: panel)
+        applyBlur(AppearanceSettings.shared.blurRadius)
         installKeyMonitor()
-        onVisibilityChange?(true)
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
         }
+    }
+
+    /// 検索欄からフォーカスを外す。`reattachSearchField()` で戻す
+    private func detachSearchField() {
+        // 検索欄に入力中（フィールドエディタがフォーカスを持っている）のときだけ外す。戻す先がわからなければ触らない
+        guard !focusDetached, let field = (panel.firstResponder as? NSTextView)?.delegate as? NSResponder else { return }
+        searchField = field
+        _ = panel.makeFirstResponder(nil)
+        focusDetached = true
+    }
+
+    /// 外していたフォーカスを検索欄に戻す
+    private func reattachSearchField() {
+        guard focusDetached else { return }
+        focusDetached = false
+        _ = panel.makeFirstResponder(searchField)
     }
 
     /// フェードアウトして閉じる。閉じ終わってから `completion` を呼ぶ
@@ -99,6 +161,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         isHiding = true
         removeKeyMonitor()
+        // 検索欄にフォーカスがあるままフェードすると、2 回に 1 回ほど、隠す処理（orderOut）が
+        // 約 0.5 秒止まり、薄れかけたウインドウが残って見える（2026-10-17、Mac で計測）。
+        // フォーカスを外してからフェードすると起きなかったので、外してから閉じる（隠したあとで戻す）
+        detachSearchField()
         NSAnimationContext.runAnimationGroup({ context in
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
@@ -106,9 +172,14 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // フェード中に開き直していたら（show() が isHiding を戻している）、隠さない
+                guard self.isHiding else { return }
                 self.panel.orderOut(nil)
                 self.isHiding = false
-                self.onVisibilityChange?(false)
+                // 次に開いたときのために、検索欄にフォーカスを戻しておく
+                self.reattachSearchField()
+                // 前のアプリが前面に戻ってから、開く前の入力方法に戻す
+                self.inputSource.restore()
                 completion?()
             }
         })
@@ -184,6 +255,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     /// 処理したキーなら true（検索欄には渡さない）
     private func handleKey(_ event: NSEvent) -> Bool {
+        // 英数に変わる前にキーが押されたら、先に検索欄へフォーカスを戻して、打った文字を検索欄に届ける
+        reattachSearchField()
+        // 日本語の変換中は、Enter（確定）・↑↓（候補の選択）・Esc（取り消し）などを日本語入力に渡す。
+        // このモニタは日本語入力より先にキーを受け取るので、確かめないと確定の Enter で貼り付けてしまう
+        if let client = panel.firstResponder as? NSTextInputClient, client.hasMarkedText() {
+            return false
+        }
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         switch Int(event.keyCode) {
         case 125: // ↓
@@ -199,16 +277,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             model.moveSelection(8)
             return true
         case 36, 76: // ⏎ / テンキーの Enter
-            if flags.contains(.option) {
+            // ⌥⏎ や ⌃⏎ では何もしない。前のコピーのキー（⌥⏎）を押したときに、貼り付けてしまわないようにする
+            guard flags.isDisjoint(with: [.option, .control]) else { return true }
+            if flags.contains(.command) {
                 model.activateSelection(.copyOnly)
             } else if flags.contains(.shift) {
                 model.activateSelection(.plainText)
             } else {
                 model.activateSelection(.paste)
             }
-            return true
-        case 48 where model.queueMode != nil && flags.isDisjoint(with: [.command, .option, .control]): // Tab: キューと履歴の切り替え（FIFO / LIFO 中だけ）
-            model.toggleListMode()
             return true
         case 53: // Esc: 検索語があれば消し、なければ閉じる
             if model.query.isEmpty {
@@ -236,11 +313,53 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 model.togglePinSelection()
                 return true
             }
+            // ⌘D でも消せる。⌘⌫ はキーボードによって押しにくいため（2026-10-18、Kazuya さんの要望）
+            if characters == "d", flags.isDisjoint(with: [.shift, .option, .control]) {
+                model.deleteSelection()
+                return true
+            }
             if characters == "w" {
                 hide()
                 return true
             }
+            if let action = Self.editAction(characters, flags: flags) {
+                if action == #selector(NSText.paste(_:)), pasteAsOneLine() {
+                    return true
+                }
+                return NSApp.sendAction(action, to: nil, from: nil)
+            }
         }
         return false
+    }
+
+    /// 検索欄に、改行やタブを空白に置き換えて 1 行で貼り付ける。
+    /// 検索欄は 1 行なので、改行を含む文字をそのまま貼ると表示が崩れる（2026-10-18、Mac で確認）。
+    /// 空白は検索の区切り（AND）になるので、行ごとの語がそれぞれ検索語になる。貼り付けられなければ false
+    private func pasteAsOneLine() -> Bool {
+        guard let editor = panel.firstResponder as? NSTextView, editor.isEditable,
+              let text = NSPasteboard.general.string(forType: .string)
+        else { return false }
+        // insertText はキーで打った文字と同じ扱いで、そのままだと直前に打った文字とまとめて取り消される。
+        // ⌘Z で貼った分だけが消えるよう、前後で区切る（2026-10-21 決定。要件書 §3.3）
+        editor.breakUndoCoalescing()
+        editor.insertText(TextNormalizer.singleLine(text), replacementRange: editor.selectedRange())
+        editor.breakUndoCoalescing()
+        return true
+    }
+
+    /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。
+    /// Kasane はメニューバーにメニューを出さないので「編集」メニューがなく、
+    /// ふつうのアプリのようにはこれらのキーが検索欄に届かない
+    private static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
+        guard flags.isDisjoint(with: [.option, .control]) else { return nil }
+        let shift = flags.contains(.shift)
+        switch characters {
+        case "v" where !shift: return #selector(NSText.paste(_:))
+        case "c" where !shift: return #selector(NSText.copy(_:))
+        case "x" where !shift: return #selector(NSText.cut(_:))
+        case "a" where !shift: return #selector(NSText.selectAll(_:))
+        case "z": return shift ? Selector(("redo:")) : Selector(("undo:"))
+        default: return nil
+        }
     }
 }

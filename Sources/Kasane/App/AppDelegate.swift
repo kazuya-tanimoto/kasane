@@ -5,7 +5,7 @@ import KasaneStore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     /// ショートカットの初期値（仮）。どれも `defaults write` で変えられる。設定画面は v1 の仕上げで作る
-    static let defaultHotKeys = (history: "ctrl+cmd+v", fifo: "ctrl+opt+cmd+f", lifo: "ctrl+opt+cmd+l")
+    static let defaultHotKeys = (history: "opt+v", fifo: "opt+cmd+f", lifo: "opt+cmd+l")
 
     private var store: HistoryStore!
     private var model: HistoryModel!
@@ -13,7 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: PasteboardMonitor!
     private var panel: HistoryPanelController!
     private var queue: QueueController!
-    private let queueHUD = QueueHUDController()
+    private lazy var queueHUD = QueueHUDController()
     private var statusItem: StatusItemController!
     private var onboarding: OnboardingWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
@@ -33,11 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model = HistoryModel(store: store, sortOrder: AppSettings.sortOrder)
         model.onActivate = { [weak self] id, action in self?.activate(itemID: id, action: action) }
-        model.onDelete = { [weak self] ids in self?.queue.remove(itemIDs: Set(ids)) }
         model.load()
 
         panel = HistoryPanelController(model: model)
-        panel.onVisibilityChange = { [weak self] _ in self?.updateQueueHUD() }
 
         queue = QueueController(store: store, writer: writer)
         queue.isHistoryPanelKey = { [weak self] in self?.panel.isKey ?? false }
@@ -84,11 +82,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         func register(_ name: String, _ fallback: String, _ handler: @escaping () -> Void) -> String {
             let spec = AppSettings.hotKey(name, default: fallback)
             guard let hotKey = HotKeyCenter.HotKey(spec) ?? HotKeyCenter.HotKey(fallback) else { return "" }
-            if !center.register(hotKey, handler: handler) {
+            switch center.register(hotKey, handler: handler) {
+            case .registered:
+                return hotKey.displayString
+            case .inUse:
                 NSLog("Kasane: hotkey \(spec) is already in use")
                 return "（\(hotKey.displayString) は使用中）"
+            case .rejected(let status):
+                NSLog("Kasane: hotkey \(spec) was rejected (\(status))")
+                return "（\(hotKey.displayString) は macOS で使えません）"
             }
-            return hotKey.displayString
         }
         let keys = Self.defaultHotKeys
         return .init(
@@ -127,7 +130,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func didSave(_ result: HistoryStore.SaveResult, candidate: SearchCandidate) {
         model.upsert(result.item, candidate: candidate)
         model.remove(ids: result.prunedIDs)
-        queue.remove(itemIDs: Set(result.prunedIDs))
         if let id = result.item.id {
             queue.didCapture(itemID: id)
         }
@@ -139,9 +141,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let item = try? store.item(id: itemID),
               let representations = try? store.representations(itemID: itemID)
         else { return }
+        // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加するだけ（クリップボードは変えない）。
+        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
+        if action == .copyOnly, queue.mode != nil {
+            queue.didCapture(itemID: itemID)
+            return
+        }
+
         // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
         let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
         writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
+        // ⌘⏎ でコピーした項目だけ、⌘C でコピーし直したときと同じく一番上に移す。
+        // 貼り付け（⏎・⇧⏎・⌘1〜⌘9）では移さない。貼るたびに並びと ⌘番号が変わると、
+        // 次に開いたとき前に見た位置で探せなくなるため（2026-10-18 決定）
+        if action == .copyOnly {
+            let now = Date()
+            try? store.recordReuse(itemID: itemID, now: now)
+            model.didReuse(id: itemID, at: now)
+        }
 
         panel.hide { [weak self] in
             guard action != .copyOnly else { return }
@@ -175,15 +192,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func queueDidChange() {
         let current = queue.queue
         statusItem?.update(queueMode: current?.mode, count: current?.count ?? 0)
-        model.updateQueue(current.map { QueueInfo(mode: $0.mode, itemIDs: $0.itemsInPasteOrder) })
+        if model.queueMode != current?.mode {
+            model.queueMode = current?.mode
+        }
         updateQueueHUD()
     }
 
-    /// 履歴ウインドウを閉じている間だけ、画面の隅にキュー（スタック）の中身を小さく出す
+    /// モード中は、履歴ウインドウの開閉に関係なく、画面の隅にキューの全件を出す
     private func updateQueueHUD() {
         let current = queue.queue
-        let titles = current?.itemsInPasteOrder.map { model.summary(id: $0)?.title ?? "?" } ?? []
-        queueHUD.update(mode: current?.mode, titles: titles, visible: !panel.isVisible)
+        let titles = current?.itemsInPasteOrder.map(\.title) ?? []
+        queueHUD.update(mode: current?.mode, titles: titles)
     }
 
     // MARK: - メニュー
@@ -197,7 +216,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppSettings.historyLimit = limit
         let pruned = (try? store.prune(limit: limit)) ?? []
         model.remove(ids: pruned)
-        queue.remove(itemIDs: Set(pruned))
     }
 
     private func showOnboarding() {
@@ -220,6 +238,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let ids = (try? store.deleteAll(keepPinned: true)) ?? []
         model.remove(ids: ids)
-        queue.remove(itemIDs: Set(ids))
     }
 }

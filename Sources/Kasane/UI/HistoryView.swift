@@ -5,29 +5,29 @@ import SwiftUI
 
 /// 履歴ウインドウ（デザインモック「C案 改訂版」）
 ///
+/// - 一番上: 「Kasane」の帯（つかんでウインドウを動かす）
 /// - 1行目: 検索欄
-/// - 2行目: モード（FIFO/LIFO 中のみ）、種類の絞り込み、操作ボタン、詳細の切り替え
-/// - 本体: 左に履歴かキューのリスト、右に大きなプレビュー（⌘I で詳細）
+/// - 2行目: 種類の絞り込み
+/// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
+/// - 一番下: 選んだ項目への操作ボタン
+///
+/// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
     @ObservedObject var model: HistoryModel
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(spacing: 0) {
+            TitleBar()
             searchBar
             Toolbar(model: model)
                 .padding(.horizontal, 20)
                 .padding(.bottom, 12)
             HStack(spacing: 12) {
-                Group {
-                    if model.isShowingQueue {
-                        QueueListView(model: model)
-                    } else {
-                        ItemListView(model: model)
-                    }
-                }
-                .frame(width: 350)
+                ItemListView(model: model)
+                    .frame(width: 350)
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
@@ -38,6 +38,7 @@ struct HistoryView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
+            ActionBar(model: model)
         }
         .frame(
             minWidth: HistoryPanelController.minSize.width, maxWidth: .infinity,
@@ -51,28 +52,46 @@ struct HistoryView: View {
         }
     }
 
+    /// 検索欄。角丸の薄い塗りの中が文字を打つ場所で、塗りの外をつかむとウインドウが動く
+    /// （2026-10-18 決定。詳細はデザインの ui-tweaks-2026-10-18.md）
     private var searchBar: some View {
-        HStack(spacing: 12) {
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        return HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundStyle(.secondary)
-            TextField(
-                model.isShowingQueue ? "入力すると履歴を検索します" : "履歴を検索",
-                text: $model.query
-            )
-            .textFieldStyle(.plain)
-            .font(.system(size: 19))
-            .focused($searchFocused)
-            if !model.isShowingQueue {
-                Text("\(model.pinned.count + model.others.count) 件")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
+                .allowsHitTesting(false)
+            TextField("履歴を検索", text: $model.query)
+                .textFieldStyle(.plain)
+                .font(.system(size: 19))
+                .focused($searchFocused)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 16)
-        .padding(.bottom, 10)
+        .padding(.vertical, 7)
+        .padding(.horizontal, 13)
+        .background(shape.fill(colorScheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05)))
+        // 塗りの中は、文字の上でなくてもクリックで検索欄に入れる
+        .contentShape(shape)
+        .onTapGesture { searchFocused = true }
+        .pointerStyle(.horizontalText)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
         // 検索欄の周りをつかんでウインドウを動かせるようにする
+        .background(WindowDragArea())
+    }
+}
+
+/// ウインドウの一番上の帯。一般的な Mac のアプリのタイトルバーと同じ場所で、どこをつかんでもウインドウが動く
+private struct TitleBar: View {
+    var body: some View {
+        // 中央に 13pt（Mac の標準のウインドウタイトルと同じ大きさ）。2026-10-18 決定
+        Text("Kasane")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(Color.primary.opacity(0.85))
+            // 文字の上でも、背景の WindowDragArea でつかめるようにする
+            .allowsHitTesting(false)
+        .frame(height: 28)
+        .frame(maxWidth: .infinity)
         .background(WindowDragArea())
     }
 }
@@ -91,73 +110,214 @@ struct WindowDragArea: NSViewRepresentable {
     }
 }
 
-// MARK: - ツールバー（1行）
+// MARK: - 絞り込み（1行）
 
 private struct Toolbar: View {
     @ObservedObject var model: HistoryModel
-    @Environment(\.kasaneAccent) private var accent
 
     var body: some View {
         HStack(spacing: 6) {
-            if let mode = model.queueMode {
-                Button {
-                    model.toggleListMode()
-                } label: {
-                    Text("\(mode == .fifo ? "FIFO" : "LIFO") \(model.queueRows.count)")
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .buttonStyle(ChipStyle(isOn: model.isShowingQueue, onColor: accent.color, onText: accent.foreground))
-                .help("Tab でキューと履歴を切り替え")
-                Divider().frame(height: 18).padding(.horizontal, 4)
-            }
-            if model.isShowingQueue {
-                Text("⌘V で上から順に貼り付け · Tab で履歴に切り替え")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(KindFilter.allCases) { filter in
-                    Button(filter.label) { model.kindFilter = filter }
-                        .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
-                }
+            ForEach(KindFilter.allCases) { filter in
+                Button(filter.label) { model.kindFilter = filter }
+                    .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
             }
             // 空いている所をつかんでもウインドウを動かせる
             WindowDragArea()
                 .frame(minWidth: 8, maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+        }
+    }
+}
+
+// MARK: - 操作ボタン（一番下の帯）
+
+/// 選んだ項目への操作ボタン。上の段（探す）と場所を分け、絞り込みのボタンと取り違えにくくする。
+/// ピン留めと削除の入口もここに置く（右クリックのメニューは作らない。2026-10-18 決定）
+private struct ActionBar: View {
+    @ObservedObject var model: HistoryModel
+    @Environment(\.colorScheme) private var colorScheme
+    @StateObject private var tooltips = TooltipState()
+
+    var body: some View {
+        let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
+        HStack(spacing: 6) {
+            // 空いている所をつかんでもウインドウを動かせる
+            WindowDragArea()
+                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 26, maxHeight: 26)
             Button("ペースト ⏎") { model.activateSelection(.paste) }
-                .buttonStyle(ActionStyle(isPrimary: true, accent: accent))
+                .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
-                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
-            Button("コピー ⌥⏎") { model.activateSelection(.copyOnly) }
-                .buttonStyle(ActionStyle(isPrimary: false, accent: accent))
+                .buttonStyle(ActionStyle())
+            // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
+            Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
+                .buttonStyle(ActionStyle())
             Button {
+                tooltips.dismiss()
+                model.togglePinSelection()
+            } label: {
+                Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(ActionStyle(isOn: isPinned))
+            .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
+            // ⌘⌫ でも消せるが、ボタンには ⌘D だけ書く（1 つの方がすぐ読める）
+            Button {
+                tooltips.dismiss()
+                model.deleteSelection()
+            } label: {
+                Label("⌘D", systemImage: "trash")
+                    .labelStyle(.titleAndIcon)
+            }
+            .buttonStyle(ActionStyle())
+            .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
+            Button {
+                tooltips.dismiss()
                 model.showsDetails.toggle()
             } label: {
                 Label("⌘I", systemImage: "info.circle")
                     .labelStyle(.titleAndIcon)
             }
-            .buttonStyle(ActionStyle(isPrimary: false, isOn: model.showsDetails, accent: accent))
-            .help("詳細を表示（⌘I）")
+            .buttonStyle(ActionStyle(isOn: model.showsDetails))
+            .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
+        .padding(.vertical, 9)
+        .padding(.horizontal, 16)
+        // 上端の線は背景に置く（手前に置くと、ボタンの上に出す説明を横切る）
+        .background(alignment: .top) {
+            Rectangle()
+                .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
+                .frame(height: 1)
+        }
+        .background(WindowDragArea())
+        // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
+        .onChange(of: model.focusToken) { tooltips.dismiss() }
     }
 }
 
-/// 絞り込みやモードの丸いボタン。
-/// 色を指定しないときは、選択中を macOS の切り替えボタンのように白く浮かせる（アクセントカラーはペーストと FIFO / LIFO だけに使う）
+// MARK: - ボタンの説明（ツールチップ）
+
+/// ボタンの説明を出す時機を決める。
+///
+/// macOS 標準のツールチップ（`.help`）は、Kasane では出るまで 2〜3 秒かかり、文字も小さかった（2026-10-19、Kazuya さん）。
+/// 標準のものは文字の大きさを変えられないので、自前で描く。決めたことは design/tooltip-unpin-2026-10-19.md
+@MainActor
+private final class TooltipState: ObservableObject {
+    /// 止まって迷ったときにはすぐ出し、帯の上を動かしている途中では出さない長さ
+    static let delay: Duration = .milliseconds(500)
+    /// 説明が消えてからこの秒数のうちに別のボタンへ移ったら、待たずに出す（ボタンを順に見ていくとき）
+    static let quickSwitchWindow: TimeInterval = 1
+
+    @Published private(set) var shownID: String?
+    private var pendingID: String?
+    private var pending: Task<Void, Never>?
+    private var lastHiddenAt = Date.distantPast
+
+    func hover(_ id: String, inside: Bool) {
+        if inside {
+            cancelPending()
+            if shownID != nil || Date().timeIntervalSince(lastHiddenAt) < Self.quickSwitchWindow {
+                shownID = id
+                return
+            }
+            pendingID = id
+            pending = Task { [weak self] in
+                try? await Task.sleep(for: Self.delay)
+                guard !Task.isCancelled, let self, self.pendingID == id else { return }
+                self.pendingID = nil
+                self.shownID = id
+            }
+        } else {
+            // 隣のボタンに入ったあとで、前のボタンから出た知らせが届くことがある。そのときは消さない
+            if pendingID == id { cancelPending() }
+            if shownID == id {
+                shownID = nil
+                lastHiddenAt = Date()
+            }
+        }
+    }
+
+    /// ボタンを押したときや、開き直したときに消す。続けて別のボタンに移っても、すぐには出さない
+    func dismiss() {
+        cancelPending()
+        shownID = nil
+        lastHiddenAt = .distantPast
+    }
+
+    private func cancelPending() {
+        pending?.cancel()
+        pending = nil
+        pendingID = nil
+    }
+}
+
+private extension View {
+    func tooltip(_ text: String, id: String, state: TooltipState) -> some View {
+        modifier(Tooltip(text: text, id: id, state: state))
+    }
+}
+
+/// ボタンのすぐ上に、右端をそろえて説明を出す（右端のボタンでもウインドウの外にはみ出さない）
+private struct Tooltip: ViewModifier {
+    let text: String
+    let id: String
+    @ObservedObject var state: TooltipState
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { state.hover(id, inside: $0) }
+            // `.help` は VoiceOver が読む説明も兼ねていたので、その分をここで渡す
+            .accessibilityHint(Text(text))
+            .overlay(alignment: .topTrailing) {
+                if state.shownID == id {
+                    // 上端をボタンの上端にそろえてから、説明の高さ＋6pt だけ上にずらす。
+                    // `alignmentGuide(.top)` で持ち上げる書き方は、Kazuya さんの Mac で効かず、ボタンに重なった（2026-10-21）
+                    TooltipLabel(text: text)
+                        .fixedSize()
+                        .offset(y: -(TooltipLabel.height + 6))
+                        .allowsHitTesting(false)
+                }
+            }
+    }
+}
+
+private struct TooltipLabel: View {
+    /// 上にずらす量をこの値で決めるので、高さは固定にする（12pt の 1 行が収まる）
+    static let height: CGFloat = 22
+
+    let text: String
+
+    var body: some View {
+        // ボタンの文字（`ActionStyle`）と同じ 12pt
+        Text(text)
+            .font(.system(size: 12))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .frame(height: Self.height)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.15), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 4, y: 1)
+    }
+}
+
+/// 絞り込みの丸いボタン。
+/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーは FIFO / LIFO の小さいウインドウだけに使う）
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
-    var onColor: Color? = nil
-    var onText: Color? = nil
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12))
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? (onText ?? Color.raisedText) : .primary)
+            .foregroundStyle(isOn ? Color.raisedText : .primary)
             .background {
-                if isOn, let onColor {
-                    Capsule().fill(onColor)
-                } else if isOn {
+                if isOn {
                     RaisedFill(shape: Capsule())
                 } else {
                     Capsule().fill(Color.primary.opacity(0.08))
@@ -190,30 +350,38 @@ private extension Color {
     })
 }
 
-/// ペーストなどの操作ボタン
+/// ペーストなどの操作ボタン。
+/// ペーストも他と同じ色にし、太字で区別する（色付きのボタンは「選ばれている」ように見えるため。2026-10-18 決定）
 private struct ActionStyle: ButtonStyle {
-    var isPrimary: Bool
+    var isPrimary = false
+    /// ピン留め中や ⌘I の詳細がオンのとき、絞り込みの選択中と同じく白く浮かせる
     var isOn = false
-    var accent: AccentColor
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
+            .foregroundStyle(isOn ? Color.raisedText : .primary)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                if isPrimary {
-                    shape.fill(accent.color)
-                } else if isOn {
-                    // ⌘I の詳細がオンのときは、絞り込みの選択中と同じ見た目
+                if isOn {
                     RaisedFill(shape: shape)
                 } else {
-                    shape.fill(Color.primary.opacity(0.08))
+                    ActionFill(shape: shape)
                 }
             }
             .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// 操作ボタンのふだんの背景（ライトは黒 7%、ダークは白 12%）
+private struct ActionFill<S: Shape>: View {
+    let shape: S
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        shape.fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07))
     }
 }
 
@@ -226,17 +394,16 @@ private struct ItemListView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 4) {
-                    if !model.pinned.isEmpty {
-                        SectionHeader(title: "ピン留め")
-                        ForEach(model.pinned) { item in
-                            row(item)
+                    // 見出しは出さず、ピン留めとそれ以外の間に線を 1 本引くだけにする（2026-10-18 決定。
+                    // ピン留めの段は自分でピン留めしたときにしか出ないので、見出しがなくても分かる）。
+                    // ピン留めとそれ以外を 1 つの ForEach で描く。別々の ForEach にすると、ピン留めした行が
+                    // 移った先で描き直されず、ピン留めする直前の見た目（選択中の背景、ピンの印なし）のまま残った（2026-10-18、Mac で確認）
+                    let firstOtherID = model.pinned.isEmpty ? nil : model.others.first?.id
+                    ForEach(model.visible) { item in
+                        if item.id == firstOtherID {
+                            PinDivider()
                         }
-                    }
-                    if !model.others.isEmpty {
-                        SectionHeader(title: model.query.isEmpty ? "履歴" : "検索結果")
-                        ForEach(model.others) { item in
-                            row(item)
-                        }
+                        row(item)
                     }
                     if model.pinned.isEmpty && model.others.isEmpty {
                         EmptyState(
@@ -251,6 +418,10 @@ private struct ItemListView: View {
             .scrollIndicators(.automatic)
             .onChange(of: model.selectedID) { _, id in
                 guard let id else { return }
+                proxy.scrollTo(id)
+            }
+            .onChange(of: model.scrollToken) {
+                guard let id = model.selectedID else { return }
                 proxy.scrollTo(id)
             }
         }
@@ -274,95 +445,18 @@ private struct ItemListView: View {
     }
 }
 
-// MARK: - FIFO / LIFO のキュー
-
-private struct QueueListView: View {
-    @ObservedObject var model: HistoryModel
-
-    var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
-                    SectionHeader(title: "\(model.queueMode == .lifo ? "LIFO" : "FIFO") のキュー（貼り付ける順）")
-                    ForEach(model.queueRows) { row in
-                        QueueRowView(row: row, isSelected: model.queueSelection == row.id)
-                            .id(row.id)
-                            .contentShape(Rectangle())
-                            .onTapGesture { model.queueSelection = row.id }
-                    }
-                    if model.queueRows.isEmpty {
-                        EmptyState(text: "まだ何もありません。\nコピーすると、ここに順番に積まれます。")
-                    }
-                }
-                .padding(2)
-            }
-            .onChange(of: model.queueSelection) { _, index in
-                proxy.scrollTo(index)
-            }
-        }
-    }
-}
-
-private struct QueueRowView: View {
-    let row: QueueRow
-    let isSelected: Bool
-    @Environment(\.kasaneAccent) private var accent
-
-    var body: some View {
-        HStack(spacing: 10) {
-            // 貼り付ける順番。10 件を超えると 2 桁以上になるので、丸ではなく横に伸びる札にする
-            Text("\(row.id + 1)")
-                .font(.system(size: 13, weight: .bold, design: .rounded))
-                .monospacedDigit()
-                .padding(.horizontal, 7)
-                .frame(minWidth: 30, minHeight: 26)
-                // 次に貼るのは常に一番上なので、番号は色を付けずにほかと同じにする。
-                // 色付きにすると、選択中の項目と紛れる
-                .foregroundStyle(Color.secondary)
-                .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.primary.opacity(0.08))
-                )
-                .fixedSize()
-            VStack(alignment: .leading, spacing: 3) {
-                Text(row.summary.title.isEmpty ? " " : row.summary.title)
-                    .font(.system(size: 13))
-                    .lineLimit(2)
-                HStack(spacing: 6) {
-                    Text(row.summary.kind.displayName)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(row.summary.kind.tint)
-                    if row.id == 0 {
-                        Text("次の ⌘V で貼り付け")
-                            .fontWeight(.semibold)
-                            .foregroundStyle(accent.text)
-                    } else {
-                        Text("\(row.id + 1) 番目")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .font(.system(size: 11))
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(SelectionBackground(isSelected: isSelected))
-    }
-}
-
 // MARK: - 行
 
-private struct SectionHeader: View {
-    let title: String
+/// ピン留めとそれ以外の履歴の境目の線（両方あるときだけ出す）
+private struct PinDivider: View {
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        Text(title)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(.secondary)
+        Rectangle()
+            .fill(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.14))
+            .frame(height: 1)
             .padding(.horizontal, 8)
-            .padding(.top, 6)
-            .padding(.bottom, 2)
+            .padding(.vertical, 6)
     }
 }
 

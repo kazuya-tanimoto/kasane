@@ -1,0 +1,27 @@
+# push のたびに、Mac でビルドとテストを流す（2026-10-21 決定。design/regression-tests-2026-10-21.md）。
+# クラウドの作業環境では Swift をビルドできないので、壊れた push を Kazuya さんの確認より先に見つけるため
+name: Test
+
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: Swift の版（記録用）
+        run: swift --version
+      - name: アプリをビルド
+        run: swift build --product Kasane
+      - name: テスト
+        run: swift test
+      - name: 確認用のスクリプトが通るか
+        run: swiftc -typecheck scripts/hold-hotkey.swift
+      - name: アプリの組み立て（ad-hoc 署名）
+        run: scripts/build-app.sh

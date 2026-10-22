@@ -17,6 +17,62 @@ public enum TextNormalizer {
         return s
     }
 
+    /// 検索欄に貼り付ける文字を 1 行にする。改行とタブを空白 1 つに置き換え、前後の空白を除く
+    public static func singleLine(_ text: String) -> String {
+        text.split(whereSeparator: { $0.isNewline || $0 == "\t" })
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    /// 履歴のリストの行に出す見出し。
+    ///
+    /// 各行の前後の空白を取り、空の行を除いて、空白 1 つでつなぐ。タブは空白として扱う。
+    /// 1 行目しか出さないと、短い 1 行目の項目を見分けにくい（2026-10-21、Kazuya さん）。
+    /// 本文は数 MB のこともあるので、`maxLength` 文字が集まったら読むのをやめる
+    public static func listTitle(_ text: String, maxLength: Int = 200) -> String {
+        var result = ""
+        var resultLength = 0
+        var line = ""
+        var lineLength = 0
+        var lineHasText = false
+
+        func flush() {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if !trimmed.isEmpty {
+                if resultLength > 0 {
+                    result.append(" ")
+                    resultLength += 1
+                }
+                result.append(trimmed)
+                resultLength += trimmed.count
+            }
+            line = ""
+            lineLength = 0
+            lineHasText = false
+        }
+
+        for character in text {
+            if character.isNewline {
+                flush()
+            } else {
+                let normalized: Character = character == "\t" ? " " : character
+                // 行頭の空白は、あとで取るので数えずに捨てる（字下げの深い行でも読み進められる）
+                if !lineHasText && normalized == " " { continue }
+                lineHasText = true
+                line.append(normalized)
+                lineLength += 1
+                // 1 行がとても長いときも、上限を越えたらそこで切り上げる
+                if resultLength + 1 + lineLength > maxLength {
+                    flush()
+                    break
+                }
+            }
+            if resultLength >= maxLength { break }
+        }
+        flush()
+        return String(result.prefix(maxLength))
+    }
+
     /// 日本語（かな・漢字）を含むかどうか。ローマ字の読みを作るかの判定に使う
     public static func containsJapanese(_ text: String) -> Bool {
         text.unicodeScalars.contains { scalar in
