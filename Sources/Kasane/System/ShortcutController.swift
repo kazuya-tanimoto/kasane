@@ -68,10 +68,11 @@ final class ShortcutController {
     /// 外したキーを戻す
     func resumeAll() {
         for (slot, binding) in bindings {
-            if let error = binding.resume() {
+            let error = binding.resume()
+            if let error {
                 NSLog("Kasane: hotkey \(binding.shortcut.storageString) for \(slot.rawValue) was not registered again (\(error))")
-                registrationErrors[slot] = error
             }
+            registrationErrors[slot] = error
         }
         onChange?()
     }

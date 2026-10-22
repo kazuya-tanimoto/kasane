@@ -60,6 +60,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
+        // .regular にして activate() しても前に出ないことがある（Apple の開発者フォーラムの報告、PRレビュー調べ）
+        window.orderFrontRegardless()
     }
 
     func windowWillClose(_ notification: Notification) {

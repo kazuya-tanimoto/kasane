@@ -253,7 +253,7 @@ private final class FakeRegistrar: ShortcutRegistrar {
     func register(_ shortcut: Shortcut, handler: @escaping () -> Void) -> Result<Int, ShortcutRegistrationError> {
         log.append("register \(name(shortcut))")
         if takenByOtherApps.contains(shortcut) || tokens.values.contains(shortcut) {
-            return .inUse
+            return .failure(.inUse)
         }
         let token = nextToken
         nextToken += 1

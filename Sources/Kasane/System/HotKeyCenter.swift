@@ -98,4 +98,3 @@ extension HotKeyCenter {
         shortcut.displayString(keyLabel: { keyLabel($0) })
     }
 }
-
