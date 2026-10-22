@@ -171,6 +171,14 @@ public enum FuzzyMatcher {
         return text.withUnsafeBufferPointer { t -> Int? in
             pattern.withUnsafeBufferPointer { p -> Int? in
                 let n = t.count
+                // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す。
+                // 当たらない項目では、1 文字目が出るたびに幅の上限まで調べるより、ずっと少なく済む
+                var found = 0
+                for c in t where c == p[found] {
+                    found += 1
+                    if found == m { break }
+                }
+                guard found == m else { return nil }
                 for first in 0...(n - m) where t[first] == p[0] {
                     // この位置から前に進み、幅の上限までに全文字がそろうか
                     let limit = min(n, first + maxSpan)
