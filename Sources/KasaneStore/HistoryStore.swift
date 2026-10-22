@@ -88,18 +88,30 @@ public final class HistoryStore: @unchecked Sendable {
         do {
             result = try dbQueue.write { db -> SaveResult in
                 var isNew = false
+                var keepsExistingContent = false
                 var item: ClipItem
                 if var existing = try ClipItem.filter(Column("contentHash") == hash).fetchOne(db) {
                     existing.copiedAt = now
                     existing.copyCount += 1
-                    existing.title = capture.title
-                    existing.sourceBundleID = capture.sourceBundleID ?? existing.sourceBundleID
-                    existing.sourceAppName = capture.sourceAppName ?? existing.sourceAppName
-                    existing.byteSize = capture.byteSize
+                    if existing.kind == .richText && capture.kind == .text {
+                        // 書式付きの項目と同じ文字を書式なしでコピーしたときは、書式付きのほうを残し、日時と回数だけ更新する。
+                        // 書式なしで貼りたいときは ⇧⏎ があるので、残しても困らない
+                        keepsExistingContent = true
+                    } else {
+                        // 空白の違いは無視してまとめるので、種類や本文は新しいコピーに合わせる
+                        existing.kind = capture.kind
+                        existing.title = capture.title
+                        existing.text = capture.text
+                        existing.romaji = capture.romaji
+                        existing.thumbnail = capture.thumbnail ?? existing.thumbnail
+                        existing.sourceBundleID = capture.sourceBundleID ?? existing.sourceBundleID
+                        existing.sourceAppName = capture.sourceAppName ?? existing.sourceAppName
+                        existing.byteSize = capture.byteSize
+                        // 中身も新しいもので置き換える
+                        filesToDelete += try self.deleteRepresentations(itemID: existing.id!, db: db)
+                    }
                     try existing.update(db)
                     item = existing
-                    // 書式などが変わっている場合があるので、中身は新しいもので置き換える
-                    filesToDelete += try self.deleteRepresentations(itemID: existing.id!, db: db)
                 } else {
                     item = ClipItem(
                         id: nil,
@@ -127,7 +139,7 @@ public final class HistoryStore: @unchecked Sendable {
                 }
                 let itemID = item.id!
                 var positions: [Int: Int] = [:]
-                for rep in capture.representations where rep.data.count <= Self.maxRepresentationSize {
+                for rep in capture.representations where !keepsExistingContent && rep.data.count <= Self.maxRepresentationSize {
                     let position = positions[rep.itemIndex, default: 0]
                     positions[rep.itemIndex] = position + 1
                     var record = ClipRepresentation(
