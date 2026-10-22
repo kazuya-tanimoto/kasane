@@ -26,7 +26,7 @@ struct PreviewPane: View {
             }
             .animation(.easeOut(duration: 0.15), value: showsDetails)
             // 文字の大きさを変えたときも作り直す（書式付きのテキストは作るときに大きさを決めるため）
-            .id("\(content.item.id)-\(size.rawValue)")
+            .id("\(content.item.id ?? 0)-\(size.rawValue)")
         } else {
             Color.clear
         }

@@ -95,9 +95,12 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         textSize = level
         let minSize = Self.minSize(for: level)
         panel.minSize = minSize
-        // SwiftUI が新しい大きさで描き直し、最小の大きさを入れ直してから、ウインドウの大きさを変える
+        // この通知は値が変わる前に来る。次の回で、SwiftUI に新しい大きさで描き直させ
+        // （小さくするときに古い最小の大きさが残らないように）、それからウインドウの大きさを変える
         DispatchQueue.main.async { [weak self] in
-            self?.resizeForTextSize(from: old, to: level, minSize: minSize)
+            guard let self else { return }
+            self.hosting.layoutSubtreeIfNeeded()
+            self.resizeForTextSize(from: old, to: level, minSize: minSize)
         }
     }
 

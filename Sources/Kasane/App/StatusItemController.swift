@@ -219,7 +219,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         // メニューの項目は折り返さないので、説明は切れ目を決めて 1 行ずつ灰色の項目にする
-        for line in ["関係のない項目が多く出るときは", "「厳しめ」に、略して打った語が", "見つからないときは「ゆるめ」に", "します。"] {
+        for line in ["関係のない項目が多く出るときは「厳しめ」に、", "略して打った語が見つからないときは", "「ゆるめ」にします。"] {
             menu.addItem(header(line))
         }
         let searchItem = NSMenuItem(title: "検索のゆるさ", action: nil, keyEquivalent: "")

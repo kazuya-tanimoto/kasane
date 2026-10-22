@@ -180,7 +180,11 @@ public enum FuzzyMatcher {
                         if t[end] == p[pi] { pi += 1 }
                         end += 1
                     }
-                    guard pi == m else { continue }
+                    if pi < m {
+                        // 欄の終わりまで見てもそろわなければ、もっと後ろから始めてもそろわない
+                        if limit == n { break }
+                        continue
+                    }
                     // 後ろから戻って、一致する範囲をできるだけ短くする
                     var start = first
                     pi = m - 1
