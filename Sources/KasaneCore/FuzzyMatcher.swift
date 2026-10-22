@@ -164,52 +164,73 @@ public enum FuzzyMatcher {
     // MARK: - fzf v1
 
     /// 語の文字が順番どおりに、`maxSpan` 文字以内の幅に収まる最初の位置を探し、そのスコアを返す。
-    /// 開始位置ごとに前へ `maxSpan` 文字までしか見ないので、照合の量は（欄の長さ × `maxSpan`）で抑えられる
+    ///
+    /// 1 文字目の候補から 2 文字目を探す間に出てきた 1 文字目は、どれも同じ 2 文字目以降を使うので、
+    /// 2 文字目にいちばん近いものだけを試せばよい（範囲がいちばん短くなる）。
+    /// こうして 2 文字目までは欄を 1 回なめるだけで進み、3 文字目からは幅の上限までを調べる
     static func fuzzyMatch(_ pattern: [UInt16], in text: [UInt16], maxSpan: Int) -> Int? {
         let m = pattern.count
         guard m > 0, text.count >= m, maxSpan >= m else { return nil }
         return text.withUnsafeBufferPointer { t -> Int? in
             pattern.withUnsafeBufferPointer { p -> Int? in
                 let n = t.count
-                // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す。
-                // 当たらない項目では、1 文字目が出るたびに幅の上限まで調べるより、ずっと少なく済む
+                // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す（当たらない項目の大半はここで済む）
                 var found = 0
                 for c in t where c == p[found] {
                     found += 1
                     if found == m { break }
                 }
                 guard found == m else { return nil }
-                for first in 0...(n - m) where t[first] == p[0] {
-                    // この位置から前に進み、幅の上限までに全文字がそろうか
-                    let limit = min(n, first + maxSpan)
-                    var pi = 1
-                    var end = first + 1
-                    while pi < m && end < limit {
-                        if t[end] == p[pi] { pi += 1 }
-                        end += 1
-                    }
-                    if pi < m {
-                        // 欄の終わりまで見てもそろわなければ、もっと後ろから始めてもそろわない
-                        if limit == n { break }
-                        continue
-                    }
-                    // 後ろから戻って、一致する範囲をできるだけ短くする
-                    var start = first
-                    pi = m - 1
-                    var i = end - 1
-                    while i >= first {
-                        if t[i] == p[pi] {
-                            pi -= 1
-                            if pi < 0 {
-                                start = i
-                                break
-                            }
-                        }
-                        i -= 1
-                    }
-                    return calculateScore(p, t, start, end)
+                guard m > 1 else {
+                    let at = t.firstIndex(of: p[0])!
+                    return calculateScore(p, t, at, at + 1)
                 }
-                return nil
+                // 1 文字目と 2 文字目が同じ字なら、見つけた 2 文字目を次の 1 文字目の候補にもする
+                let sameFirstTwo = p[0] == p[1]
+                var i = 0
+                while true {
+                    while i < n && t[i] != p[0] { i += 1 }
+                    guard i < n else { return nil }
+                    // 2 文字目を探しながら、その手前でいちばん近い 1 文字目を覚える
+                    var first = i
+                    var second = i + 1
+                    while second < n && t[second] != p[1] {
+                        if t[second] == p[0] { first = second }
+                        second += 1
+                    }
+                    guard second < n else { return nil }
+                    let limit = min(n, first + maxSpan)
+                    if second < limit {
+                        // 3 文字目からは、幅の上限までにそろうか
+                        var pi = 2
+                        var end = second + 1
+                        while pi < m && end < limit {
+                            if t[end] == p[pi] { pi += 1 }
+                            end += 1
+                        }
+                        if pi == m {
+                            // 後ろから戻って、一致する範囲をできるだけ短くする
+                            var start = first
+                            pi = m - 1
+                            var k = end - 1
+                            while k >= first {
+                                if t[k] == p[pi] {
+                                    pi -= 1
+                                    if pi < 0 {
+                                        start = k
+                                        break
+                                    }
+                                }
+                                k -= 1
+                            }
+                            return calculateScore(p, t, start, end)
+                        }
+                        // 欄の終わりまで見てもそろわなければ、もっと後ろから始めてもそろわない
+                        if limit == n { return nil }
+                    }
+                    // この 2 文字目を使う 1 文字目は試し終えたので、その先から次の候補を探す
+                    i = sameFirstTwo ? second : second + 1
+                }
             }
         }
     }
