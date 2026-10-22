@@ -135,9 +135,9 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertEqual(FuzzyMatcher.fuzzyMatch(pattern, in: text, maxSpan: 6), expected)
     }
 
-    /// 1 回なめる作りが、総当たりで探した「幅に収まるいちばん早い終わりと、その終わりでいちばん遅い開始位置」と
+    /// 照合が、総当たりで探した「幅に収まるいちばん早い終わりと、その終わりでいちばん遅い開始位置」と
     /// 同じ範囲を選ぶこと（当たるかどうかとスコアが一致する）を、固定の乱数で確かめる
-    func testOnePassMatchAgreesWithBruteForce() {
+    func testMatchAgreesWithBruteForce() {
         var seed: UInt64 = 2026_10_22
         func next(_ bound: Int) -> Int {
             seed = seed &* 6364136223846793005 &+ 1442695040888963407

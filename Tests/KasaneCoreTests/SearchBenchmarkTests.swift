@@ -36,8 +36,9 @@ final class SearchBenchmarkTests: XCTestCase {
         }
     }
 
-    /// 照合のやり方ごとの速さを、同じ実行の中で比べる（CI のマシンは回ごとに速さが 2 倍ほど変わるため、回をまたいで比べない）。
-    /// 1 つの語を、1 万件の全部の欄に照合する時間（3 回のうち最も速い回）を出す
+    /// 前の版（幅の制限なし）と今の照合の速さを、同じ実行の中で比べる（CI のマシンは回ごとに速さが 2 倍ほど変わるため、回をまたいで比べない）。
+    /// 1 つの語を、1 万件の全部の欄に照合する時間（3 回のうち最も速い回）を出す。
+    /// 2026-10-22 に、1 回なめて開始位置を持ち回る作りとも比べ、こちらの方が速かった（devlog に記録）
     func testMatcherComparison() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
         let fields = Self.makeCandidates().flatMap(\.fields)
@@ -56,11 +57,8 @@ final class SearchBenchmarkTests: XCTestCase {
             let before = time({ Self.unlimitedMatch($0, in: $1) }, term)
             print(String(format: "照合の比較「%@」前の版（幅の制限なし）: %.1f ms、%d 欄", word, before.ms, before.hits))
             for ratio in [2, 3, 6] {
-                let span = term.count * ratio
-                let anchored = time({ Self.anchoredMatch($0, in: $1, maxSpan: span) }, term)
-                let onePass = time({ FuzzyMatcher.fuzzyMatch($0, in: $1, maxSpan: span) }, term)
-                print(String(format: "照合の比較「%@」%d 倍: 1 文字目ごと %.1f ms、1 回なめる %.1f ms、%d 欄",
-                             word, ratio, anchored.ms, onePass.ms, onePass.hits))
+                let now = time({ FuzzyMatcher.fuzzyMatch($0, in: $1, maxSpan: term.count * ratio) }, term)
+                print(String(format: "照合の比較「%@」%d 倍: %.1f ms、%d 欄", word, ratio, now.ms, now.hits))
             }
         }
     }
@@ -118,51 +116,6 @@ final class SearchBenchmarkTests: XCTestCase {
                     i -= 1
                 }
                 return FuzzyMatcher.calculateScore(p, t, start, end)
-            }
-        }
-    }
-
-    /// 比較用: 02cbf59 の照合（そろうか先に 1 回なめ、1 文字目が出るたびに幅の上限まで調べる）
-    static func anchoredMatch(_ pattern: [UInt16], in text: [UInt16], maxSpan: Int) -> Int? {
-        let m = pattern.count
-        guard m > 0, text.count >= m, maxSpan >= m else { return nil }
-        return text.withUnsafeBufferPointer { t -> Int? in
-            pattern.withUnsafeBufferPointer { p -> Int? in
-                let n = t.count
-                var found = 0
-                for c in t where c == p[found] {
-                    found += 1
-                    if found == m { break }
-                }
-                guard found == m else { return nil }
-                for first in 0...(n - m) where t[first] == p[0] {
-                    let limit = min(n, first + maxSpan)
-                    var pi = 1
-                    var end = first + 1
-                    while pi < m && end < limit {
-                        if t[end] == p[pi] { pi += 1 }
-                        end += 1
-                    }
-                    if pi < m {
-                        if limit == n { break }
-                        continue
-                    }
-                    var start = first
-                    pi = m - 1
-                    var i = end - 1
-                    while i >= first {
-                        if t[i] == p[pi] {
-                            pi -= 1
-                            if pi < 0 {
-                                start = i
-                                break
-                            }
-                        }
-                        i -= 1
-                    }
-                    return FuzzyMatcher.calculateScore(p, t, start, end)
-                }
-                return nil
             }
         }
     }

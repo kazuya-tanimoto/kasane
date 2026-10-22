@@ -164,47 +164,52 @@ public enum FuzzyMatcher {
     // MARK: - fzf v1
 
     /// 語の文字が順番どおりに、`maxSpan` 文字以内の幅に収まる最初の位置を探し、そのスコアを返す。
-    ///
-    /// 欄を前から 1 回だけなめ、語の先頭から k 文字目までがそろう「いちばん遅い開始位置」を文字ごとに持つ。
-    /// 最後の文字がそろうたびに、そこで終わる最短の範囲が分かるので、幅が上限以内なら一致にする。
-    /// 照合の量は（欄の長さ × 語の文字数）で、幅の設定にはよらない。
-    /// 選ぶ範囲は「最初に始まり、幅に収まる範囲を後ろから詰めたもの」と同じになる（2026-10-22 に前の作りと突き合わせて確認）
+    /// 開始位置ごとに前へ `maxSpan` 文字までしか見ないので、照合の量は（欄の長さ × `maxSpan`）で抑えられる
     static func fuzzyMatch(_ pattern: [UInt16], in text: [UInt16], maxSpan: Int) -> Int? {
         let m = pattern.count
         guard m > 0, text.count >= m, maxSpan >= m else { return nil }
         return text.withUnsafeBufferPointer { t -> Int? in
             pattern.withUnsafeBufferPointer { p -> Int? in
-                // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す（当たらない項目の大半はここで済む）
+                let n = t.count
+                // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す。
+                // 当たらない項目では、1 文字目が出るたびに幅の上限まで調べるより、ずっと少なく済む
                 var found = 0
                 for c in t where c == p[found] {
                     found += 1
                     if found == m { break }
                 }
                 guard found == m else { return nil }
-
-                // 語にない文字は飛ばす（下位 6 ビットでのふるい。すり抜けても下の比較で外れる）
-                var mask: UInt64 = 0
-                for c in p { mask |= 1 << UInt64(c & 63) }
-                let last = p[m - 1]
-                return withUnsafeTemporaryAllocation(of: Int.self, capacity: m) { latest -> Int? in
-                    // latest[k]: 語の 0〜k 文字目が、今の位置までに順番どおりにそろう、いちばん遅い開始位置（なければ -1）
-                    latest.initialize(repeating: -1)
-                    for j in 0..<t.count {
-                        let c = t[j]
-                        guard mask & (1 << UInt64(c & 63)) != 0 else { continue }
-                        // 同じ文字を 2 回使わないよう、後ろの文字から順に、1 つ前の文字までの結果で更新する
-                        var k = m - 1
-                        while k > 0 {
-                            if c == p[k], latest[k - 1] >= 0 { latest[k] = latest[k - 1] }
-                            k -= 1
-                        }
-                        if c == p[0] { latest[0] = j }
-                        if c == last, latest[m - 1] >= 0, j - latest[m - 1] < maxSpan {
-                            return calculateScore(p, t, latest[m - 1], j + 1)
-                        }
+                for first in 0...(n - m) where t[first] == p[0] {
+                    // この位置から前に進み、幅の上限までに全文字がそろうか
+                    let limit = min(n, first + maxSpan)
+                    var pi = 1
+                    var end = first + 1
+                    while pi < m && end < limit {
+                        if t[end] == p[pi] { pi += 1 }
+                        end += 1
                     }
-                    return nil
+                    if pi < m {
+                        // 欄の終わりまで見てもそろわなければ、もっと後ろから始めてもそろわない
+                        if limit == n { break }
+                        continue
+                    }
+                    // 後ろから戻って、一致する範囲をできるだけ短くする
+                    var start = first
+                    pi = m - 1
+                    var i = end - 1
+                    while i >= first {
+                        if t[i] == p[pi] {
+                            pi -= 1
+                            if pi < 0 {
+                                start = i
+                                break
+                            }
+                        }
+                        i -= 1
+                    }
+                    return calculateScore(p, t, start, end)
                 }
+                return nil
             }
         }
     }
