@@ -11,7 +11,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         var setSortOrder: (HistorySortOrder) -> Void
         var setHistoryLimit: (Int) -> Void
         var setHUDPosition: (HUDPosition) -> Void
-        var setHUDFontSize: (Double) -> Void
+        var setHUDTextSize: (TextSizeLevel) -> Void
         var resetHistoryWindowFrame: () -> Void
         var showOnboarding: () -> Void
         var clearHistory: () -> Void
@@ -168,6 +168,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(entry)
         }
 
+        // pt の数字は出さない。数字では見た目の違いが想像しにくいため（2026-10-22 決定）
+        menu.addItem(.separator())
+        menu.addItem(header("履歴ウインドウの文字の大きさ"))
+        for level in TextSizeLevel.allCases {
+            let entry = item(level.displayName, #selector(selectHistoryTextSize(_:)))
+            entry.representedObject = level.rawValue
+            entry.state = appearance.historyTextSize == level ? .on : .off
+            entry.indentationLevel = 1
+            menu.addItem(entry)
+        }
+
         menu.addItem(.separator())
         menu.addItem(header("FIFO / LIFO の小さいウインドウの位置"))
         for position in HUDPosition.allCases {
@@ -180,10 +191,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(header("FIFO / LIFO の小さいウインドウの文字の大きさ"))
-        for size in [11.0, 12, 14, 16, 18, 20] {
-            let entry = item(size == 12 ? "12 pt（標準）" : "\(Int(size)) pt", #selector(selectHUDFontSize(_:)))
-            entry.representedObject = size
-            entry.state = AppSettings.hudFontSize == size ? .on : .off
+        for level in TextSizeLevel.allCases {
+            let entry = item(level.displayName, #selector(selectHUDTextSize(_:)))
+            entry.representedObject = level.rawValue
+            entry.state = AppSettings.hudTextSize == level ? .on : .off
             entry.indentationLevel = 1
             menu.addItem(entry)
         }
@@ -260,9 +271,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         AppearanceSettings.shared.accent = accent
     }
 
-    @objc private func selectHUDFontSize(_ sender: NSMenuItem) {
-        guard let size = sender.representedObject as? Double else { return }
-        actions.setHUDFontSize(size)
+    @objc private func selectHUDTextSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let level = TextSizeLevel(rawValue: raw) else { return }
+        actions.setHUDTextSize(level)
+    }
+
+    @objc private func selectHistoryTextSize(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let level = TextSizeLevel(rawValue: raw) else { return }
+        AppearanceSettings.shared.historyTextSize = level
     }
 
     @objc private func toggleLinkPreviews() { AppSettings.fetchesLinkPreviews.toggle() }

@@ -18,7 +18,7 @@ final class HistoryPanel: NSPanel {
         // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
-        minSize = HistoryPanelController.minSize
+        minSize = HistoryPanelController.minSize(for: AppSettings.historyTextSize)
         isFloatingPanel = true
         level = .floating
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
@@ -37,8 +37,18 @@ final class HistoryPanel: NSPanel {
 
 @MainActor
 final class HistoryPanelController: NSObject, NSWindowDelegate {
+    /// 文字の大きさが標準のときの、初めの大きさと最小の大きさ
     static let defaultSize = NSSize(width: 880, height: 560)
     static let minSize = NSSize(width: 720, height: 420)
+
+    /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）
+    nonisolated static func defaultSize(for level: TextSizeLevel) -> NSSize {
+        WindowPlacement.size(defaultSize, scaledTo: level)
+    }
+
+    nonisolated static func minSize(for level: TextSizeLevel) -> NSSize {
+        WindowPlacement.size(minSize, scaledTo: level)
+    }
 
     private var panel: HistoryPanel
     private let hosting: NSHostingView<HistoryView>
@@ -49,6 +59,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private var isPositioning = false
     private var blurObserver: AnyCancellable?
     private var blurState = WindowBlurState()
+    private var textSizeObserver: AnyCancellable?
+    /// 今の文字の大きさ。変えたときに、前の段階からの割合でウインドウの大きさを変える
+    private var textSize = AppSettings.historyTextSize
     private let inputSource = InputSourceSwitcher()
     /// 検索欄。開くときに英数に切り替える間だけフォーカスを外すので、戻す先として覚えておく
     private weak var searchField: NSResponder?
@@ -68,6 +81,46 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         panel.delegate = self
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
             self?.applyBlur(radius)
+        }
+        textSizeObserver = AppearanceSettings.shared.$historyTextSize.dropFirst().sink { [weak self] level in
+            self?.changeTextSize(to: level)
+        }
+    }
+
+    /// 文字の大きさを変えたら、一覧とプレビューが大きくなった分だけウインドウを広げる（小さくしたら狭める）。
+    /// 左上は動かさず、画面からはみ出すときは画面に収める（2026-10-22 決定。デザインの font-size-levels-2026-10-22.md）
+    private func changeTextSize(to level: TextSizeLevel) {
+        let old = textSize
+        guard level != old else { return }
+        textSize = level
+        let minSize = Self.minSize(for: level)
+        panel.minSize = minSize
+        // SwiftUI が新しい大きさで描き直し、最小の大きさを入れ直してから、ウインドウの大きさを変える
+        DispatchQueue.main.async { [weak self] in
+            self?.resizeForTextSize(from: old, to: level, minSize: minSize)
+        }
+    }
+
+    private func resizeForTextSize(from old: TextSizeLevel, to level: TextSizeLevel, minSize: NSSize) {
+        if isVisible, let screen = panel.screen?.visibleFrame {
+            let frame = WindowPlacement.frame(panel.frame, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            isPositioning = true
+            panel.setFrame(frame, display: true)
+            isPositioning = false
+            // 位置は画面の中心からのずれで覚えているので、広げたあとの位置で覚え直す
+            saveFrame()
+        } else if AppSettings.historyWindowSize != nil, let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
+            // 閉じている間に変えたときは、覚えている位置と大きさを同じように変える
+            let current = WindowPlacement.frame(
+                in: screen,
+                savedSize: AppSettings.historyWindowSize,
+                savedOffset: AppSettings.historyWindowOffset,
+                defaultSize: Self.defaultSize(for: old),
+                minSize: Self.minSize(for: old)
+            )
+            let frame = WindowPlacement.frame(current, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            AppSettings.historyWindowSize = frame.size
+            AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
         }
     }
 
@@ -194,8 +247,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             in: visible,
             savedSize: AppSettings.historyWindowSize,
             savedOffset: AppSettings.historyWindowOffset,
-            defaultSize: Self.defaultSize,
-            minSize: Self.minSize
+            defaultSize: Self.defaultSize(for: textSize),
+            minSize: Self.minSize(for: textSize)
         )
         isPositioning = true
         panel.setFrame(frame, display: false)
@@ -301,6 +354,14 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             break
         }
         if flags.contains(.command), let characters = event.charactersIgnoringModifiers?.lowercased() {
+            // ⌘+ / ⌘− で一覧とプレビューの文字の大きさを一段変える。端では何もしない（音も鳴らさない）
+            if flags.isDisjoint(with: [.option, .control]), let step = Self.textSizeStep(characters) {
+                let appearance = AppearanceSettings.shared
+                if let next = step > 0 ? appearance.historyTextSize.larger : appearance.historyTextSize.smaller {
+                    appearance.historyTextSize = next
+                }
+                return true
+            }
             if let number = Int(characters), (1...9).contains(number) {
                 model.activate(index: number - 1, action: .paste)
                 return true
@@ -345,6 +406,17 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         editor.insertText(TextNormalizer.singleLine(text), replacementRange: editor.selectedRange())
         editor.breakUndoCoalescing()
         return true
+    }
+
+    /// ⌘ と一緒に押したキーが、文字の大きさを一段大きくする（1）か小さくする（-1）か。
+    /// US 配列の ⌘+ は ⇧ と = のキーなので、⌘= と ⌘⇧=（+）のどちらでも大きくする。
+    /// JIS 配列の + は ⇧ と ; のキーなので、⌘; と ⌘⇧;（+）でも大きくする
+    private static func textSizeStep(_ characters: String) -> Int? {
+        switch characters {
+        case "+", "=", ";": return 1
+        case "-": return -1
+        default: return nil
+        }
     }
 
     /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。

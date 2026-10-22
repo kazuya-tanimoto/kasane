@@ -1,4 +1,5 @@
 import AppKit
+import KasaneCore
 import SwiftUI
 
 /// 背景のぼかしの半径の選択肢（設定画面ができるまではメニューで選ぶ）
@@ -33,6 +34,10 @@ final class AppearanceSettings: ObservableObject {
     }
     @Published var accent: AccentColor = AppSettings.accentColor {
         didSet { AppSettings.accentColor = accent }
+    }
+    /// 履歴ウインドウの一覧とプレビューの文字の大きさ。メニューと ⌘+ / ⌘− で変える
+    @Published var historyTextSize: TextSizeLevel = AppSettings.historyTextSize {
+        didSet { AppSettings.historyTextSize = historyTextSize }
     }
     /// 背景のぼかしの半径（0 でぼかしなし）。色の濃さは変えず、ぼかしだけを変える
     @Published var blurRadius: Int = AppSettings.blurRadius {

@@ -1,4 +1,5 @@
 import AppKit
+import KasaneCore
 import KasaneStore
 import LinkPresentation
 import PDFKit
@@ -10,6 +11,7 @@ import UniformTypeIdentifiers
 struct PreviewPane: View {
     let content: PreviewContent?
     let showsDetails: Bool
+    @Environment(\.textSize) private var size
 
     var body: some View {
         if let content {
@@ -23,7 +25,8 @@ struct PreviewPane: View {
                 }
             }
             .animation(.easeOut(duration: 0.15), value: showsDetails)
-            .id(content.item.id)
+            // 文字の大きさを変えたときも作り直す（書式付きのテキストは作るときに大きさを決めるため）
+            .id("\(content.item.id)-\(size.rawValue)")
         } else {
             Color.clear
         }
@@ -34,7 +37,8 @@ struct PreviewPane: View {
         switch content.item.kind {
         case .richText:
             if let richText = content.richText {
-                RichTextView(text: richText)
+                // 書式付きのテキストは、コピー元の大きさのまま、プレビューの本文と同じ割合で拡大する
+                RichTextView(text: richText, scale: size.font(14) / 14)
             } else {
                 TextPreview(text: content.item.text ?? "")
             }
@@ -47,7 +51,7 @@ struct PreviewPane: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(16)
+                    .padding(size.scaled(16))
             } else if let pdf = content.pdfData {
                 PDFPreview(source: .data(pdf))
             } else {
@@ -63,15 +67,16 @@ private struct TextPreview: View {
     let text: String
     /// 長すぎるテキストは描画が重くなるので先頭だけを表示する
     static let maxLength = 20_000
+    @Environment(\.textSize) private var size
 
     var body: some View {
         ScrollView {
             Text(text.count > Self.maxLength ? String(text.prefix(Self.maxLength)) + "\n…" : text)
-                .font(.system(size: 14))
-                .lineSpacing(5)
+                .font(.system(size: size.font(14)))
+                .lineSpacing(size.scaled(5))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
-                .padding(18)
+                .padding(size.scaled(18))
         }
     }
 }
@@ -79,6 +84,8 @@ private struct TextPreview: View {
 /// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く
 private struct RichTextView: NSViewRepresentable {
     let text: NSAttributedString
+    /// 文字の大きさに掛ける割合（文字の大きさの段階。標準は 1）
+    let scale: CGFloat
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -89,14 +96,27 @@ private struct RichTextView: NSViewRepresentable {
             textView.isEditable = false
             textView.isSelectable = true
             textView.drawsBackground = false
-            textView.textContainerInset = NSSize(width: 13, height: 18)
-            textView.textStorage?.setAttributedString(text)
+            textView.textContainerInset = NSSize(width: 13 * scale, height: 18 * scale)
+            textView.textStorage?.setAttributedString(Self.scaled(text, by: scale))
         }
         return scrollView
     }
 
-    // 項目が変わるとプレビュー全体を作り直すので、ここでは何もしない
+    // 項目や文字の大きさが変わるとプレビュー全体を作り直すので、ここでは何もしない
     func updateNSView(_ view: NSScrollView, context: Context) {}
+
+    /// 各文字の大きさに割合を掛ける。見出しと本文の差など、コピー元の書式はそのまま残る
+    private static func scaled(_ text: NSAttributedString, by scale: CGFloat) -> NSAttributedString {
+        guard scale != 1 else { return text }
+        let result = NSMutableAttributedString(attributedString: text)
+        let whole = NSRange(location: 0, length: result.length)
+        result.enumerateAttribute(.font, in: whole) { value, range, _ in
+            // 大きさの指定がない部分は、NSTextView の既定（12pt）で表示される
+            let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: 12)
+            result.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range)
+        }
+        return result
+    }
 }
 
 /// コピーしたリッチテキストを、プレビュー用の NSAttributedString にする
@@ -167,21 +187,23 @@ private struct URLPreview: View {
     @State private var title: String?
     @State private var icon: NSImage?
     @State private var image: NSImage?
+    @Environment(\.textSize) private var size
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: size.scaled(12)) {
+            HStack(spacing: size.scaled(10)) {
                 if let icon {
-                    Image(nsImage: icon).resizable().frame(width: 24, height: 24)
+                    Image(nsImage: icon).resizable().frame(width: size.scaled(24), height: size.scaled(24))
                 } else {
-                    Image(systemName: "link").font(.system(size: 20)).foregroundStyle(.secondary)
+                    Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(.secondary)
                 }
+                // macOS の Title 3（15pt）。段階で大きさを変えるため数値で指定する
                 Text(title ?? URL(string: urlString)?.host() ?? urlString)
-                    .font(.title3.weight(.semibold))
+                    .font(.system(size: size.font(15), weight: .semibold))
                     .lineLimit(3)
             }
             Text(urlString)
-                .font(.system(size: 12.5, design: .monospaced))
+                .font(.system(size: size.font(12.5), design: .monospaced))
                 .foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .lineLimit(8)
@@ -199,7 +221,7 @@ private struct URLPreview: View {
             }
             Spacer()
         }
-        .padding(16)
+        .padding(size.scaled(16))
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: urlString) {
             // ページタイトルは、設定でオンのときに、プレビューを開いたときだけ取得する（コピーしただけでは通信しない）
@@ -247,6 +269,7 @@ final class LinkTitleCache {
 
 private struct FilePreview: View {
     let urls: [URL]
+    @Environment(\.textSize) private var size
 
     var body: some View {
         if urls.count == 1, let url = urls.first {
@@ -257,16 +280,19 @@ private struct FilePreview: View {
             }
         } else {
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: size.scaled(8)) {
                     ForEach(urls, id: \.self) { url in
-                        HStack(spacing: 8) {
+                        HStack(spacing: size.scaled(8)) {
                             Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
                                 .resizable()
-                                .frame(width: 24, height: 24)
+                                .frame(width: size.scaled(24), height: size.scaled(24))
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(url.lastPathComponent).lineLimit(1)
+                                Text(url.lastPathComponent)
+                                    .font(.system(size: size.font(13)))
+                                    .lineLimit(1)
+                                // macOS の Caption（10pt）。段階で大きさを変えるため数値で指定する
                                 Text(url.deletingLastPathComponent().path)
-                                    .font(.caption)
+                                    .font(.system(size: size.font(10)))
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                                     .truncationMode(.middle)
@@ -274,7 +300,7 @@ private struct FilePreview: View {
                         }
                     }
                 }
-                .padding(16)
+                .padding(size.scaled(16))
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
@@ -326,11 +352,12 @@ private struct PDFPreview: NSViewRepresentable {
 private struct Placeholder: View {
     let symbol: String
     let text: String
+    @Environment(\.textSize) private var size
 
     var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: symbol).font(.system(size: 28)).foregroundStyle(.tertiary)
-            Text(text).foregroundStyle(.secondary)
+        VStack(spacing: size.scaled(8)) {
+            Image(systemName: symbol).font(.system(size: size.scaled(28))).foregroundStyle(.tertiary)
+            Text(text).font(.system(size: size.font(13))).foregroundStyle(.secondary)
         }
     }
 }
@@ -338,6 +365,7 @@ private struct Placeholder: View {
 /// プレビューの下に出す情報（種類、コピー元、日時、文字数など）
 private struct InfoTable: View {
     let content: PreviewContent
+    @Environment(\.textSize) private var size
 
     /// 表示する項目（ラベルと値）
     private var entries: [(String, String)] {
@@ -362,7 +390,7 @@ private struct InfoTable: View {
     var body: some View {
         let entries = self.entries
         // 高さを抑えるため、1行にラベルと値の組を2つ並べる
-        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+        Grid(alignment: .leading, horizontalSpacing: size.scaled(12), verticalSpacing: size.scaled(4)) {
             ForEach(Array(stride(from: 0, to: entries.count, by: 2)), id: \.self) { index in
                 GridRow {
                     cell(entries[index])
@@ -372,9 +400,9 @@ private struct InfoTable: View {
                 }
             }
         }
-        .font(.system(size: 11.5))
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
+        .font(.system(size: size.font(11.5)))
+        .padding(.horizontal, size.scaled(18))
+        .padding(.vertical, size.scaled(10))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
