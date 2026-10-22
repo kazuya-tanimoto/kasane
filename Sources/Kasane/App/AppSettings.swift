@@ -1,4 +1,5 @@
 import AppKit
+import KasaneCore
 import KasaneStore
 
 /// UserDefaults に保存する設定。設定画面は v1 の仕上げで作るので、MVP ではメニューと `defaults` コマンドで変える
@@ -19,6 +20,12 @@ enum AppSettings {
     static var sortOrder: HistorySortOrder {
         get { HistorySortOrder(rawValue: defaults.string(forKey: "sortOrder") ?? "") ?? .recent }
         set { defaults.set(newValue.rawValue, forKey: "sortOrder") }
+    }
+
+    /// 検索のゆるさ（要件書 §3.2。2026-10-22 決定）
+    static var searchLooseness: SearchLooseness {
+        get { SearchLooseness(rawValue: defaults.string(forKey: "searchLooseness") ?? "") ?? .default }
+        set { defaults.set(newValue.rawValue, forKey: "searchLooseness") }
     }
 
     /// 履歴に残さないアプリのバンドルID

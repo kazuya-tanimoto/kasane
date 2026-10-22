@@ -80,6 +80,57 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertNil(FuzzyMatcher.score("zzz", text: long), "上限より後ろは検索しない")
     }
 
+    // MARK: - 一致の幅（検索のゆるさ、2026-10-22）
+
+    func testScatteredLettersDoNotMatchAtStandard() {
+        // s…l…a…c…k が 22 文字に散らばっている。標準（3 倍 = 15 文字）では外れ、ゆるめ（5 倍 = 25 文字）で出る
+        XCTAssertNil(FuzzyMatcher.score("slack", text: "see the list and click OK"))
+        XCTAssertNotNil(FuzzyMatcher.score("slack", text: "see the list and click OK", spanRatio: 5))
+        XCTAssertNotNil(FuzzyMatcher.score("slack", text: "Slack"))
+    }
+
+    func testSkippedLettersStillMatch() {
+        XCTAssertNotNil(FuzzyMatcher.score("slck", text: "Slack"))
+        XCTAssertNotNil(FuzzyMatcher.score("mktst", text: "make test"))
+        // 幅 11 文字（2.2 倍）。標準では出て、厳しめ（2 倍 = 10 文字）では外れる
+        XCTAssertNotNil(FuzzyMatcher.score("hstvw", text: "HistoryView"))
+        XCTAssertNil(FuzzyMatcher.score("hstvw", text: "HistoryView", spanRatio: 2))
+    }
+
+    func testInitialsNeedLooserSetting() {
+        // 頭文字だけ。幅 13 文字（4.3 倍）なので、少しゆるめ（4 倍）までは外れ、ゆるめ（5 倍）で出る
+        XCTAssertNil(FuzzyMatcher.score("gpr", text: "github pull request", spanRatio: 4))
+        XCTAssertNotNil(FuzzyMatcher.score("gpr", text: "github pull request", spanRatio: 5))
+    }
+
+    func testLaterCompactMatchIsFound() {
+        // 前の方の散らばった一致で諦めず、後ろのまとまった一致を探す
+        XCTAssertNotNil(FuzzyMatcher.score("slack", text: "see the list and click OK, then open Slack"))
+    }
+
+    func testTypingMoreCanWidenTheLimit() {
+        // 「sl」は幅 6 文字まで、「slc」は幅 9 文字まで。special case の s〜l は幅 7 文字
+        XCTAssertNil(FuzzyMatcher.score("sl", text: "special case"))
+        XCTAssertNotNil(FuzzyMatcher.score("slc", text: "special case"))
+    }
+
+    func testLongItemNoLongerMatchesEveryWord() {
+        let long = String(repeating: "the quick brown fox jumps over a lazy dog by the river bank. ", count: 30)
+        // m…a…k…e と t…e…s…t は順番どおりに散らばって含まれている（幅を限らなければ一致していた）
+        XCTAssertNil(FuzzyMatcher.score("make test", text: long), "2 語の AND で絞り込まれる")
+        XCTAssertNotNil(FuzzyMatcher.score("lazy dog", text: long))
+    }
+
+    func testExactTermIgnoresSpanSetting() {
+        XCTAssertNotNil(FuzzyMatcher.score("'push", text: "git push", spanRatio: 2))
+    }
+
+    func testLoosenessRatios() {
+        XCTAssertEqual(SearchLooseness.allCases.map(\.spanRatio), [2, 3, 4, 5, 6])
+        XCTAssertEqual(SearchLooseness.default, .standard)
+        XCTAssertEqual(SearchLooseness.allCases.map(\.displayName), ["厳しめ", "標準", "少しゆるめ", "ゆるめ", "とてもゆるめ"])
+    }
+
     func testPerformanceTenThousandItems() {
         let words = ["git", "checkout", "docker", "compose", "swift", "build", "kasane", "clipboard", "https://example.com/path"]
         var candidates: [SearchCandidate] = []

@@ -84,6 +84,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         let sortItem = NSMenuItem(title: "並び順", action: nil, keyEquivalent: "")
         sortItem.submenu = sortMenu
         menu.addItem(sortItem)
+        menu.addItem(searchLoosenessItem())
 
         let limitMenu = NSMenu()
         for limit in AppSettings.historyLimitOptions {
@@ -195,6 +196,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return appearanceItem
     }
 
+    /// 検索のゆるさ。倍率は出さず、名前と、どちらへ動かせばよいかの説明だけを出す
+    /// （2026-10-22 決定。見せ方はデザインの search-looseness-2026-10-22.md）
+    private func searchLoosenessItem() -> NSMenuItem {
+        let menu = NSMenu()
+        for looseness in SearchLooseness.allCases {
+            let entry = item(looseness.displayName, #selector(selectSearchLooseness(_:)))
+            entry.representedObject = looseness.rawValue
+            entry.state = AppSettings.searchLooseness == looseness ? .on : .off
+            menu.addItem(entry)
+        }
+        menu.addItem(.separator())
+        // メニューの項目は折り返さないので、説明は切れ目を決めて 1 行ずつ灰色の項目にする
+        for line in ["関係のない項目が多く出るときは", "「厳しめ」に、略して打った語が", "見つからないときは「ゆるめ」に", "します。"] {
+            menu.addItem(header(line))
+        }
+        let searchItem = NSMenuItem(title: "検索のゆるさ", action: nil, keyEquivalent: "")
+        searchItem.submenu = menu
+        return searchItem
+    }
+
     private func header(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
@@ -217,6 +238,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func selectSortOrder(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let order = HistorySortOrder(rawValue: raw) else { return }
         actions.setSortOrder(order)
+    }
+
+    @objc private func selectSearchLooseness(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let looseness = SearchLooseness(rawValue: raw) else { return }
+        AppSettings.searchLooseness = looseness
     }
 
     @objc private func selectOpacity(_ sender: NSMenuItem) {

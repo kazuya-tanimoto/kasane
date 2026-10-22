@@ -21,6 +21,8 @@ jobs:
         run: swift build --product Kasane
       - name: テスト
         run: swift test
+      - name: 検索の速さ（記録用。リリースビルドで、検索のゆるさごとに 1 万件を測る）
+        run: KASANE_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter SearchBenchmarkTests
       - name: 確認用のスクリプトが通るか
         run: swiftc -typecheck scripts/hold-hotkey.swift
       - name: アプリの組み立て（ad-hoc 署名）
