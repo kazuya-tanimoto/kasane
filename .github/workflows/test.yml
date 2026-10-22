@@ -21,5 +21,7 @@ jobs:
         run: swift build --product Kasane
       - name: テスト
         run: swift test
+      - name: 確認用のスクリプトが通るか
+        run: swiftc -typecheck scripts/hold-hotkey.swift
       - name: アプリの組み立て（ad-hoc 署名）
         run: scripts/build-app.sh
