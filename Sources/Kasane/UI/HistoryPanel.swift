@@ -425,7 +425,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。
     /// Kasane はメニューバーにメニューを出さないので「編集」メニューがなく、
     /// ふつうのアプリのようにはこれらのキーが検索欄に届かない
-    private static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
+    static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
         guard flags.isDisjoint(with: [.option, .control]) else { return nil }
         let shift = flags.contains(.shift)
         switch characters {
