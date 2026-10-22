@@ -34,9 +34,9 @@ final class SearchBenchmarkTests: XCTestCase {
 
         // 1 文字ずつ打ったときの各回の時間を測り、一番遅い回を出す。
         // 「make test」はほぼすべての項目に当たる場合。「taqz」は文字がそろわず当たらない場合。
-        // 「kgsr」は文字は順番どおりにあるが、離れていて厳しめでは当たらない場合
-        // （1 文字目が出るたびに幅の上限まで調べるので、幅を広げるほど遅くなりうる）
-        for query in ["make test", "taqz", "kgsr"] {
+        // 「kgsr」「agkr」は文字は順番どおりにあるが、離れていて厳しめでは当たらない場合
+        // （1 文字目が出るたびに幅の上限まで調べる。「a」はローマ字の欄に特に多いので、「agkr」が一番遅い側）
+        for query in ["make test", "taqz", "kgsr", "agkr"] {
             let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
             for looseness in SearchLooseness.allCases {
                 var slowest = 0.0
