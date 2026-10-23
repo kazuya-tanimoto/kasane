@@ -98,16 +98,24 @@ public enum ContrastFit {
     /// 色みと彩度を保ち、明るさを 0.01 ずつ（地が暗ければ上げ、明るければ下げ）変えて、
     /// 8 ビットに丸めた色で target に届いた最初の色を返す。届かなければ白か黒
     public static func fitLightness(_ color: RGBColor, background: RGBColor, target: Double) -> RGBColor {
+        let (h, s, _) = color.hsl
+        guard let lightness = fittedLightness(color, background: background, target: target) else {
+            return luminance(background) < 0.2 ? RGBColor(hex: 0xFFFFFF) : RGBColor(hex: 0x000000)
+        }
+        return RGBColor(hex: RGBColor(hue: h, saturation: s, lightness: lightness).hex)
+    }
+
+    /// 丸める前の明るさ（色みと彩度は元のまま）。届かなければ nil
+    static func fittedLightness(_ color: RGBColor, background: RGBColor, target: Double) -> Double? {
         let (h, s, l) = color.hsl
-        let raises = luminance(background) < 0.2
-        let step = raises ? 0.01 : -0.01
+        let step = luminance(background) < 0.2 ? 0.01 : -0.01
         var lightness = l
         while lightness >= 0 && lightness <= 1 {
             let candidate = RGBColor(hex: RGBColor(hue: h, saturation: s, lightness: lightness).hex)
-            if contrast(candidate, background) >= target { return candidate }
+            if contrast(candidate, background) >= target { return lightness }
             lightness += step
         }
-        return raises ? RGBColor(hex: 0xFFFFFF) : RGBColor(hex: 0x000000)
+        return nil
     }
 
     /// 一致した文字の色

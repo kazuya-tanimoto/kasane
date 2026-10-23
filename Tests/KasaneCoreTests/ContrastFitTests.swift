@@ -55,19 +55,16 @@ final class ContrastFitTests: XCTestCase {
         }
     }
 
-    /// 白や黒を混ぜず、色みと彩度は元のまま（8 ビットに丸める前の値で比べる。丸めると、明るさが端に近い色でずれが大きいため）
-    func testHueAndSaturationAreKept() {
+    /// 白や黒を混ぜず、色みと彩度は元のまま。返した色は「元の色みと彩度で、明るさだけを変えた色」を 8 ビットにしたもの
+    /// （丸めたあとの色で色みを比べると、明るさが端に近い色でずれが大きいため、丸める前の明るさで比べる）
+    func testHueAndSaturationAreKept() throws {
         for tone in AccentTone.allCases {
             for (color, dark) in [(tone.light, false), (tone.dark, true)] {
                 let (h, s, _) = color.hsl
                 let background = dark ? ContrastFit.darkBackground : ContrastFit.lightBackground
                 let fitted = ContrastFit.matchText(color, dark: dark, increasedContrast: false)
-                let l = fitted.hsl.lightness
-                // 丸める前の色（同じ色み・彩度で、明るさだけを変えたもの）を 8 ビットにすると、返した色になる
-                let unrounded = RGBColor(hue: h, saturation: s, lightness: l)
-                XCTAssertEqual(unrounded.hsl.hue, h, accuracy: 1e-9, "\(tone)")
-                XCTAssertEqual(unrounded.hsl.saturation, s, accuracy: 1e-9, "\(tone)")
-                XCTAssertGreaterThanOrEqual(ContrastFit.contrast(fitted, background), 4.5)
+                let lightness = try XCTUnwrap(ContrastFit.fittedLightness(color, background: background, target: ContrastFit.matchTarget))
+                XCTAssertEqual(RGBColor(hue: h, saturation: s, lightness: lightness).hex, fitted.hex, "\(tone)")
             }
         }
     }

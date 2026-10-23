@@ -33,6 +33,19 @@ final class MatchHighlighterTests: XCTestCase {
         XCTAssertEqual(MatchHighlighter.ranges(query: "git", title: ""), [])
     }
 
+    /// 1 文字ずつ正規化する道でも、位置は元の文字に戻る
+    func testPerCharacterMapping() {
+        let text = NormalizedText("ＡbＣ", perCharacter: true)
+        XCTAssertEqual(text.units, Array("abc".utf16))
+        XCTAssertEqual((0..<3).map(text.sourceRange(of:)), [0..<1, 1..<2, 2..<3])
+    }
+
+    /// 正規化で長さが変わる題名（ß が ss になるなら）でも、当たった文字の位置は元の文字
+    func testLengthChangingNormalization() throws {
+        try XCTSkipIf(TextNormalizer.normalize("ß").utf16.count == 1, "この環境では ß の長さが変わらない")
+        XCTAssertEqual(MatchHighlighter.ranges(query: "strasse", title: "Straße 1"), [0..<6])
+    }
+
     func testPositionsAfterAnEmoji() {
         XCTAssertEqual(MatchHighlighter.ranges(query: "git", title: "👍git"), [2..<5])
     }

@@ -75,10 +75,12 @@ struct NormalizedText {
     /// 正規化後の 1 単位ごとの、元の文字の範囲。nil なら位置はそのまま
     private let sources: [Range<Int>]?
 
-    init(_ text: String) {
+    /// `perCharacter` はテストで 1 文字ずつの道を直接通すため
+    init(_ text: String, perCharacter: Bool = false) {
         let whole = Array(TextNormalizer.normalize(text).utf16)
-        // ふつうは正規化しても長さが変わらない（大文字小文字・全角半角・ひらがな→カタカナはどれも 1 対 1）ので、位置はそのまま使う
-        if whole.count == text.utf16.count {
+        // ふつうは正規化しても長さが変わらない（大文字小文字・全角半角・ひらがな→カタカナはどれも 1 対 1）ので、位置はそのまま使う。
+        // 1 文字が伸びて別の 1 文字が縮むと、長さが同じでも位置がずれる（まれで、色の位置がずれるだけ。docs/todo.md）
+        if !perCharacter && whole.count == text.utf16.count {
             units = whole
             sources = nil
             return

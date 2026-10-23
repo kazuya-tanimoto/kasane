@@ -41,14 +41,25 @@ enum AccentColor: String, CaseIterable {
         let tone = self.tone
         return Color(nsColor: NSColor(name: nil) { appearance in
             let dark = Self.isDark(appearance)
-            let base = tone.map { dark ? $0.dark : $0.light } ?? Self.systemAccent()
+            let base = tone.map { dark ? $0.dark : $0.light } ?? Self.systemAccent(in: appearance)
             return NSColor(ContrastFit.matchText(base, dark: dark, increasedContrast: Self.isHighContrast(appearance)))
         })
     }
 
-    private static func systemAccent() -> RGBColor {
-        let c = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? NSColor.systemBlue.usingColorSpace(.sRGB)!
+    /// Mac の設定のアクセントカラー。描いている appearance（ライト / ダーク）での色を読む
+    /// （provider の中で、そのときの描画の appearance が渡されたものと同じとは限らないため）
+    private static func systemAccent(in appearance: NSAppearance) -> RGBColor {
+        let c = systemAccentNSColor(in: appearance)
         return RGBColor(red: Double(c.redComponent), green: Double(c.greenComponent), blue: Double(c.blueComponent))
+    }
+
+    private static func systemAccentNSColor(in appearance: NSAppearance) -> NSColor {
+        // 読めなかったときは Mac の初期の青（#007AFF）
+        var color = NSColor(srgbRed: 0, green: 0x7A / 255.0, blue: 1, alpha: 1)
+        appearance.performAsCurrentDrawingAppearance {
+            if let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) { color = accent }
+        }
+        return color
     }
 
     /// 小さいウインドウの次の番号の色（小さいウインドウは今のまま、の決定なので、一致した文字の matchText とは別）。
@@ -59,7 +70,7 @@ enum AccentColor: String, CaseIterable {
         let tone = tone
         return Color(nsColor: NSColor(name: nil) { appearance in
             let base = tone.map { NSColor(Self.isDark(appearance) ? $0.dark : $0.light) }
-                ?? (NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue)
+                ?? Self.systemAccentNSColor(in: appearance)
             if Self.isDark(appearance) {
                 return base.blended(withFraction: 0.4, of: .white) ?? base
             }
@@ -89,8 +100,8 @@ enum AccentColor: String, CaseIterable {
     var foreground: Color {
         guard let tone else {
             // システムのアクセントカラーは利用者が変えられる（黄色など明るい色もある）ので、明るさで白か黒を選ぶ
-            return Color(nsColor: NSColor(name: nil) { _ in
-                let accent = NSColor.controlAccentColor.usingColorSpace(.sRGB) ?? .systemBlue
+            return Color(nsColor: NSColor(name: nil) { appearance in
+                let accent = Self.systemAccentNSColor(in: appearance)
                 let luminance = 0.2126 * accent.redComponent + 0.7152 * accent.greenComponent + 0.0722 * accent.blueComponent
                 return luminance > 0.6 ? NSColor(hex: 0x1D1D1F) : .white
             })
