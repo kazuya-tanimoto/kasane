@@ -99,7 +99,7 @@ final class SettingsTabController: NSTabViewController {
         // 小さい画面で高いタブにしたとき、下にはみ出さないよう上へずらす（上端は画面の中に収める）
         if let visible = window.screen?.visibleFrame {
             if frame.minY < visible.minY { frame.origin.y = visible.minY }
-            if frame.maxY > visible.maxY { frame.origin.y = max(visible.minY, visible.maxY - frame.height) }
+            if frame.maxY > visible.maxY { frame.origin.y = visible.maxY - frame.height }
         }
         window.setFrame(frame, display: true, animate: animate && window.isVisible)
     }
