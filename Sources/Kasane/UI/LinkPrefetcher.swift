@@ -75,6 +75,12 @@ final class LinkPrefetcher: ObservableObject {
         pump()
     }
 
+    /// 一覧に出す行が変わった（検索・絞り込み・削除）。外れた行は見えている行から外す
+    func listChanged(_ ids: Set<Int64>) {
+        scheduler.keepRows(ids)
+        pump()
+    }
+
     /// 選んだ行が変わった（URL でない行を選んだときは nil）
     func select(_ item: ClipSummary?) {
         let id = item.flatMap { $0.kind == .url ? $0.id : nil }
@@ -163,9 +169,9 @@ final class LinkPrefetcher: ObservableObject {
             let item = try? store.item(id: id)
             return (item?.kind == .url ? item?.text : nil, try? store.linkPreviewAttempt(itemID: id))
         }.value
-        guard let urlString = state.url, LinkPreviewPolicy.isFetchable(urlString), let url = URL(string: urlString) else {
-            return
-        }
+        // 読んでいる間にスイッチをオフにしていたら、取りに行かない
+        guard !Task.isCancelled, isEnabled else { return }
+        guard let url = state.url.flatMap(LinkPreviewPolicy.webURL) else { return }
         guard LinkPreviewPolicy.shouldFetch(lastAttempt: state.lastAttempt, now: Date()) else {
             Self.log.info("skip \(id, privacy: .public) (fetched recently)")
             return
@@ -185,7 +191,9 @@ final class LinkPrefetcher: ObservableObject {
                 Self.log.info("offline \(id, privacy: .public)")
                 return
             }
-            Self.log.info("failed \(id, privacy: .public) \(error.localizedDescription, privacy: .public)")
+            // エラーの文に URL が入ることがあるので、種類と番号だけを出す
+            let nsError = error as NSError
+            Self.log.info("failed \(id, privacy: .public) \(nsError.domain, privacy: .public) \(nsError.code, privacy: .public)")
             let now = Date()
             await Task.detached(priority: .utility) {
                 try? store.markLinkPreviewFailed(itemID: id, at: now)
@@ -193,25 +201,32 @@ final class LinkPrefetcher: ObservableObject {
             return
         }
         let title = metadata.title
+        let hasIcon = metadata.iconProvider != nil
+        let hasImage = metadata.imageProvider != nil
         let iconData = await Self.loadData(metadata.iconProvider)
         let imageData = await Self.loadData(metadata.imageProvider)
         guard !Task.isCancelled, isEnabled else { return }
         let now = Date()
         // 縮小・書き出しと DB への書き込みはメインスレッドで行わない
-        let files = await Task.detached(priority: .utility) { () -> (icon: LinkPreview.ImageFile?, image: LinkPreview.ImageFile?) in
+        let saved = await Task.detached(priority: .utility) { () -> LinkPreview? in
             let icon = iconData.flatMap {
                 LinkImageEncoder.encode($0, maxPixelSize: LinkPreviewPolicy.iconMaxPixelSize, alwaysPNG: true)
             }
             let image = imageData.flatMap {
                 LinkImageEncoder.encode($0, maxPixelSize: LinkPreviewPolicy.imageMaxPixelSize, alwaysPNG: false)
             }
-            try? store.saveLinkPreview(itemID: id, title: title, icon: icon, image: image, at: now)
-            return (icon, image)
+            // ページにはあるのに読めなかった・縮められなかった画像は、前に取れていたものを残す
+            // （「取り直せなかったときは保存した結果のまま」）
+            try? store.saveLinkPreview(
+                itemID: id, title: title, icon: icon, image: image, at: now,
+                keepsIcon: hasIcon && icon == nil, keepsImage: hasImage && image == nil
+            )
+            return try? store.linkPreview(itemID: id)
         }.value
-        guard isEnabled else { return }
+        guard isEnabled, let saved else { return }
         Self.log.info("saved \(id, privacy: .public)")
         readFromStore.insert(id)
-        loaded[id] = Self.makeLoaded(title: title, icon: files.icon?.data, image: files.image?.data)
+        loaded[id] = Self.makeLoaded(title: saved.title, icon: saved.icon, image: saved.image)
     }
 
     private static func makeLoaded(title: String?, icon: Data?, image: Data?) -> Loaded {

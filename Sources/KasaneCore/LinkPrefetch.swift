@@ -25,13 +25,21 @@ public enum LinkPreviewPolicy {
 
     /// 取りに行ってよい URL か。http / https で、ホストがあるものだけ
     public static func isFetchable(_ urlString: String) -> Bool {
-        guard !urlString.contains(where: \.isWhitespace),
-              let components = URLComponents(string: urlString),
-              let scheme = components.scheme?.lowercased(),
+        webURL(urlString) != nil
+    }
+
+    /// http / https の URL として読めれば、その URL。前後の空白と改行は除く。
+    /// コピーしたときに「URL」の種類にするかの判定（CaptureBuilder.isWebURL）と同じにする
+    /// （違うと、URL の行なのに取りに行かないものができるため）
+    public static func webURL(_ text: String) -> URL? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.contains(where: \.isWhitespace),
+              let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              let host = components.host, !host.isEmpty
-        else { return false }
-        return true
+              let host = url.host, !host.isEmpty
+        else { return nil }
+        return url
     }
 }
 
@@ -85,6 +93,12 @@ public struct PrefetchScheduler: Sendable {
         } else {
             visibleSince[id] = nil
         }
+    }
+
+    /// 一覧から外れた行（検索や絞り込みで出なくなった、削除した）を、見えている行から外す。
+    /// 外れた行に「見えなくなった」が届くとは限らないため
+    public mutating func keepRows(_ ids: Set<Int64>) {
+        visibleSince = visibleSince.filter { ids.contains($0.key) }
     }
 
     public mutating func select(_ id: Int64?, at now: Date) {

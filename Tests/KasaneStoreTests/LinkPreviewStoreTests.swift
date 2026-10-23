@@ -74,6 +74,20 @@ final class LinkPreviewStoreTests: XCTestCase {
         XCTAssertEqual(try linkFiles().count, 1, "古い画像のファイルは消える")
     }
 
+    func testImageThatCouldNotBeReadKeepsThePreviousOne() throws {
+        let id = try saveURL("https://example.com")
+        try store.saveLinkPreview(itemID: id, title: "Old", icon: png, image: jpg, at: Date(timeIntervalSince1970: 2_000))
+        // 取り直しで、アイコンは新しくなり、画像はページにあったのに読めなかった
+        try store.saveLinkPreview(
+            itemID: id, title: "New", icon: png, image: nil, at: Date(timeIntervalSince1970: 100_000), keepsImage: true
+        )
+        let saved = try XCTUnwrap(store.linkPreview(itemID: id))
+        XCTAssertEqual(saved.title, "New")
+        XCTAssertEqual(saved.image, jpg.data, "前の画像が残る")
+        XCTAssertEqual(saved.icon, png.data)
+        XCTAssertEqual(try linkFiles().count, 2, "古いアイコンのファイルだけが消える")
+    }
+
     func testDeletedWhileFetchingLeavesNoFiles() throws {
         let id = try saveURL("https://example.com")
         try store.delete(itemID: id)

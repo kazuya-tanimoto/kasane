@@ -245,6 +245,7 @@ final class HistoryModel: ObservableObject {
         let otherList = list.filter { !$0.isPinned }
         pinned = pinnedList
         others = otherList
+        links.listChanged(Set(list.map(\.id)))
         if scrollsAfterApply {
             scrollsAfterApply = false
             scrollToken += 1

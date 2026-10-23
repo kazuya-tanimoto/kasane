@@ -23,6 +23,21 @@ final class LinkPreviewPolicyTests: XCTestCase {
         XCTAssertFalse(LinkPreviewPolicy.isFetchable("https://example.com/a b"))
         XCTAssertFalse(LinkPreviewPolicy.isFetchable(""))
     }
+
+    func testSurroundingNewlinesAreIgnored() {
+        // コピーしたときは前後の空白と改行を除いて URL の種類にしているので、取りに行くときも同じにする
+        XCTAssertEqual(LinkPreviewPolicy.webURL("https://example.com\n")?.absoluteString, "https://example.com")
+        XCTAssertEqual(LinkPreviewPolicy.webURL("  https://example.com/a  ")?.absoluteString, "https://example.com/a")
+        XCTAssertNil(LinkPreviewPolicy.webURL("https://example.com\nhttps://example.org"))
+    }
+
+    #if canImport(Darwin)
+    func testJapaneseURL() {
+        // 日本語を含む URL も取りに行く（URL(string:) が文字を % に置き換える。macOS 14 から）
+        let url = LinkPreviewPolicy.webURL("https://ja.wikipedia.org/wiki/会議")
+        XCTAssertEqual(url?.host, "ja.wikipedia.org")
+    }
+    #endif
 }
 
 final class PrefetchSchedulerTests: XCTestCase {
@@ -113,6 +128,16 @@ final class PrefetchSchedulerTests: XCTestCase {
         XCTAssertEqual(s.nextDeadline()!.timeIntervalSince(t0), 0.5, accuracy: 1e-6)
         s.hide()
         XCTAssertNil(s.nextDeadline())
+    }
+
+    func testRowsLeavingTheListAreForgotten() {
+        var s = scheduler()
+        s.setVisible(1, true, at: t0)
+        s.setVisible(2, true, at: t0)
+        // 検索で 1 が一覧から外れた（「見えなくなった」は届いていない）
+        s.keepRows([2])
+        s.tick(at: t0.addingTimeInterval(2))
+        XCTAssertEqual(s.takeNext(), [2])
     }
 
     func testCancelAll() {

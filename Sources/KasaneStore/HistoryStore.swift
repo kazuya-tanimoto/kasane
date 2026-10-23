@@ -439,9 +439,11 @@ extension HistoryStore {
     }
 
     /// 取れた結果を保存する。画像が変わるときは、新しいファイルを書く → 行を書き換える → 古いファイルを消す、の順にする
-    /// （途中で止まっても、行が指すファイルが必ずある）。取っている間に項目が消されていたら、書いたファイルも消して何もしない
+    /// （途中で止まっても、行が指すファイルが必ずある）。取っている間に項目が消されていたら、書いたファイルも消して何もしない。
+    /// keepsIcon・keepsImage は、ページにはあったのに読めなかったとき。前に取れていたものを残す
     public func saveLinkPreview(
-        itemID: Int64, title: String?, icon: LinkPreview.ImageFile?, image: LinkPreview.ImageFile?, at date: Date
+        itemID: Int64, title: String?, icon: LinkPreview.ImageFile?, image: LinkPreview.ImageFile?, at date: Date,
+        keepsIcon: Bool = false, keepsImage: Bool = false
     ) throws {
         let linkDirectory = blobDirectory.appendingPathComponent(Self.linkDirectoryName, isDirectory: true)
         try fileManager.createDirectory(at: linkDirectory, withIntermediateDirectories: true)
@@ -460,12 +462,18 @@ extension HistoryStore {
             old = try dbQueue.write { db -> [String] in
                 guard try ClipItem.exists(db, key: itemID) else { throw LinkPreviewError.itemDeleted }
                 let previous = try LinkPreviewRecord.fetchOne(db, key: itemID)
+                let newIconPath = keepsIcon && iconPath == nil ? previous?.iconPath : iconPath
+                let newImagePath = keepsImage && imagePath == nil ? previous?.imagePath : imagePath
                 let record = LinkPreviewRecord(
-                    itemID: itemID, title: title, iconPath: iconPath, imagePath: imagePath,
+                    itemID: itemID, title: title, iconPath: newIconPath, imagePath: newImagePath,
                     attemptedAt: date, succeeded: true
                 )
                 try record.save(db)
-                return [previous?.iconPath, previous?.imagePath].compactMap { $0 }
+                // 書き換えて使わなくなった古いファイルだけを消す
+                return [
+                    previous?.iconPath == newIconPath ? nil : previous?.iconPath,
+                    previous?.imagePath == newImagePath ? nil : previous?.imagePath,
+                ].compactMap { $0 }
             }
         } catch {
             written.forEach(removeBlob)
