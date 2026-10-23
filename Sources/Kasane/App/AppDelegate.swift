@@ -205,7 +205,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     clearHistory: { [weak self] in self?.confirmClearHistory() },
                     unpinnedCount: { [weak self] in self?.model.unpinnedCount ?? 0 },
                     // 履歴の一覧が変わったあとで数え直す（objectWillChange は変わる前に届くので、次の回で読む）
-                    historyChanges: model.objectWillChange
+                    historyChanges: self.model.objectWillChange
                         .map { _ in () }
                         .receive(on: RunLoop.main)
                         .eraseToAnyPublisher(),
