@@ -14,6 +14,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: StatusItemController!
     private var shortcuts: ShortcutController!
     private var onboarding: OnboardingWindowController?
+    private var settingsModel: SettingsModel?
+    private var settingsWindow: SettingsWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
     private let processingQueue = DispatchQueue(label: "io.github.kazuya-tanimoto.kasane.capture", qos: .utility)
 
@@ -45,29 +47,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.start()
 
         shortcuts = ShortcutController { [weak self] slot in self?.hotKeyPressed(slot) }
+        panel.onOpenSettings = { [weak self] in self?.showSettings() }
         statusItem = StatusItemController(
             actions: .init(
                 showHistory: { [weak self] in self?.panel.show() },
                 toggleQueue: { [weak self] mode in self?.toggleQueue(mode) },
-                setSortOrder: { [weak self] order in self?.setSortOrder(order) },
-                setHistoryLimit: { [weak self] limit in self?.setHistoryLimit(limit) },
-                setHUDPosition: { [weak self] position in
-                    AppSettings.hudPosition = position
-                    self?.updateQueueHUD()
-                },
-                setHUDTextSize: { [weak self] level in
-                    AppSettings.hudTextSize = level
-                    self?.updateQueueHUD()
-                },
-                resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
-                showOnboarding: { [weak self] in self?.showOnboarding() },
-                clearHistory: { [weak self] in self?.confirmClearHistory() }
+                showSettings: { [weak self] in self?.showSettings() },
+                showOnboarding: { [weak self] in self?.showOnboarding() }
             ),
             shortcuts: menuShortcuts()
         )
         shortcuts.onChange = { [weak self] in
             guard let self else { return }
             self.statusItem.shortcuts = self.menuShortcuts()
+            self.settingsModel?.shortcutsDidChange()
         }
 
         if !AppSettings.hasCompletedOnboarding
@@ -197,17 +190,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         queueHUD.update(mode: current?.mode, titles: titles)
     }
 
-    // MARK: - メニュー
+    // MARK: - 設定
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            let model = SettingsModel(
+                actions: .init(
+                    setSortOrder: { [weak self] order in self?.setSortOrder(order) },
+                    setHistoryLimit: { [weak self] limit in self?.setHistoryLimit(limit) ?? false },
+                    clearHistory: { [weak self] in self?.confirmClearHistory() },
+                    queueHUDChanged: { [weak self] in self?.updateQueueHUD() },
+                    resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
+                    isHistoryWindowStandard: { [weak self] in self?.panel.isFrameStandard ?? true }
+                ),
+                shortcuts: shortcuts
+            )
+            let window = SettingsWindowController { SettingsTabController(model: model) }
+            window.onShow = {
+                model.refresh()
+                model.permissions.startPolling()
+            }
+            window.onClose = { model.permissions.stopPolling() }
+            settingsModel = model
+            settingsWindow = window
+        }
+        settingsWindow?.show()
+    }
 
     private func setSortOrder(_ order: HistorySortOrder) {
         AppSettings.sortOrder = order
         model.setSortOrder(order)
     }
 
-    private func setHistoryLimit(_ limit: Int) {
+    /// 保存件数を変える。今のピン留め以外の件数が新しい件数を超えるときは、削除する前に確認を出す。
+    /// ポップアップの選び間違いで削除した履歴は戻せないため（settings-screen-2026-10-22.md §3「履歴」）。キャンセルなら false
+    private func setHistoryLimit(_ limit: Int) -> Bool {
+        let deleting = ((try? store.unpinnedCount()) ?? 0) - limit
+        if deleting > 0 {
+            let alert = NSAlert()
+            alert.messageText = "古い履歴 \(deleting.formatted()) 件を削除しますか？"
+            alert.informativeText = "保存件数を \(limit.formatted()) 件にするため、超えた分を古いものから削除します。"
+                + "削除した履歴は戻せません。ピン留めした項目は削除されません。"
+            // 右が「削除」、左が「キャンセル」。どちらも既定のボタンにしない（⏎ では押されない）。Esc はキャンセル
+            let delete = alert.addButton(withTitle: "削除")
+            let cancel = alert.addButton(withTitle: "キャンセル")
+            delete.hasDestructiveAction = true
+            delete.keyEquivalent = ""
+            cancel.keyEquivalent = "\u{1b}"
+            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        }
         AppSettings.historyLimit = limit
         let pruned = (try? store.prune(limit: limit)) ?? []
         model.remove(ids: pruned)
+        return true
     }
 
     private func showOnboarding() {

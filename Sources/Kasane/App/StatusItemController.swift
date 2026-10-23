@@ -8,13 +8,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     struct Actions {
         var showHistory: () -> Void
         var toggleQueue: (QueueMode) -> Void
-        var setSortOrder: (HistorySortOrder) -> Void
-        var setHistoryLimit: (Int) -> Void
-        var setHUDPosition: (HUDPosition) -> Void
-        var setHUDTextSize: (TextSizeLevel) -> Void
-        var resetHistoryWindowFrame: () -> Void
+        var showSettings: () -> Void
         var showOnboarding: () -> Void
-        var clearHistory: () -> Void
     }
 
     struct Shortcuts {
@@ -62,7 +57,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         button.imagePosition = .imageLeading
     }
 
-    // メニューを開くたびに作り直す（状態を常に正しく出すため）
+    // メニューを開くたびに作り直す（状態を常に正しく出すため）。
+    // 設定は設定画面にまとめ、メニューは履歴と FIFO / LIFO を開くためのものにする（2026-10-22 決定。settings-screen §5）
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
@@ -75,163 +71,19 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(item("\(lifoTitle)  \(shortcuts.lifo)", #selector(toggleLIFO)))
         menu.addItem(.separator())
 
-        let sortMenu = NSMenu()
-        for order in HistorySortOrder.allCases {
-            let entry = item(order.displayName, #selector(selectSortOrder(_:)))
-            entry.representedObject = order.rawValue
-            entry.state = AppSettings.sortOrder == order ? .on : .off
-            sortMenu.addItem(entry)
+        let settings = item("設定…", #selector(showSettings))
+        settings.keyEquivalent = ","
+        menu.addItem(settings)
+        if !(Permissions.isAccessibilityTrusted && Permissions.pasteboardAccess == .allowed) {
+            menu.addItem(item("⚠︎ 許可の設定が必要です…", #selector(showOnboarding)))
         }
-        let sortItem = NSMenuItem(title: "並び順", action: nil, keyEquivalent: "")
-        sortItem.submenu = sortMenu
-        menu.addItem(sortItem)
-        menu.addItem(searchLoosenessItem())
-
-        let limitMenu = NSMenu()
-        for limit in AppSettings.historyLimitOptions {
-            let entry = item("\(limit.formatted()) 件", #selector(selectHistoryLimit(_:)))
-            entry.representedObject = limit
-            entry.state = AppSettings.historyLimit == limit ? .on : .off
-            limitMenu.addItem(entry)
-        }
-        let limitItem = NSMenuItem(title: "履歴の保存件数", action: nil, keyEquivalent: "")
-        limitItem.submenu = limitMenu
-        menu.addItem(limitItem)
-
-        menu.addItem(appearanceItem())
-
-        let linkPreview = item("URL のページ情報を取得", #selector(toggleLinkPreviews))
-        linkPreview.state = AppSettings.fetchesLinkPreviews ? .on : .off
-        linkPreview.toolTip = "URL のプレビューで、ページのタイトルと画像を取りに行きます"
-        menu.addItem(linkPreview)
-
-        let login = item("ログイン時に起動", #selector(toggleLoginItem))
-        login.state = LoginItem.isEnabled ? .on : .off
-        menu.addItem(login)
-
-        let permissionsTitle = Permissions.isAccessibilityTrusted && Permissions.pasteboardAccess == .allowed
-            ? "権限の設定…" : "⚠︎ 権限の設定が必要です…"
-        menu.addItem(item(permissionsTitle, #selector(showOnboarding)))
-        menu.addItem(item("履歴を削除（ピン留め以外）…", #selector(clearHistory)))
         menu.addItem(.separator())
 
-        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
-        let about = NSMenuItem(title: "Kasane \(version)", action: nil, keyEquivalent: "")
+        let about = NSMenuItem(title: "Kasane \(AppInfo.version)", action: nil, keyEquivalent: "")
         about.isEnabled = false
         menu.addItem(about)
         let quit = NSMenuItem(title: "Kasane を終了", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
-    }
-
-    /// アクセントカラー・透明度・ぼかし・小さいウインドウの位置と文字の大きさ。設定画面ができるまではメニューで変える
-    private func appearanceItem() -> NSMenuItem {
-        let appearance = AppearanceSettings.shared
-        let menu = NSMenu()
-
-        menu.addItem(header("アクセントカラー"))
-        for accent in AccentColor.allCases {
-            let title = accent == .default ? "\(accent.displayName)（標準）" : accent.displayName
-            let entry = item(title, #selector(selectAccent(_:)))
-            entry.representedObject = accent.rawValue
-            entry.state = appearance.accent == accent ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(header("不透明度"))
-        for percent in stride(from: 10, through: 100, by: 10) {
-            let entry = item("\(percent)%", #selector(selectOpacity(_:)))
-            entry.representedObject = percent
-            entry.state = Int((appearance.opacity * 100).rounded()) == percent ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        menu.addItem(.separator())
-        let canSetRadius = !appearance.usesSystemMaterial
-        menu.addItem(header(canSetRadius ? "背景のぼかし（半径）" : "背景のぼかし"))
-        for radius in BlurPreset.radii {
-            // 半径を指定できないときは、ぼかしあり / なしだけになる
-            if !canSetRadius && radius != 0 && radius != BlurPreset.defaultRadius { continue }
-            let title: String
-            if radius == 0 {
-                title = "なし"
-            } else if !canSetRadius {
-                title = "あり"
-            } else {
-                title = radius == BlurPreset.defaultRadius ? "\(radius)（標準）" : "\(radius)"
-            }
-            let entry = item(title, #selector(selectBlur(_:)))
-            entry.representedObject = radius
-            entry.state = (canSetRadius ? appearance.blurRadius == radius : (appearance.blurRadius > 0) == (radius > 0)) ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        // pt の数字は出さない。数字では見た目の違いが想像しにくいため（2026-10-22 決定）
-        menu.addItem(.separator())
-        menu.addItem(header("履歴ウインドウの文字の大きさ"))
-        for level in TextSizeLevel.allCases {
-            let entry = item(level.displayName, #selector(selectHistoryTextSize(_:)))
-            entry.representedObject = level.rawValue
-            entry.state = appearance.historyTextSize == level ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(header("FIFO / LIFO の小さいウインドウの位置"))
-        for position in HUDPosition.allCases {
-            let entry = item(position.displayName, #selector(selectHUDPosition(_:)))
-            entry.representedObject = position.rawValue
-            entry.state = AppSettings.hudPosition == position ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(header("FIFO / LIFO の小さいウインドウの文字の大きさ"))
-        for level in TextSizeLevel.allCases {
-            let entry = item(level.displayName, #selector(selectHUDTextSize(_:)))
-            entry.representedObject = level.rawValue
-            entry.state = AppSettings.hudTextSize == level ? .on : .off
-            entry.indentationLevel = 1
-            menu.addItem(entry)
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(item("履歴ウインドウの位置と大きさを元に戻す", #selector(resetHistoryWindowFrame)))
-
-        let appearanceItem = NSMenuItem(title: "見た目", action: nil, keyEquivalent: "")
-        appearanceItem.submenu = menu
-        return appearanceItem
-    }
-
-    /// 検索のゆるさ。倍率は出さず、名前と、どちらへ動かせばよいかの説明だけを出す
-    /// （2026-10-22 決定。見せ方はデザインの search-looseness-2026-10-22.md）
-    private func searchLoosenessItem() -> NSMenuItem {
-        let menu = NSMenu()
-        for looseness in SearchLooseness.allCases {
-            let entry = item(looseness.displayName, #selector(selectSearchLooseness(_:)))
-            entry.representedObject = looseness.rawValue
-            entry.state = AppSettings.searchLooseness == looseness ? .on : .off
-            menu.addItem(entry)
-        }
-        menu.addItem(.separator())
-        // メニューの項目は折り返さないので、説明は切れ目を決めて 1 行ずつ灰色の項目にする
-        for line in ["関係のない項目が多く出るときは「厳しめ」に、", "略して打った語が見つからないときは", "「ゆるめ」にします。"] {
-            menu.addItem(header(line))
-        }
-        let searchItem = NSMenuItem(title: "検索のゆるさ", action: nil, keyEquivalent: "")
-        searchItem.submenu = menu
-        return searchItem
-    }
-
-    private func header(_ title: String) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -243,55 +95,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func showHistory() { actions.showHistory() }
     @objc private func toggleFIFO() { actions.toggleQueue(.fifo) }
     @objc private func toggleLIFO() { actions.toggleQueue(.lifo) }
+    @objc private func showSettings() { actions.showSettings() }
     @objc private func showOnboarding() { actions.showOnboarding() }
-    @objc private func clearHistory() { actions.clearHistory() }
-    @objc private func toggleLoginItem() { LoginItem.setEnabled(!LoginItem.isEnabled) }
+}
 
-    @objc private func selectSortOrder(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let order = HistorySortOrder(rawValue: raw) else { return }
-        actions.setSortOrder(order)
+enum AppInfo {
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
     }
 
-    @objc private func selectSearchLooseness(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let looseness = SearchLooseness(rawValue: raw) else { return }
-        AppSettings.searchLooseness = looseness
-    }
-
-    @objc private func selectOpacity(_ sender: NSMenuItem) {
-        guard let percent = sender.representedObject as? Int else { return }
-        AppearanceSettings.shared.opacity = Double(percent) / 100
-    }
-
-    @objc private func selectBlur(_ sender: NSMenuItem) {
-        guard let radius = sender.representedObject as? Int else { return }
-        AppearanceSettings.shared.blurRadius = radius
-    }
-
-    @objc private func selectAccent(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let accent = AccentColor(rawValue: raw) else { return }
-        AppearanceSettings.shared.accent = accent
-    }
-
-    @objc private func selectHUDTextSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let level = TextSizeLevel(rawValue: raw) else { return }
-        actions.setHUDTextSize(level)
-    }
-
-    @objc private func selectHistoryTextSize(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let level = TextSizeLevel(rawValue: raw) else { return }
-        AppearanceSettings.shared.historyTextSize = level
-    }
-
-    @objc private func toggleLinkPreviews() { AppSettings.fetchesLinkPreviews.toggle() }
-    @objc private func resetHistoryWindowFrame() { actions.resetHistoryWindowFrame() }
-
-    @objc private func selectHUDPosition(_ sender: NSMenuItem) {
-        guard let raw = sender.representedObject as? String, let position = HUDPosition(rawValue: raw) else { return }
-        actions.setHUDPosition(position)
-    }
-
-    @objc private func selectHistoryLimit(_ sender: NSMenuItem) {
-        guard let limit = sender.representedObject as? Int else { return }
-        actions.setHistoryLimit(limit)
-    }
+    static let repositoryURL = URL(string: "https://github.com/kazuya-tanimoto/kasane")!
 }

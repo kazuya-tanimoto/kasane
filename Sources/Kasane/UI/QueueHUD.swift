@@ -129,7 +129,7 @@ struct QueueHUDContent: View {
     let mode: QueueMode
     let titles: [String]
     let fontSize: Double
-    /// アクセントカラーはメニューで変えるとすぐ反映されるよう、`QueueHUDView` から受け取る
+    /// アクセントカラーは設定で変えるとすぐ反映されるよう、`QueueHUDView` から受け取る
     @Environment(\.kasaneAccent) private var accent
 
     /// 12pt のときを 1 とした倍率。余白や幅もこれに合わせて大きくする

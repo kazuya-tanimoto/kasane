@@ -75,4 +75,17 @@ final class SettingsRulesTests: XCTestCase {
             defaultSize: defaultSize, minSize: minSize, in: small
         ), "どちらも画面いっぱいに収まるので、押しても変わらない")
     }
+
+    // MARK: - 検索のゆるさの例
+
+    /// 設定の検索タブの例（design/search-looseness-2026-10-22.md の表）。画面は FuzzyMatcher で出る / 出ないを決めるので、表と食い違わないことを確かめる
+    func testLoosenessExamplesMatchTheDecidedTable() {
+        let levels = SearchLooseness.allCases
+        func shown(_ query: String, _ item: String) -> [Bool] {
+            levels.map { FuzzyMatcher.score(query, text: TextNormalizer.normalize(item), spanRatio: $0.spanRatio) != nil }
+        }
+        XCTAssertEqual(shown("hstvw", "HistoryView"), [false, true, true, true, true])
+        XCTAssertEqual(shown("gpr", "github pull request"), [false, false, false, true, true])
+        XCTAssertEqual(shown("slack", "see the list and click OK"), [false, false, false, true, true])
+    }
 }

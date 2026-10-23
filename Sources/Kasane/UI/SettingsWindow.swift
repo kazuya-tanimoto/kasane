@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 
 /// 設定のウインドウ。AppKit のウインドウに SwiftUI の画面を載せる（設定画面の仕組みの設計 settings-implementation-2026-10-22.md §2 の A）。
 ///
@@ -8,11 +7,14 @@ import SwiftUI
 @MainActor
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     private var window: SettingsWindow?
-    private let makeContent: () -> AnyView
+    private let makeContent: () -> NSViewController
     /// 前に出すために、一時的に Dock に出るアプリにしたか。閉じたら戻す
     private var promotedToRegular = false
+    /// 開くたびに呼ぶ（値を読み直す、許可の確かめを始める）
+    var onShow: (() -> Void)?
+    var onClose: (() -> Void)?
 
-    init(content: @escaping () -> AnyView) {
+    init(content: @escaping () -> NSViewController) {
         makeContent = content
     }
 
@@ -27,15 +29,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
 
     func show() {
         if window == nil {
-            let window = SettingsWindow(contentViewController: NSHostingController(rootView: makeContent()))
+            let window = SettingsWindow(contentViewController: makeContent())
             // しまう・広げるのボタンは押せない見た目にする（設定のウインドウの慣習）
             window.styleMask = [.titled, .closable]
+            window.toolbarStyle = .preference
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
             self.window = window
         }
         guard let window else { return }
+        onShow?()
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         // 前に出たかは、すぐには分からない（macOS が次の描画のあとに決める）ので、少し待ってから確かめる
@@ -65,6 +69,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        onClose?()
         if promotedToRegular {
             promotedToRegular = false
             NSApp.setActivationPolicy(.accessory)

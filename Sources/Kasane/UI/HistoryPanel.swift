@@ -164,6 +164,20 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     var isKey: Bool { panel.isKeyWindow }
     /// 開いたときに一番前が Kasane のウインドウ（設定、初回の案内）だったか。そのときはペーストせずにコピーだけにする
     private(set) var openedOverKasane = false
+    /// ⌘, で設定を開く。履歴ウインドウはほかのウインドウより上に出るので、閉じてから開く
+    var onOpenSettings: (() -> Void)?
+
+    /// 覚えている位置と大きさが、今の文字の大きさでの標準と同じか（設定の「標準に戻す」を出すかどうか）
+    var isFrameStandard: Bool {
+        guard let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else { return true }
+        return WindowPlacement.isStandard(
+            savedSize: AppSettings.historyWindowSize,
+            savedOffset: AppSettings.historyWindowOffset,
+            defaultSize: Self.defaultSize(for: textSize),
+            minSize: Self.minSize(for: textSize),
+            in: screen
+        )
+    }
 
     func toggle() {
         isVisible ? hide() : show()
@@ -388,6 +402,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             }
             if characters == "w" {
                 hide()
+                return true
+            }
+            if characters == ",", flags.isDisjoint(with: [.shift, .option, .control]) {
+                hide { [weak self] in self?.onOpenSettings?() }
                 return true
             }
             if let action = Self.editAction(characters, flags: flags) {

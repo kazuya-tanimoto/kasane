@@ -361,7 +361,7 @@ extension HistorySortOrder {
     var displayName: String {
         switch self {
         case .recent: return "コピー日時順"
-        case .mostPasted: return "貼り付け回数順"
+        case .mostPasted: return "ペースト回数順"
         }
     }
 }

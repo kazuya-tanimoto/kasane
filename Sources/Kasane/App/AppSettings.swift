@@ -138,6 +138,12 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "hudSide") }
     }
 
+    /// 設定ウインドウで最後に見たタブ。次に開いたときに出す
+    static var settingsTab: String? {
+        get { defaults.string(forKey: "settingsTab") }
+        set { defaults.set(newValue, forKey: "settingsTab") }
+    }
+
     static var hasCompletedOnboarding: Bool {
         get { defaults.bool(forKey: "hasCompletedOnboarding") }
         set { defaults.set(newValue, forKey: "hasCompletedOnboarding") }

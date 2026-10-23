@@ -298,6 +298,11 @@ public final class HistoryStore: @unchecked Sendable {
         try dbQueue.read { db in try ClipItem.fetchCount(db) }
     }
 
+    /// ピン留めしていない項目の数。保存件数を減らすときに、削除される数を出すのに使う
+    public func unpinnedCount() throws -> Int {
+        try dbQueue.read { db in try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM item WHERE isPinned = 0") ?? 0 }
+    }
+
     // MARK: - 更新
 
     public func setPinned(_ pinned: Bool, itemID: Int64, now: Date = Date()) throws {
