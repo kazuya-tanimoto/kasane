@@ -64,7 +64,11 @@ final class HistoryModel: ObservableObject {
     @Published private(set) var pinned: [ClipSummary] = []
     @Published private(set) var others: [ClipSummary] = []
     @Published var selectedID: Int64? {
-        didSet { if selectedID != oldValue { loadPreview() } }
+        didSet {
+            guard selectedID != oldValue else { return }
+            loadPreview()
+            links.select(selectedID.flatMap { summaryByID[$0] })
+        }
     }
     /// FIFO / LIFO 中のモード。ウインドウには通常の履歴を出し、「コピー ⌘⏎」の表示だけを変える
     @Published var queueMode: QueueMode?
@@ -84,6 +88,8 @@ final class HistoryModel: ObservableObject {
     var onActivate: ((Int64, PasteAction) -> Void)?
 
     let store: HistoryStore
+    /// URL のタイトルと画像を、見えている行から先に取りに行く
+    let links: LinkPrefetcher
 
     private var summaries: [ClipSummary] = []
     private var candidates: [SearchCandidate] = []
@@ -102,6 +108,7 @@ final class HistoryModel: ObservableObject {
 
     init(store: HistoryStore, sortOrder: HistorySortOrder) {
         self.store = store
+        links = LinkPrefetcher(store: store)
         self.sortOrder = sortOrder
         showsDetails = AppSettings.showsDetails
     }
@@ -265,6 +272,12 @@ final class HistoryModel: ObservableObject {
         scrollToken += 1
         loadPreview()
         focusToken += 1
+        links.show()
+    }
+
+    /// 履歴ウインドウを閉じたとき
+    func didHide() {
+        links.hide()
     }
 
     func moveSelection(_ delta: Int) {

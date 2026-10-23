@@ -210,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         .receive(on: RunLoop.main)
                         .eraseToAnyPublisher(),
                     queueHUDChanged: { [weak self] in self?.updateQueueHUD() },
+                    fetchesLinkPreviewsChanged: { [weak self] enabled in self?.model.links.setEnabled(enabled) },
                     resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
                     isHistoryWindowStandard: { [weak self] in self?.panel.isFrameStandard ?? true }
                 ),
