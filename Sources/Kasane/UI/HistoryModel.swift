@@ -195,9 +195,10 @@ final class HistoryModel: ObservableObject {
             return
         }
         let candidates = self.candidates
+        let spanRatio = AppSettings.searchLooseness.spanRatio
         searchTask = Task { [weak self] in
             let hits = await Task.detached(priority: .userInitiated) {
-                FuzzyMatcher.search(query, in: candidates)
+                FuzzyMatcher.search(query, in: candidates, spanRatio: spanRatio)
             }.value
             guard !Task.isCancelled, let self, self.query == query else { return }
             self.apply(hits.compactMap { self.summaryByID[$0.id] })

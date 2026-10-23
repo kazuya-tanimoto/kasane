@@ -1,4 +1,5 @@
 import AppKit
+import KasaneCore
 import KasaneStore
 
 /// UserDefaults に保存する設定。設定画面は v1 の仕上げで作るので、MVP ではメニューと `defaults` コマンドで変える
@@ -19,6 +20,12 @@ enum AppSettings {
     static var sortOrder: HistorySortOrder {
         get { HistorySortOrder(rawValue: defaults.string(forKey: "sortOrder") ?? "") ?? .recent }
         set { defaults.set(newValue.rawValue, forKey: "sortOrder") }
+    }
+
+    /// 検索のゆるさ（要件書 §3.2。2026-10-22 決定）
+    static var searchLooseness: SearchLooseness {
+        get { SearchLooseness(rawValue: defaults.string(forKey: "searchLooseness") ?? "") ?? .default }
+        set { defaults.set(newValue.rawValue, forKey: "searchLooseness") }
     }
 
     /// 履歴に残さないアプリのバンドルID
@@ -72,14 +79,29 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "accentColor") }
     }
 
-    /// FIFO / LIFO 中の小さいウインドウの文字の大きさ（pt）
-    static var hudFontSize: Double {
-        get {
-            let value = defaults.object(forKey: "hudFontSize") as? Double ?? 12
-            return min(max(value, 10), 24)
-        }
-        set { defaults.set(newValue, forKey: "hudFontSize") }
+    /// 履歴ウインドウの一覧とプレビューの文字の大きさ（2026-10-22 決定）
+    static var historyTextSize: TextSizeLevel {
+        get { TextSizeLevel(rawValue: defaults.string(forKey: "historyTextSize") ?? "") ?? .default }
+        set { defaults.set(newValue.rawValue, forKey: "historyTextSize") }
     }
+
+    /// FIFO / LIFO 中の小さいウインドウの文字の大きさ（2026-10-22 決定）。
+    /// 前の版では pt（11〜20）で選んでいたので、その設定があれば一番近い段階にする
+    static var hudTextSize: TextSizeLevel {
+        get {
+            if let level = TextSizeLevel(rawValue: defaults.string(forKey: "hudTextSize") ?? "") {
+                return level
+            }
+            if let old = defaults.object(forKey: "hudFontSize") as? Double {
+                return .nearest(toHUDFontSize: CGFloat(old))
+            }
+            return .default
+        }
+        set { defaults.set(newValue.rawValue, forKey: "hudTextSize") }
+    }
+
+    /// 小さいウインドウの文字の大きさ（pt）
+    static var hudFontSize: Double { Double(hudTextSize.hudFontSize) }
 
     /// URL のプレビューでページのタイトルと画像を取りに行くか。
     /// 初期値はオフ: 社内のリンクやログイン用の一度きりのリンクに、コピーしただけでアクセスしないようにする

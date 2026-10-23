@@ -57,8 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     AppSettings.hudPosition = position
                     self?.updateQueueHUD()
                 },
-                setHUDFontSize: { [weak self] size in
-                    AppSettings.hudFontSize = size
+                setHUDTextSize: { [weak self] level in
+                    AppSettings.hudTextSize = level
                     self?.updateQueueHUD()
                 },
                 resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },

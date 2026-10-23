@@ -27,7 +27,7 @@ struct HistoryView: View {
                 .padding(.bottom, 12)
             HStack(spacing: 12) {
                 ItemListView(model: model)
-                    .frame(width: 350)
+                    .frame(width: appearance.historyTextSize.scaled(350))
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
@@ -41,15 +41,20 @@ struct HistoryView: View {
             ActionBar(model: model)
         }
         .frame(
-            minWidth: HistoryPanelController.minSize.width, maxWidth: .infinity,
-            minHeight: HistoryPanelController.minSize.height, maxHeight: .infinity
+            minWidth: minSize.width, maxWidth: .infinity,
+            minHeight: minSize.height, maxHeight: .infinity
         )
         .background(PanelBackground(appearance: appearance))
         .environment(\.kasaneAccent, appearance.accent)
+        .environment(\.textSize, appearance.historyTextSize)
         .onAppear { searchFocused = true }
         .onChange(of: model.focusToken) {
             searchFocused = true
         }
+    }
+
+    private var minSize: NSSize {
+        HistoryPanelController.minSize(for: appearance.historyTextSize)
     }
 
     /// 検索欄。角丸の薄い塗りの中が文字を打つ場所で、塗りの外をつかむとウインドウが動く
@@ -389,11 +394,12 @@ private struct ActionFill<S: Shape>: View {
 
 private struct ItemListView: View {
     @ObservedObject var model: HistoryModel
+    @Environment(\.textSize) private var size
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 4) {
+                LazyVStack(alignment: .leading, spacing: size.scaled(4)) {
                     // 見出しは出さず、ピン留めとそれ以外の間に線を 1 本引くだけにする（2026-10-18 決定。
                     // ピン留めの段は自分でピン留めしたときにしか出ないので、見出しがなくても分かる）。
                     // ピン留めとそれ以外を 1 つの ForEach で描く。別々の ForEach にすると、ピン留めした行が
@@ -450,35 +456,38 @@ private struct ItemListView: View {
 /// ピン留めとそれ以外の履歴の境目の線（両方あるときだけ出す）
 private struct PinDivider: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.textSize) private var size
 
     var body: some View {
         Rectangle()
             .fill(colorScheme == .dark ? Color.white.opacity(0.2) : Color.black.opacity(0.14))
             .frame(height: 1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
+            .padding(.horizontal, size.scaled(8))
+            .padding(.vertical, size.scaled(6))
     }
 }
 
 private struct EmptyState: View {
     let text: String
+    @Environment(\.textSize) private var size
 
     var body: some View {
         Text(text)
-            .font(.system(size: 13))
+            .font(.system(size: size.font(13)))
             .multilineTextAlignment(.center)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity)
-            .padding(.top, 60)
+            .padding(.top, size.scaled(60))
     }
 }
 
 private struct SelectionBackground: View {
     let isSelected: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.textSize) private var size
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous)
             .fill(isSelected ? (colorScheme == .dark ? Color.white.opacity(0.13) : Color.white) : Color.clear)
             .shadow(color: isSelected && colorScheme == .light ? .black.opacity(0.10) : .clear, radius: 5, y: 2)
     }
@@ -489,14 +498,15 @@ private struct ItemRow: View {
     let isSelected: Bool
     let shortcut: Int?
     let model: HistoryModel
+    @Environment(\.textSize) private var size
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: size.scaled(10)) {
             ItemIcon(item: item, model: model)
-                .frame(width: 44, height: 44)
-            VStack(alignment: .leading, spacing: 3) {
+                .frame(width: size.scaled(44), height: size.scaled(44))
+            VStack(alignment: .leading, spacing: size.scaled(3)) {
                 Text(item.title.isEmpty ? " " : item.title)
-                    .font(.system(size: 13))
+                    .font(.system(size: size.font(13)))
                     .lineLimit(2)
                     .truncationMode(.tail)
                 HStack(spacing: 6) {
@@ -516,11 +526,11 @@ private struct ItemRow: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                .font(.system(size: 11))
+                .font(.system(size: size.font(11)))
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
+        .padding(.horizontal, size.scaled(10))
+        .padding(.vertical, size.scaled(9))
         .background(SelectionBackground(isSelected: isSelected))
     }
 
@@ -538,6 +548,7 @@ private struct ItemIcon: View {
     let item: ClipSummary
     let model: HistoryModel
     @State private var thumbnail: NSImage?
+    @Environment(\.textSize) private var size
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
@@ -545,22 +556,22 @@ private struct ItemIcon: View {
                 Image(nsImage: thumbnail)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
-                    .frame(width: 44, height: 44)
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                    .frame(width: size.scaled(44), height: size.scaled(44))
+                    .clipShape(RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous))
             } else {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous)
                     .fill(item.kind.tint.opacity(0.18))
                     .overlay {
                         Image(systemName: item.kind.symbolName)
-                            .font(.system(size: 18, weight: .medium))
+                            .font(.system(size: size.scaled(18), weight: .medium))
                             .foregroundStyle(item.kind.tint)
                     }
             }
             if let icon = AppIconCache.icon(bundleID: item.sourceBundleID) {
                 Image(nsImage: icon)
                     .resizable()
-                    .frame(width: 18, height: 18)
-                    .offset(x: 4, y: 4)
+                    .frame(width: size.scaled(18), height: size.scaled(18))
+                    .offset(x: size.scaled(4), y: size.scaled(4))
             }
         }
         .task(id: item.id) {
@@ -568,6 +579,18 @@ private struct ItemIcon: View {
                 thumbnail = await model.thumbnail(for: item.id)
             }
         }
+    }
+}
+
+private struct TextSizeKey: EnvironmentKey {
+    static let defaultValue = TextSizeLevel.default
+}
+
+extension EnvironmentValues {
+    /// 履歴ウインドウの一覧とプレビューの文字の大きさ（2026-10-22 決定。上の帯・検索欄・絞り込み・下のボタンは変えない）
+    var textSize: TextSizeLevel {
+        get { self[TextSizeKey.self] }
+        set { self[TextSizeKey.self] = newValue }
     }
 }
 
