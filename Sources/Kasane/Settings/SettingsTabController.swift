@@ -96,6 +96,11 @@ final class SettingsTabController: NSTabViewController {
         guard abs(contentRect.height - size.height) > 0.5 || abs(contentRect.width - size.width) > 0.5 else { return }
         var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
         frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        // 小さい画面で高いタブにしたとき、下にはみ出さないよう上へずらす（上端は画面の中に収める）
+        if let visible = window.screen?.visibleFrame {
+            if frame.minY < visible.minY { frame.origin.y = visible.minY }
+            if frame.maxY > visible.maxY { frame.origin.y = max(visible.minY, visible.maxY - frame.height) }
+        }
         window.setFrame(frame, display: true, animate: animate && window.isVisible)
     }
 }

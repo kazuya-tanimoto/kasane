@@ -154,6 +154,9 @@ final class ShortcutRecorder: ObservableObject {
     private var keyMonitor: Any?
     private var mouseMonitor: Any?
     private var resignObserver: NSObjectProtocol?
+    /// 欄の外のクリックで取り消したときの、そのクリックの番号と欄。
+    /// 待っている欄をもう一度クリックしたときは、押した時点で取り消し、離した時点でボタンが start を呼ぶので、そこで始め直さない
+    private var cancellingClick: (slot: ShortcutSlot, eventNumber: Int)?
 
     init(controller: ShortcutController, onChange: @escaping () -> Void) {
         self.controller = controller
@@ -161,6 +164,14 @@ final class ShortcutRecorder: ObservableObject {
     }
 
     func start(_ slot: ShortcutSlot) {
+        // 押したときに取り消したのと同じクリック（マウスの押すと離すは同じ番号）で、同じ欄なら、待ちを終えたままにする
+        if let click = cancellingClick {
+            cancellingClick = nil
+            if click.slot == slot, let event = NSApp.currentEvent,
+               event.type == .leftMouseUp, event.eventNumber == click.eventNumber {
+                return
+            }
+        }
         if recording != nil {
             let wasSame = recording == slot
             cancel()
@@ -179,7 +190,13 @@ final class ShortcutRecorder: ObservableObject {
         }
         // 欄の外をクリックしたら取り消す。クリックはそのまま届ける
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-            MainActor.assumeIsolated { self?.cancel() }
+            let number = event.eventNumber
+            let isLeft = event.type == .leftMouseDown
+            MainActor.assumeIsolated {
+                guard let self, let slot = self.recording else { return }
+                self.cancellingClick = isLeft ? (slot, number) : nil
+                self.cancel()
+            }
             return event
         }
         resignObserver = NotificationCenter.default.addObserver(

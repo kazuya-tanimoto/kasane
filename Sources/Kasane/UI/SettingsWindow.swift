@@ -13,6 +13,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     /// 開くたびに呼ぶ（値を読み直す、許可の確かめを始める）
     var onShow: (() -> Void)?
     var onClose: (() -> Void)?
+    /// キーになるたびに呼ぶ（設定を開いたまま履歴ウインドウを動かしたときなど、ほかの所で変わった値を読み直す）
+    var onBecomeKey: (() -> Void)?
 
     init(content: @escaping () -> NSViewController) {
         makeContent = content
@@ -77,6 +79,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.makeKeyAndOrderFront(nil)
         // .regular にして activate() しても前に出ないことがある（Apple の開発者フォーラムの報告、PRレビュー調べ）
         window.orderFrontRegardless()
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        onBecomeKey?()
     }
 
     func windowWillClose(_ notification: Notification) {

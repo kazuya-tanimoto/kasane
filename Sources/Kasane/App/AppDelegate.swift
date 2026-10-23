@@ -221,6 +221,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.permissions.startPolling()
                 model.startObservingHistory()
             }
+            window.onBecomeKey = { model.refresh() }
             window.onClose = {
                 model.permissions.stopPolling()
                 model.stopObservingHistory()
