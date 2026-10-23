@@ -19,13 +19,14 @@ enum KindFilter: String, CaseIterable, Identifiable {
         }
     }
 
-    func matches(_ kind: ClipKind) -> Bool {
+    func matches(_ item: ClipSummary) -> Bool {
         switch self {
         case .all: return true
-        case .text: return kind == .text || kind == .richText
-        case .image: return kind == .image
-        case .url: return kind == .url
-        case .file: return kind == .file
+        case .text: return item.kind == .text || item.kind == .richText
+        // 画像のファイルの行も入れる（2026-10-23 決定）。その行は「ファイル」にも今までどおり出る
+        case .image: return item.kind == .image || (item.kind == .file && item.isImageFile)
+        case .url: return item.kind == .url
+        case .file: return item.kind == .file
         }
     }
 }
@@ -93,7 +94,11 @@ final class HistoryModel: ObservableObject {
     /// 次に並びを入れ替えたあとで、選択中の項目までスクロールする（検索中は並びがあとから届くため）
     private var scrollsAfterApply = false
     private var previewTask: Task<Void, Never>?
-    private let thumbnailCache = NSCache<NSNumber, NSImage>()
+    /// 一致した文字の位置の覚え書き（見えている行だけ、描くときに計算する）。描くたびに書き足すので @Published にしない
+    private var highlightKey = ""
+    private var highlightCache: [Int64: [Range<Int>]] = [:]
+    /// 題名のローマ字の読み。クエリと関係ないので、クエリが変わっても捨てない（打つたびに語に分け直さない）
+    private var readingCache: [Int64: (title: String, reading: RomajiReading?)] = [:]
 
     init(store: HistoryStore, sortOrder: HistorySortOrder) {
         self.store = store
@@ -169,6 +174,34 @@ final class HistoryModel: ObservableObject {
 
     func summary(id: Int64) -> ClipSummary? { summaryByID[id] }
 
+    /// 一覧の題名で、検索の語が当たった文字の位置（design/accent-implementation-2026-10-23.md §1）
+    func matchRanges(for item: ClipSummary) -> [Range<Int>] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return [] }
+        let spanRatio = AppSettings.searchLooseness.spanRatio
+        let key = "\(spanRatio)\u{0}\(query)"
+        if key != highlightKey {
+            highlightKey = key
+            highlightCache.removeAll(keepingCapacity: true)
+        }
+        if let cached = highlightCache[item.id] { return cached }
+        let ranges = MatchHighlighter.ranges(query: query, title: item.title, spanRatio: spanRatio) {
+            reading(for: item)
+        }
+        highlightCache[item.id] = ranges
+        return ranges
+    }
+
+    /// ローマ字の読みを持つ種類（テキスト・リッチテキスト・URL）だけ、題名を語に分ける
+    private func reading(for item: ClipSummary) -> RomajiReading? {
+        guard item.kind == .text || item.kind == .richText || item.kind == .url else { return nil }
+        if let cached = readingCache[item.id], cached.title == item.title { return cached.reading }
+        if readingCache.count > 2_000 { readingCache.removeAll(keepingCapacity: true) }
+        let reading = Romanizer.reading(for: item.title)
+        readingCache[item.id] = (item.title, reading)
+        return reading
+    }
+
     /// ピン留め以外の件数（設定の「履歴を削除…」を押せるか）
     var unpinnedCount: Int { summaries.reduce(0) { $0 + ($1.isPinned ? 0 : 1) } }
 
@@ -200,7 +233,7 @@ final class HistoryModel: ObservableObject {
     }
 
     private func apply(_ all: [ClipSummary]) {
-        let list = kindFilter == .all ? all : all.filter { kindFilter.matches($0.kind) }
+        let list = kindFilter == .all ? all : all.filter { kindFilter.matches($0) }
         let pinnedList = list.filter(\.isPinned)
         let otherList = list.filter { !$0.isPinned }
         pinned = pinnedList
@@ -340,17 +373,6 @@ final class HistoryModel: ObservableObject {
                 richText: loaded.richTextData.flatMap { RichTextPreview.attributedString(type: $0.type, data: $0.data) }
             )
         }
-    }
-
-    func thumbnail(for id: Int64) async -> NSImage? {
-        if let cached = thumbnailCache.object(forKey: NSNumber(value: id)) { return cached }
-        let store = self.store
-        let data = await Task.detached(priority: .utility) { () -> Data? in
-            try? store.thumbnail(itemID: id)
-        }.value
-        guard let data, let image = NSImage(data: data) else { return nil }
-        thumbnailCache.setObject(image, forKey: NSNumber(value: id))
-        return image
     }
 }
 
