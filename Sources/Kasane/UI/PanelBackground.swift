@@ -11,19 +11,6 @@ enum BlurPreset {
 }
 
 /// FIFO / LIFO 中の小さいウインドウを出す位置
-enum HUDPosition: String, CaseIterable {
-    case topRight, topLeft, bottomRight, bottomLeft
-
-    var displayName: String {
-        switch self {
-        case .topRight: return "右上"
-        case .topLeft: return "左上"
-        case .bottomRight: return "右下"
-        case .bottomLeft: return "左下"
-        }
-    }
-}
-
 /// 見た目の設定。メニューで変えると、開いているウインドウにもすぐ反映する
 @MainActor
 final class AppearanceSettings: ObservableObject {

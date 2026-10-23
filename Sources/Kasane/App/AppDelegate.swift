@@ -145,17 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
         let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
         writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
-        // ⌘⏎ でコピーした項目だけ、⌘C でコピーし直したときと同じく一番上に移す。
-        // 貼り付け（⏎・⇧⏎・⌘1〜⌘9）では移さない。貼るたびに並びと ⌘番号が変わると、
-        // 次に開いたとき前に見た位置で探せなくなるため（2026-10-18 決定）
-        if action == .copyOnly {
+        let outcome = action.outcome(openedOverKasane: panel.openedOverKasane)
+        if outcome.movesToTop {
             let now = Date()
             try? store.recordReuse(itemID: itemID, now: now)
             model.didReuse(id: itemID, at: now)
         }
 
         panel.hide { [weak self] in
-            guard action != .copyOnly else { return }
+            guard outcome.sendsCommandV else { return }
             guard Permissions.isAccessibilityTrusted else {
                 // 権限がなければクリップボードに入れるところまで。案内を出す
                 self?.showOnboarding()
@@ -165,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Paster.postCommandV()
             }
         }
-        if action != .copyOnly {
+        if outcome.countsPaste {
             recordPaste(itemID: itemID)
         }
     }

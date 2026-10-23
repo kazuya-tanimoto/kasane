@@ -125,9 +125,17 @@ enum AppSettings {
         set { defaults.set(newValue.map(NSStringFromPoint), forKey: "historyWindowOffset") }
     }
 
-    static var hudPosition: HUDPosition {
-        get { HUDPosition(rawValue: defaults.string(forKey: "hudPosition") ?? "") ?? .topRight }
-        set { defaults.set(newValue.rawValue, forKey: "hudPosition") }
+    /// 小さいウインドウを出す側（左は左上、右は右上）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
+    static var hudSide: HUDSide {
+        get {
+            if let side = HUDSide(rawValue: defaults.string(forKey: "hudSide") ?? "") {
+                return side
+            }
+            let side = HUDSide(legacyPosition: defaults.string(forKey: "hudPosition"))
+            defaults.set(side.rawValue, forKey: "hudSide")
+            return side
+        }
+        set { defaults.set(newValue.rawValue, forKey: "hudSide") }
     }
 
     static var hasCompletedOnboarding: Bool {

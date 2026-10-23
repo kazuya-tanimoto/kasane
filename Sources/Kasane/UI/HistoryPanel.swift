@@ -162,12 +162,16 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
+    /// 開いたときに一番前が Kasane のウインドウ（設定、初回の案内）だったか。そのときはペーストせずにコピーだけにする
+    private(set) var openedOverKasane = false
 
     func toggle() {
         isVisible ? hide() : show()
     }
 
     func show() {
+        openedOverKasane = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            == ProcessInfo.processInfo.processIdentifier
         model.prepareForShow()
         position()
         isHiding = false

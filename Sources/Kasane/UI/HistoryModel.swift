@@ -3,15 +3,6 @@ import Combine
 import KasaneCore
 import KasaneStore
 
-enum PasteAction {
-    /// 元のアプリに自動ペーストする（⏎、⌘1〜9）
-    case paste
-    /// 書式なしで自動ペーストする（⇧⏎）
-    case plainText
-    /// クリップボードにコピーするだけ（⌘⏎）
-    case copyOnly
-}
-
 /// 種類での絞り込み
 enum KindFilter: String, CaseIterable, Identifiable {
     case all, text, image, url, file

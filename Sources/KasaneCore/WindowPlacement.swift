@@ -36,4 +36,22 @@ public enum WindowPlacement {
     public static func offset(of window: CGRect, in screen: CGRect) -> CGPoint {
         CGPoint(x: window.midX - screen.midX, y: window.midY - screen.midY)
     }
+
+    /// 覚えている位置と大きさが、標準（`defaultSize`、中心より少し上）と同じに見えるか。
+    /// 設定の「標準に戻す」を、押して変わるときだけ出すために使う。
+    /// 画面に収めたあとの枠で比べるので、画面からはみ出して寄せられた分は違いに数えない
+    public static func isStandard(
+        savedSize: CGSize?,
+        savedOffset: CGPoint?,
+        defaultSize: CGSize,
+        minSize: CGSize,
+        in screen: CGRect,
+        tolerance: CGFloat = 1
+    ) -> Bool {
+        if savedSize == nil && savedOffset == nil { return true }
+        let saved = frame(in: screen, savedSize: savedSize, savedOffset: savedOffset, defaultSize: defaultSize, minSize: minSize)
+        let standard = frame(in: screen, savedSize: nil, savedOffset: nil, defaultSize: defaultSize, minSize: minSize)
+        return abs(saved.minX - standard.minX) <= tolerance && abs(saved.minY - standard.minY) <= tolerance
+            && abs(saved.width - standard.width) <= tolerance && abs(saved.height - standard.height) <= tolerance
+    }
 }
