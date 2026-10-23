@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import KasaneCore
 import KasaneStore
 
@@ -197,8 +198,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let model = SettingsModel(
                 actions: .init(
                     setSortOrder: { [weak self] order in self?.setSortOrder(order) },
-                    setHistoryLimit: { [weak self] limit in self?.setHistoryLimit(limit) ?? false },
+                    setHistoryLimit: { [weak self] limit, completion in
+                        guard let self else { return completion(false) }
+                        self.setHistoryLimit(limit, completion: completion)
+                    },
                     clearHistory: { [weak self] in self?.confirmClearHistory() },
+                    unpinnedCount: { [weak self] in self?.model.unpinnedCount ?? 0 },
+                    // 履歴の一覧が変わったあとで数え直す（objectWillChange は変わる前に届くので、次の回で読む）
+                    historyChanges: model.objectWillChange
+                        .map { _ in () }
+                        .receive(on: RunLoop.main)
+                        .eraseToAnyPublisher(),
                     queueHUDChanged: { [weak self] in self?.updateQueueHUD() },
                     resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
                     isHistoryWindowStandard: { [weak self] in self?.panel.isFrameStandard ?? true }
@@ -209,8 +219,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.onShow = {
                 model.refresh()
                 model.permissions.startPolling()
+                model.startObservingHistory()
             }
-            window.onClose = { model.permissions.stopPolling() }
+            window.onClose = {
+                model.permissions.stopPolling()
+                model.stopObservingHistory()
+            }
             settingsModel = model
             settingsWindow = window
         }
@@ -223,26 +237,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// 保存件数を変える。今のピン留め以外の件数が新しい件数を超えるときは、削除する前に確認を出す。
-    /// ポップアップの選び間違いで削除した履歴は戻せないため（settings-screen-2026-10-22.md §3「履歴」）。キャンセルなら false
-    private func setHistoryLimit(_ limit: Int) -> Bool {
-        let deleting = ((try? store.unpinnedCount()) ?? 0) - limit
-        if deleting > 0 {
-            let alert = NSAlert()
-            alert.messageText = "古い履歴 \(deleting.formatted()) 件を削除しますか？"
-            alert.informativeText = "保存件数を \(limit.formatted()) 件にするため、超えた分を古いものから削除します。"
-                + "削除した履歴は戻せません。ピン留めした項目は削除されません。"
-            // 右が「削除」、左が「キャンセル」。どちらも既定のボタンにしない（⏎ では押されない）。Esc はキャンセル
-            let delete = alert.addButton(withTitle: "削除")
-            let cancel = alert.addButton(withTitle: "キャンセル")
-            delete.hasDestructiveAction = true
-            delete.keyEquivalent = ""
-            cancel.keyEquivalent = "\u{1b}"
-            guard alert.runModal() == .alertFirstButtonReturn else { return false }
+    /// ポップアップの選び間違いで削除した履歴は戻せないため（settings-screen-2026-10-22.md §3「履歴」）。キャンセルなら false を返す
+    private func setHistoryLimit(_ limit: Int, completion: @escaping (Bool) -> Void) {
+        let apply = { [weak self] in
+            guard let self else { return }
+            AppSettings.historyLimit = limit
+            // 確認を出している間にコピーされた分も含め、押した時点の履歴を新しい件数まで減らす
+            let pruned = (try? self.store.prune(limit: limit)) ?? []
+            self.model.remove(ids: pruned)
         }
-        AppSettings.historyLimit = limit
-        let pruned = (try? store.prune(limit: limit)) ?? []
-        model.remove(ids: pruned)
-        return true
+        let deleting = ((try? store.unpinnedCount()) ?? 0) - limit
+        guard deleting > 0 else {
+            apply()
+            return completion(true)
+        }
+        let alert = NSAlert()
+        alert.messageText = "古い履歴 \(deleting.formatted()) 件を削除しますか？"
+        alert.informativeText = "保存件数を \(limit.formatted()) 件にするため、超えた分を古いものから削除します。"
+            + "削除した履歴は戻せません。ピン留めした項目は削除されません。"
+        // 右が「削除」、左が「キャンセル」。どちらも既定のボタンにしない（⏎ では押されない）。Esc はキャンセル。
+        // 選んだのは件数で、削除そのものではないので、削除のボタンを赤くする（Apple の Alerts）
+        let delete = alert.addButton(withTitle: "削除")
+        let cancel = alert.addButton(withTitle: "キャンセル")
+        delete.hasDestructiveAction = true
+        delete.keyEquivalent = ""
+        cancel.keyEquivalent = "\u{1b}"
+        presentInSettings(alert) { response in
+            guard response == .alertFirstButtonReturn else { return completion(false) }
+            apply()
+            completion(true)
+        }
     }
 
     private func showOnboarding() {
@@ -254,16 +278,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onboarding?.show()
     }
 
+    /// 「履歴を削除…」の確認。削除そのものを選んだ操作なので、「削除」を既定のボタン（⏎）にし、赤くしない（Apple の Alerts。
+    /// settings-screen-2026-10-22.md §3「履歴」）
     private func confirmClearHistory() {
+        let count = (try? store.unpinnedCount()) ?? 0
+        guard count > 0 else { return }
         let alert = NSAlert()
-        alert.messageText = "履歴を削除しますか？"
-        alert.informativeText = "ピン留めした項目は残ります。この操作は取り消せません。"
+        alert.messageText = "履歴 \(count.formatted()) 件を削除しますか？"
+        alert.informativeText = "削除した履歴は戻せません。ピン留めした項目と、FIFO / LIFO のキューは削除されません。"
+        // 最初に足したボタンが右端で、⏎ の既定になる
         alert.addButton(withTitle: "削除")
-        alert.addButton(withTitle: "キャンセル")
-        alert.buttons.first?.hasDestructiveAction = true
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let ids = (try? store.deleteAll(keepPinned: true)) ?? []
-        model.remove(ids: ids)
+        let cancel = alert.addButton(withTitle: "キャンセル")
+        cancel.keyEquivalent = "\u{1b}"
+        presentInSettings(alert) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            // 確認を出している間にコピーされた分も含め、押した時点のピン留め以外を全部削除する
+            let ids = (try? self.store.deleteAll(keepPinned: true)) ?? []
+            self.model.remove(ids: ids)
+        }
+    }
+
+    private func presentInSettings(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        if let settingsWindow {
+            settingsWindow.present(alert, completion: completion)
+        } else {
+            NSApp.activate()
+            completion(alert.runModal())
+        }
     }
 }

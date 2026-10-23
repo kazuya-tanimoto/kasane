@@ -52,6 +52,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window?.close()
     }
 
+    /// 確認を設定ウインドウのシートで出す（どのウインドウの、どの設定の確認かが見て分かるため。settings-screen-2026-10-22.md §3「履歴」）。
+    /// ウインドウが開いていなければ、ふつうの確認の窓で出す
+    func present(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        guard let window, window.isVisible else {
+            NSApp.activate()
+            completion(alert.runModal())
+            return
+        }
+        alert.beginSheetModal(for: window, completionHandler: completion)
+    }
+
     /// ほかのアプリの後ろに開いてしまったら、Dock に出るアプリにしてから前に出し直す
     private func bringToFrontIfHidden() {
         guard let window, window.isVisible else { return }

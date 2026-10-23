@@ -62,11 +62,13 @@ struct HistorySettingsView: View {
                 excludedAppsList
 
                 HStack(spacing: 12) {
+                    // ピン留め以外が 0 件のときは押せなくする（押しても何も消えないため）
                     Button {
                         model.actions.clearHistory()
                     } label: {
-                        Text("履歴を削除…").foregroundStyle(.red)
+                        Text("履歴を削除…").foregroundStyle(model.hasUnpinnedHistory ? Color.red : Color.secondary)
                     }
+                    .disabled(!model.hasUnpinnedHistory)
                     SettingsCaption("ピン留めした項目と、FIFO / LIFO のキューは削除されません")
                 }
                 .padding(.top, 14)

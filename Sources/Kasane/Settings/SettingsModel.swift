@@ -11,9 +11,13 @@ final class SettingsModel: ObservableObject {
     /// 保存のほかに、アプリのほかの所を動かす必要がある操作
     struct Actions {
         var setSortOrder: (HistorySortOrder) -> Void
-        /// 保存件数を変える。減らして削除が起きるときは確認を出し、キャンセルなら false
-        var setHistoryLimit: (Int) -> Bool
+        /// 保存件数を変える。減らして削除が起きるときは確認を出し、変えたかどうかを返す（キャンセルなら false）
+        var setHistoryLimit: (Int, @escaping (Bool) -> Void) -> Void
         var clearHistory: () -> Void
+        /// ピン留め以外の履歴の件数（「履歴を削除…」を押せるか）
+        var unpinnedCount: () -> Int
+        /// 履歴が変わったとき（コピー、削除、ピン留め）に届く
+        var historyChanges: AnyPublisher<Void, Never>
         /// 小さいウインドウの位置か文字の大きさが変わった
         var queueHUDChanged: () -> Void
         var resetHistoryWindowFrame: () -> Void
@@ -43,8 +47,11 @@ final class SettingsModel: ObservableObject {
     @Published private(set) var hudSide = AppSettings.hudSide
     @Published private(set) var hudTextSize = AppSettings.hudTextSize
     @Published private(set) var isHistoryWindowStandard = true
+    /// ピン留め以外の履歴があるか。0 件なら「履歴を削除…」を押せなくする
+    @Published private(set) var hasUnpinnedHistory = true
     /// ショートカットの表示を描き直すため（キーが変わったとき、登録欄の待ちが終わったとき）
     @Published private(set) var shortcutsVersion = 0
+    private var historyObservation: AnyCancellable?
 
     init(actions: Actions, shortcuts: ShortcutController) {
         self.actions = actions
@@ -58,8 +65,23 @@ final class SettingsModel: ObservableObject {
         historyLimit = AppSettings.historyLimit
         sortOrder = AppSettings.sortOrder
         isHistoryWindowStandard = actions.isHistoryWindowStandard()
+        hasUnpinnedHistory = actions.unpinnedCount() > 0
         permissions.refresh()
         shortcutsVersion += 1
+    }
+
+    /// 設定ウインドウを開いている間だけ、履歴の件数の変化を見る。
+    /// 開いている間もコピーや削除で件数は変わるので、「履歴を削除…」を押せるかをすぐ変える（settings-screen-2026-10-22.md §3「履歴」）
+    func startObservingHistory() {
+        historyObservation = actions.historyChanges.sink { [weak self] in
+            guard let self else { return }
+            let hasUnpinned = self.actions.unpinnedCount() > 0
+            if hasUnpinned != self.hasUnpinnedHistory { self.hasUnpinnedHistory = hasUnpinned }
+        }
+    }
+
+    func stopObservingHistory() {
+        historyObservation = nil
     }
 
     // MARK: - 一般
@@ -74,11 +96,14 @@ final class SettingsModel: ObservableObject {
 
     func setHistoryLimit(_ limit: Int) {
         guard limit != historyLimit else { return }
-        if actions.setHistoryLimit(limit) {
-            historyLimit = limit
-        } else {
-            // キャンセルしたら、ポップアップを前の件数に戻す
-            objectWillChange.send()
+        actions.setHistoryLimit(limit) { [weak self] changed in
+            guard let self else { return }
+            if changed {
+                self.historyLimit = limit
+            } else {
+                // キャンセルしたら、ポップアップを前の件数に戻す
+                self.objectWillChange.send()
+            }
         }
     }
 

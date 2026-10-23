@@ -135,7 +135,8 @@ extension ShortcutController {
         switch registrationErrors[slot] {
         case nil: return nil
         case .inUse?: return "\(name) はほかのアプリが使っているため、今は効きません。別のキーにしてください"
-        case .rejected?: return "\(name) は macOS で使えないため、今は効きません。別のキーにしてください"
+        // 待っても変わらないので「今は」を付けない（settings-screen-2026-10-22.md §3「ショートカット」）
+        case .rejected?: return "\(name) は macOS で使えないため、効きません。別のキーにしてください"
         }
     }
 }

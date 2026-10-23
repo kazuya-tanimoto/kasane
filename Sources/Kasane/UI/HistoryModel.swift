@@ -169,6 +169,9 @@ final class HistoryModel: ObservableObject {
 
     func summary(id: Int64) -> ClipSummary? { summaryByID[id] }
 
+    /// ピン留め以外の件数（設定の「履歴を削除…」を押せるか）
+    var unpinnedCount: Int { summaries.reduce(0) { $0 + ($1.isPinned ? 0 : 1) } }
+
     private func rebuild() {
         summaries.sort(by: sortOrder.areInIncreasingOrder)
         summaryByID = Dictionary(summaries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
