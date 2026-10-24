@@ -74,20 +74,28 @@ final class ScrollProbeTests: XCTestCase {
         var settingsOpened = 0
         controller.onOpenSettings = { settingsOpened += 1 }
 
-        let paths: [(String, (NSWindow) -> Void)] = [
-            ("toggle", { _ in controller.toggle() }),
-            ("esc", { [unowned self] p in self.key(p, code: 53, chars: "\u{1b}") }),
-            ("cmdComma", { [unowned self] p in self.key(p, code: 43, chars: ",", flags: .command) }),
-            ("cmdW", { [unowned self] p in self.key(p, code: 13, chars: "w", flags: .command) }),
-            ("toggle2", { _ in controller.toggle() }),
+        let toggle: (NSWindow) -> Void = { _ in controller.toggle() }
+        let esc: (NSWindow) -> Void = { [unowned self] p in self.key(p, code: 53, chars: "\u{1b}") }
+        let cmdComma: (NSWindow) -> Void = { [unowned self] p in self.key(p, code: 43, chars: ",", flags: .command) }
+        // (名前, 閉じ方, スクロールのあとで ↓ で選択を動かすか)
+        let paths: [(String, (NSWindow) -> Void, Bool)] = [
+            ("toggle-wheel", toggle, false),
+            ("esc-wheel", esc, false),
+            ("cmdComma-wheel", cmdComma, false),
+            ("toggle-moved", toggle, true),
+            ("esc-moved", esc, true),
+            ("cmdComma-moved", cmdComma, true),
         ]
-        for (name, close) in paths {
+        for (name, close, moves) in paths {
             controller.show()
             wait(0.8)
             guard let panel = NSApp.windows.first(where: { $0 is HistoryPanel && $0.isVisible }) else {
                 print("PROBE \(name) panel not visible"); continue
             }
             describe(panel, model, "\(name) opened")
+            if moves {
+                for _ in 0..<3 { key(panel, code: 125, chars: "\u{F701}") ; wait(0.1) }
+            }
             scrollDown(panel)
             describe(panel, model, "\(name) scrolled")
             close(panel)
