@@ -253,6 +253,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return completion(true)
         }
         let alert = NSAlert()
+        // 思いがけず履歴が消える操作なので、注意の記号を出す（アプリのアイコンが小さく重なる）。「履歴を削除…」の確認には付けない
+        // （2026-10-24 Kazuya さんが決定。design/delete-alerts-hig-2026-10-24.md §7）
+        alert.alertStyle = .critical
         alert.messageText = "古い履歴 \(deleting.formatted()) 件を削除しますか？"
         alert.informativeText = "保存件数を \(limit.formatted()) 件にするため、超えた分を古いものから削除します。"
             + "削除した履歴は戻せません。ピン留めした項目は削除されません。"
