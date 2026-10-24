@@ -16,7 +16,8 @@ enum SettingsLayout {
 enum SettingsFont {
     /// 項目名、除外の一覧のアプリ名、ショートカットの名前とキーの欄
     static let item: CGFloat = 15
-    /// 説明、見出し、ボタン、ポップアップ、段の切り替え、状態、赤い文、数値の欄、検索の例（タブの中の標準）
+    /// 説明、見出し、ボタン、状態、赤い文、数値の欄、検索の例（タブの中の標準）。
+    /// ポップアップと段の切り替えは .font も controlSize も効かず、システムの 13pt のまま（2026-10-24 に CI の Mac で測った）
     static let text: CGFloat = 14
     /// キーの記号の札、いちばん下の行（記号で読む・めったに読まないため）
     static let small: CGFloat = 13
