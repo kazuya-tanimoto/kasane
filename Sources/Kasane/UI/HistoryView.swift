@@ -486,7 +486,7 @@ private struct EmptyState: View {
     }
 }
 
-private struct SelectionBackground: View {
+struct SelectionBackground: View {
     let isSelected: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.textSize) private var size
@@ -500,7 +500,7 @@ private struct SelectionBackground: View {
     }
 }
 
-private struct ItemRow: View {
+struct ItemRow: View {
     let item: ClipSummary
     /// 題名の中で、検索の語が当たった文字の位置（UTF-16）
     let matches: [Range<Int>]
@@ -573,7 +573,7 @@ private struct ItemRow: View {
 /// ダークでは、四角を一致した文字の塗りと同じ明るさにし、記号を #1D1D1F にする（2026-10-24、match-highlight §4）。
 /// 画像の行も縮小表示は出さず、同じ灰色のアイコンにする（一覧の大きさでは見分けにくく、色のある縮小表示が一致した文字より先に目を引くため。
 /// 縮小画像は作って保存し続けるが、一覧では読まない）
-private struct ItemIcon: View {
+struct ItemIcon: View {
     let item: ClipSummary
     let isSelected: Bool
     @Environment(\.textSize) private var size

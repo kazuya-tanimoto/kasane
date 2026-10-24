@@ -39,6 +39,11 @@ let package = Package(
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
+            name: "KasaneProbeTests",
+            dependencies: ["Kasane", "KasaneCore", "KasaneStore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
             name: "KasaneStoreTests",
             dependencies: [
                 "KasaneStore",
