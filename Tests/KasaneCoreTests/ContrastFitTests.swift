@@ -21,8 +21,8 @@ final class ContrastFitTests: XCTestCase {
             XCTAssertEqual(String(dark.hex, radix: 16), String(expected[tone]!.dark, radix: 16), "\(tone) ダーク")
         }
         // システムが青（Mac の初期値）のとき
-        XCTAssertEqual(ContrastFit.matchText(RGBColor(hex: 0x007AFF), dark: false, increasedContrast: false).hex, 0x0069DB)
-        XCTAssertEqual(ContrastFit.matchText(RGBColor(hex: 0x0A84FF), dark: true, increasedContrast: false).hex, 0x66B2FF)
+        XCTAssertEqual(ContrastFit.matchText(SRGBColor(hex: 0x007AFF), dark: false, increasedContrast: false).hex, 0x0069DB)
+        XCTAssertEqual(ContrastFit.matchText(SRGBColor(hex: 0x0A84FF), dark: true, increasedContrast: false).hex, 0x66B2FF)
     }
 
     func testEveryToneReadsOnTheWorstBackground() {
@@ -42,7 +42,7 @@ final class ContrastFitTests: XCTestCase {
         for hueStep in 0..<24 {
             for saturation in [0.0, 0.3, 0.7, 1.0] {
                 for lightness in [0.2, 0.5, 0.8] {
-                    let color = RGBColor(hue: Double(hueStep) / 24, saturation: saturation, lightness: lightness)
+                    let color = SRGBColor(hue: Double(hueStep) / 24, saturation: saturation, lightness: lightness)
                     for dark in [false, true] {
                         for increased in [false, true] {
                             let fitted = ContrastFit.matchText(color, dark: dark, increasedContrast: increased)
@@ -64,7 +64,7 @@ final class ContrastFitTests: XCTestCase {
                 let background = dark ? ContrastFit.darkBackground : ContrastFit.lightBackground
                 let fitted = ContrastFit.matchText(color, dark: dark, increasedContrast: false)
                 let lightness = try XCTUnwrap(ContrastFit.fittedLightness(color, background: background, target: ContrastFit.matchTarget))
-                XCTAssertEqual(RGBColor(hue: h, saturation: s, lightness: lightness).hex, fitted.hex, "\(tone)")
+                XCTAssertEqual(SRGBColor(hue: h, saturation: s, lightness: lightness).hex, fitted.hex, "\(tone)")
             }
         }
     }
@@ -75,9 +75,9 @@ final class ContrastFitTests: XCTestCase {
     }
 
     func testHexRoundTrip() {
-        XCTAssertEqual(RGBColor(hex: 0x165E83).hex, 0x165E83)
-        let (h, s, l) = RGBColor(hex: 0x165E83).hsl
-        XCTAssertEqual(RGBColor(hue: h, saturation: s, lightness: l).hex, 0x165E83)
+        XCTAssertEqual(SRGBColor(hex: 0x165E83).hex, 0x165E83)
+        let (h, s, l) = SRGBColor(hex: 0x165E83).hsl
+        XCTAssertEqual(SRGBColor(hue: h, saturation: s, lightness: l).hex, 0x165E83)
     }
 }
 

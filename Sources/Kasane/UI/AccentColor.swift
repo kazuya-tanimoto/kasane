@@ -48,9 +48,9 @@ enum AccentColor: String, CaseIterable {
 
     /// Mac の設定のアクセントカラー。描いている appearance（ライト / ダーク）での色を読む
     /// （provider の中で、そのときの描画の appearance が渡されたものと同じとは限らないため）
-    private static func systemAccent(in appearance: NSAppearance) -> RGBColor {
+    private static func systemAccent(in appearance: NSAppearance) -> SRGBColor {
         let c = systemAccentNSColor(in: appearance)
-        return RGBColor(red: Double(c.redComponent), green: Double(c.greenComponent), blue: Double(c.blueComponent))
+        return SRGBColor(red: Double(c.redComponent), green: Double(c.greenComponent), blue: Double(c.blueComponent))
     }
 
     private static func systemAccentNSColor(in appearance: NSAppearance) -> NSColor {
@@ -125,12 +125,12 @@ enum AccentColor: String, CaseIterable {
 }
 
 extension NSColor {
-    convenience init(_ color: RGBColor) {
+    convenience init(_ color: SRGBColor) {
         self.init(srgbRed: CGFloat(color.red), green: CGFloat(color.green), blue: CGFloat(color.blue), alpha: 1)
     }
 
     convenience init(hex: UInt32) {
-        self.init(RGBColor(hex: hex))
+        self.init(SRGBColor(hex: hex))
     }
 }
 

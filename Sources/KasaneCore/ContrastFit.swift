@@ -1,7 +1,7 @@
 import Foundation
 
-/// sRGB の色（各成分 0〜1）
-public struct RGBColor: Equatable, Sendable {
+/// sRGB の色（各成分 0〜1）。名前を RGBColor にすると、AppKit を読み込むファイルで QuickDraw の RGBColor とぶつかる
+public struct SRGBColor: Equatable, Sendable {
     public var red: Double
     public var green: Double
     public var blue: Double
@@ -75,43 +75,43 @@ public enum ContrastFit {
     public static let increasedContrastTarget = 7.0
 
     /// いちばん条件の悪い地。ライトは選んでいない行（ガラスの上で、白より暗い）、ダークは選んだ行
-    public static let lightBackground = RGBColor(hex: 0xF4F4F7)
-    public static let darkBackground = RGBColor(hex: 0x3D4047)
+    public static let lightBackground = SRGBColor(hex: 0xF4F4F7)
+    public static let darkBackground = SRGBColor(hex: 0x3D4047)
 
     /// 種類の文字とアイコンの記号の灰色。どちらも上の地で 4.5 以上（ダークはモックの #A7AAB2 では 4.47 だったので白に寄せた）
-    public static let kindGrayLight = RGBColor(hex: 0x55585F)
-    public static let kindGrayDark = RGBColor(hex: 0xABAEB6)
+    public static let kindGrayLight = SRGBColor(hex: 0x55585F)
+    public static let kindGrayDark = SRGBColor(hex: 0xABAEB6)
 
     /// WCAG の相対輝度
-    public static func luminance(_ color: RGBColor) -> Double {
+    public static func luminance(_ color: SRGBColor) -> Double {
         func linear(_ v: Double) -> Double {
             v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4)
         }
         return 0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
     }
 
-    public static func contrast(_ a: RGBColor, _ b: RGBColor) -> Double {
+    public static func contrast(_ a: SRGBColor, _ b: SRGBColor) -> Double {
         let la = luminance(a), lb = luminance(b)
         return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }
 
     /// 色みと彩度を保ち、明るさを 0.01 ずつ（地が暗ければ上げ、明るければ下げ）変えて、
     /// 8 ビットに丸めた色で target に届いた最初の色を返す。届かなければ白か黒
-    public static func fitLightness(_ color: RGBColor, background: RGBColor, target: Double) -> RGBColor {
+    public static func fitLightness(_ color: SRGBColor, background: SRGBColor, target: Double) -> SRGBColor {
         let (h, s, _) = color.hsl
         guard let lightness = fittedLightness(color, background: background, target: target) else {
-            return luminance(background) < 0.2 ? RGBColor(hex: 0xFFFFFF) : RGBColor(hex: 0x000000)
+            return luminance(background) < 0.2 ? SRGBColor(hex: 0xFFFFFF) : SRGBColor(hex: 0x000000)
         }
-        return RGBColor(hex: RGBColor(hue: h, saturation: s, lightness: lightness).hex)
+        return SRGBColor(hex: SRGBColor(hue: h, saturation: s, lightness: lightness).hex)
     }
 
     /// 丸める前の明るさ（色みと彩度は元のまま）。届かなければ nil
-    static func fittedLightness(_ color: RGBColor, background: RGBColor, target: Double) -> Double? {
+    static func fittedLightness(_ color: SRGBColor, background: SRGBColor, target: Double) -> Double? {
         let (h, s, l) = color.hsl
         let step = luminance(background) < 0.2 ? 0.01 : -0.01
         var lightness = l
         while lightness >= 0 && lightness <= 1 {
-            let candidate = RGBColor(hex: RGBColor(hue: h, saturation: s, lightness: lightness).hex)
+            let candidate = SRGBColor(hex: SRGBColor(hue: h, saturation: s, lightness: lightness).hex)
             if contrast(candidate, background) >= target { return lightness }
             lightness += step
         }
@@ -119,7 +119,7 @@ public enum ContrastFit {
     }
 
     /// 一致した文字の色
-    public static func matchText(_ accent: RGBColor, dark: Bool, increasedContrast: Bool) -> RGBColor {
+    public static func matchText(_ accent: SRGBColor, dark: Bool, increasedContrast: Bool) -> SRGBColor {
         fitLightness(
             accent,
             background: dark ? darkBackground : lightBackground,
@@ -134,8 +134,8 @@ public enum ContrastFit {
 public enum AccentTone: String, CaseIterable, Sendable {
     case matcha, seiji, ai, edoMurasaki, enji, rikyuNezumi, mono
 
-    public var light: RGBColor { RGBColor(hex: values.light) }
-    public var dark: RGBColor { RGBColor(hex: values.dark) }
+    public var light: SRGBColor { SRGBColor(hex: values.light) }
+    public var dark: SRGBColor { SRGBColor(hex: values.dark) }
     /// ダークで、塗った上に黒い文字を載せるか（ライトでは常に白い文字）
     public var darkTextOnDark: Bool { values.darkTextOnDark }
 
