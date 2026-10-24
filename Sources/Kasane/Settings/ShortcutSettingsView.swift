@@ -45,6 +45,7 @@ struct ShortcutSettingsView: View {
                         if index > 0 { SettingsDivider() }
                         HStack(spacing: 16) {
                             Text(entry.key)
+                                .font(.system(size: SettingsFont.small))
                                 .frame(width: 96, alignment: .leading)
                             Text(entry.label)
                             Spacer(minLength: 0)
@@ -66,10 +67,10 @@ struct ShortcutSettingsView: View {
         let warning = recorder.messages[slot] ?? model.shortcuts.registrationProblem(slot)
         return HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(slot.settingsTitle)
+                Text(slot.settingsTitle).font(.system(size: SettingsFont.item))
                 if let warning {
                     Text(warning)
-                        .font(.system(size: 11.5))
+                        .font(.system(size: SettingsFont.text))
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -102,8 +103,10 @@ struct ShortcutSettingsView: View {
             recorder.start(slot)
         } label: {
             Text(recording ? "キーを押してください" : HotKeyCenter.displayString(current))
+                .font(.system(size: SettingsFont.item))
                 .foregroundStyle(recording ? .secondary : .primary)
-                .frame(minWidth: 132)
+                // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように
+                .frame(minWidth: 156)
                 .padding(.vertical, 4)
                 .padding(.horizontal, 8)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))

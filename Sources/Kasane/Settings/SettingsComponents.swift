@@ -11,6 +11,19 @@ enum SettingsLayout {
     static let rowSpacing: CGFloat = 8
 }
 
+/// 文字の大きさ（settings-screen-2026-10-22.md §3「文字の大きさ」）。
+/// 読ませる文（説明・状態・赤い文）は Apple の標準の 13pt より小さくしない。タブ名・タイトル・見本の中・確認のシートは変えない
+enum SettingsFont {
+    /// 項目名、除外の一覧のアプリ名、ショートカットの名前とキーの欄
+    static let item: CGFloat = 15
+    /// 説明、見出し、ボタン、ポップアップ、段の切り替え、状態、赤い文、数値の欄、検索の例（タブの中の標準）
+    static let text: CGFloat = 14
+    /// キーの記号の札、いちばん下の行（記号で読む・めったに読まないため）
+    static let small: CGFloat = 13
+    /// アクセントカラーの色の名前（色の丸が主で、名前は添え字のため）
+    static let colorName: CGFloat = 13
+}
+
 /// 角丸の箱。中の行の間には `SettingsDivider` を置く
 struct SettingsBox<Content: View>: View {
     @ViewBuilder var content: Content
@@ -37,7 +50,7 @@ struct SettingsHeader<Trailing: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: 13, weight: .semibold))
+            Text(title).font(.system(size: SettingsFont.text, weight: .semibold))
             Spacer(minLength: 8)
             trailing
         }
@@ -62,7 +75,7 @@ struct SettingsRow<Control: View>: View {
     var body: some View {
         HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 3) {
-                Text(title)
+                Text(title).font(.system(size: SettingsFont.item))
                 if let description {
                     SettingsCaption(description)
                 }
@@ -85,7 +98,7 @@ struct SettingsCaption: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5))
+            .font(.system(size: SettingsFont.text))
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -106,6 +119,7 @@ struct FittingScroll<Content: View>: View {
     var body: some View {
         ScrollView(.vertical) {
             content
+                .font(.system(size: SettingsFont.text))
                 .padding(SettingsLayout.padding)
                 .frame(width: SettingsLayout.width, alignment: .topLeading)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }

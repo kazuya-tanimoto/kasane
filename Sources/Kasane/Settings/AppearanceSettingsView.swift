@@ -41,7 +41,7 @@ struct AppearanceSettingsView: View {
     private var accentBox: some View {
         SettingsBox {
             VStack(alignment: .leading, spacing: 6) {
-                Text("アクセントカラー")
+                Text("アクセントカラー").font(.system(size: SettingsFont.item))
                 SettingsCaption("ペーストボタン、検索で一致した文字、FIFO / LIFO の小さいウインドウの印と番号に使います")
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 10) {
                     ForEach(AccentColor.allCases, id: \.self) { accent in
@@ -77,7 +77,7 @@ struct AppearanceSettingsView: View {
                 }
                 .frame(width: 30, height: 30)
                 Text(accent.displayName)
-                    .font(.system(size: 11))
+                    .font(.system(size: SettingsFont.colorName))
                     .foregroundStyle(selected ? .primary : .secondary)
             }
             .contentShape(Rectangle())
@@ -94,7 +94,6 @@ struct AppearanceSettingsView: View {
             SettingsHeader(title: "背景（履歴ウインドウと小さいウインドウ）") {
                 if !model.isBackgroundStandard {
                     Button("標準に戻す") { model.resetBackground() }
-                        .controlSize(.small)
                 }
             }
             SettingsBox {
@@ -137,7 +136,7 @@ struct AppearanceSettingsView: View {
 
     private func sliderRow(title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String, caption: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title)
+            Text(title).font(.system(size: SettingsFont.item))
             HStack(spacing: 8) {
                 Slider(value: value, in: range, step: 1)
                     .labelsHidden()
@@ -233,7 +232,7 @@ private struct AppearanceSample: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("見本").font(.system(size: 13, weight: .semibold))
+            Text("見本").font(.system(size: SettingsFont.text, weight: .semibold))
             ZStack(alignment: .top) {
                 backdrop
                 historyWindow

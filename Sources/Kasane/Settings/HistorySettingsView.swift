@@ -8,8 +8,9 @@ struct HistorySettingsView: View {
     @ObservedObject var model: SettingsModel
     @State private var selectedApp: String?
 
-    /// 一覧の 1 行の高さと、見える行の数（5 行分。2 行半では、追加したアプリを確かめるたびにスクロールすることになるため）
-    private static let appRowHeight: CGFloat = 32
+    /// 一覧の 1 行の高さと、見える行の数（5 行分。2 行半では、追加したアプリを確かめるたびにスクロールすることになるため）。
+    /// 高さは 15pt の名前で窮屈にならないよう 36pt
+    private static let appRowHeight: CGFloat = 36
     private static let visibleAppRows: CGFloat = 5
 
     var body: some View {
@@ -155,6 +156,7 @@ struct HistorySettingsView: View {
                 .resizable()
                 .frame(width: 20, height: 20)
             Text(app.name)
+                .font(.system(size: SettingsFont.item))
                 .foregroundStyle(selected ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
             Spacer(minLength: 0)
         }

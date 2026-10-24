@@ -66,7 +66,7 @@ struct GeneralSettingsView: View {
                     }
                     .buttonStyle(.link)
                 }
-                .font(.system(size: 12))
+                .font(.system(size: SettingsFont.small))
                 .padding(.top, 14)
                 .padding(.horizontal, 4)
             }
@@ -87,12 +87,13 @@ struct GeneralSettingsView: View {
         HStack(spacing: 10) {
             StatusMark(ok: ok)
             VStack(alignment: .leading, spacing: 3) {
-                Text(name)
+                Text(name).font(.system(size: SettingsFont.item))
                 SettingsCaption(use)
             }
             Spacer(minLength: 8)
             Text(state)
                 .foregroundStyle(.secondary)
+                .fixedSize()
             Button("システム設定を開く", action: open)
         }
         .padding(.horizontal, 12)

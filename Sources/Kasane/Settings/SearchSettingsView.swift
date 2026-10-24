@@ -43,7 +43,7 @@ struct SearchSettingsView: View {
                         if index > 0 { SettingsDivider() }
                         HStack(spacing: 16) {
                             Text(entry.query)
-                                .font(.system(size: 12.5, design: .monospaced))
+                                .font(.system(size: SettingsFont.text, design: .monospaced))
                                 .frame(width: 96, alignment: .leading)
                             Text(entry.text)
                             Spacer(minLength: 0)
@@ -64,7 +64,7 @@ struct SearchSettingsView: View {
         )
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("検索のゆるさ")
+                Text("検索のゆるさ").font(.system(size: SettingsFont.item))
                 Spacer()
                 Text(model.searchLooseness.displayName)
                     .foregroundStyle(.secondary)
@@ -80,7 +80,7 @@ struct SearchSettingsView: View {
             }
             SettingsCaption("ゆるめにするほど、打った文字が離れていても見つかります。そのぶん、関係ない項目も増えます。")
             VStack(alignment: .leading, spacing: 6) {
-                Text("例").font(.system(size: 12, weight: .semibold))
+                Text("例").font(.system(size: SettingsFont.text, weight: .semibold))
                 ForEach(Self.examples, id: \.query) { example in
                     exampleRow(example)
                 }
@@ -100,14 +100,14 @@ struct SearchSettingsView: View {
         ) != nil
         return HStack(spacing: 10) {
             Text(shown ? "出る" : "出ない")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: SettingsFont.text, weight: .semibold))
                 .foregroundStyle(shown ? Color.blue : Color.secondary)
-                .frame(width: 44, height: 20)
+                .frame(width: 58, height: 24)
                 .background(
                     RoundedRectangle(cornerRadius: 5)
                         .fill(shown ? Color.blue.opacity(0.14) : Color(nsColor: .quaternaryLabelColor).opacity(0.4))
                 )
-            Text("\(Text(example.query).font(.system(size: 12.5, design: .monospaced))) → \(example.item)（\(example.note)）")
+            Text("\(Text(example.query).font(.system(size: SettingsFont.text, design: .monospaced))) → \(example.item)（\(example.note)）")
             Spacer(minLength: 0)
         }
     }
