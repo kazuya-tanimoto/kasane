@@ -78,7 +78,7 @@ final class QueueHUDController {
         }
     }
 
-    /// 中身の高さに合わせて、設定の隅に置く。画面の高さを超えるときは画面の高さで止める
+    /// 中身の高さに合わせて、設定した側の上の隅に置く。画面の高さを超えるときは画面の高さで止める
     private func position(content: QueueHUDContent) {
         guard let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else { return }
         let width = content.width
@@ -87,11 +87,10 @@ final class QueueHUDController {
         let height = min(max(ceil(fitting.height), 1), maxHeight)
         let size = NSSize(width: width, height: height)
         let origin: NSPoint
-        switch AppSettings.hudPosition {
-        case .topRight: origin = NSPoint(x: screen.maxX - size.width - margin, y: screen.maxY - size.height - margin)
-        case .topLeft: origin = NSPoint(x: screen.minX + margin, y: screen.maxY - size.height - margin)
-        case .bottomRight: origin = NSPoint(x: screen.maxX - size.width - margin, y: screen.minY + margin)
-        case .bottomLeft: origin = NSPoint(x: screen.minX + margin, y: screen.minY + margin)
+        let y = screen.maxY - size.height - margin
+        switch AppSettings.hudSide {
+        case .left: origin = NSPoint(x: screen.minX + margin, y: y)
+        case .right: origin = NSPoint(x: screen.maxX - size.width - margin, y: y)
         }
         let frame = NSRect(origin: origin, size: size)
         if panel.frame != frame {
@@ -130,7 +129,7 @@ struct QueueHUDContent: View {
     let mode: QueueMode
     let titles: [String]
     let fontSize: Double
-    /// アクセントカラーはメニューで変えるとすぐ反映されるよう、`QueueHUDView` から受け取る
+    /// アクセントカラーは設定で変えるとすぐ反映されるよう、`QueueHUDView` から受け取る
     @Environment(\.kasaneAccent) private var accent
 
     /// 12pt のときを 1 とした倍率。余白や幅もこれに合わせて大きくする

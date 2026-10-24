@@ -1,12 +1,10 @@
 import AppKit
+import Combine
 import KasaneCore
 import KasaneStore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// ショートカットの初期値（仮）。どれも `defaults write` で変えられる。設定画面は v1 の仕上げで作る
-    static let defaultHotKeys = (history: "opt+v", fifo: "opt+cmd+f", lifo: "opt+cmd+l")
-
     private var store: HistoryStore!
     private var model: HistoryModel!
     private let writer = PasteboardWriter()
@@ -15,7 +13,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var queue: QueueController!
     private lazy var queueHUD = QueueHUDController()
     private var statusItem: StatusItemController!
+    private var shortcuts: ShortcutController!
     private var onboarding: OnboardingWindowController?
+    private var settingsModel: SettingsModel?
+    private var settingsWindow: SettingsWindowController?
     /// 保存の処理（ハッシュ、サムネイル、ローマ字、DB への書き込み）は順番どおりにバックグラウンドで行う
     private let processingQueue = DispatchQueue(label: "io.github.kazuya-tanimoto.kasane.capture", qos: .utility)
 
@@ -46,27 +47,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.onCapture = { [weak self] raw in self?.process(raw) }
         monitor.start()
 
-        let shortcuts = registerHotKeys()
+        shortcuts = ShortcutController { [weak self] slot in self?.hotKeyPressed(slot) }
+        panel.onOpenSettings = { [weak self] in self?.showSettings() }
         statusItem = StatusItemController(
             actions: .init(
                 showHistory: { [weak self] in self?.panel.show() },
                 toggleQueue: { [weak self] mode in self?.toggleQueue(mode) },
-                setSortOrder: { [weak self] order in self?.setSortOrder(order) },
-                setHistoryLimit: { [weak self] limit in self?.setHistoryLimit(limit) },
-                setHUDPosition: { [weak self] position in
-                    AppSettings.hudPosition = position
-                    self?.updateQueueHUD()
-                },
-                setHUDTextSize: { [weak self] level in
-                    AppSettings.hudTextSize = level
-                    self?.updateQueueHUD()
-                },
-                resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
-                showOnboarding: { [weak self] in self?.showOnboarding() },
-                clearHistory: { [weak self] in self?.confirmClearHistory() }
+                showSettings: { [weak self] in self?.showSettings() },
+                showOnboarding: { [weak self] in self?.showOnboarding() }
             ),
-            shortcuts: shortcuts
+            shortcuts: menuShortcuts()
         )
+        shortcuts.onChange = { [weak self] in
+            guard let self else { return }
+            self.statusItem.shortcuts = self.menuShortcuts()
+            self.settingsModel?.shortcutsDidChange()
+        }
 
         if !AppSettings.hasCompletedOnboarding
             || !Permissions.isAccessibilityTrusted
@@ -77,27 +73,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - ショートカット
 
-    private func registerHotKeys() -> StatusItemController.Shortcuts {
-        let center = HotKeyCenter.shared
-        func register(_ name: String, _ fallback: String, _ handler: @escaping () -> Void) -> String {
-            let spec = AppSettings.hotKey(name, default: fallback)
-            guard let hotKey = HotKeyCenter.HotKey(spec) ?? HotKeyCenter.HotKey(fallback) else { return "" }
-            switch center.register(hotKey, handler: handler) {
-            case .registered:
-                return hotKey.displayString
-            case .inUse:
-                NSLog("Kasane: hotkey \(spec) is already in use")
-                return "（\(hotKey.displayString) は使用中）"
-            case .rejected(let status):
-                NSLog("Kasane: hotkey \(spec) was rejected (\(status))")
-                return "（\(hotKey.displayString) は macOS で使えません）"
-            }
+    private func hotKeyPressed(_ slot: ShortcutSlot) {
+        switch slot {
+        case .history: panel.toggle()
+        case .fifo: toggleQueue(.fifo)
+        case .lifo: toggleQueue(.lifo)
         }
-        let keys = Self.defaultHotKeys
-        return .init(
-            history: register("history", keys.history) { [weak self] in self?.panel.toggle() },
-            fifo: register("fifo", keys.fifo) { [weak self] in self?.toggleQueue(.fifo) },
-            lifo: register("lifo", keys.lifo) { [weak self] in self?.toggleQueue(.lifo) }
+    }
+
+    private func menuShortcuts() -> StatusItemController.Shortcuts {
+        .init(
+            history: shortcuts.menuTitle(.history),
+            fifo: shortcuts.menuTitle(.fifo),
+            lifo: shortcuts.menuTitle(.lifo)
         )
     }
 
@@ -151,17 +139,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 画像などテキストのない項目は、⇧⏎ でもそのまま貼り付ける
         let plainTextOnly = action == .plainText && item.text != nil && item.kind != .file
         writer.write(representations, plainText: item.text, plainTextOnly: plainTextOnly)
-        // ⌘⏎ でコピーした項目だけ、⌘C でコピーし直したときと同じく一番上に移す。
-        // 貼り付け（⏎・⇧⏎・⌘1〜⌘9）では移さない。貼るたびに並びと ⌘番号が変わると、
-        // 次に開いたとき前に見た位置で探せなくなるため（2026-10-18 決定）
-        if action == .copyOnly {
+        let outcome = action.outcome(openedOverKasane: panel.openedOverKasane)
+        if outcome.movesToTop {
             let now = Date()
             try? store.recordReuse(itemID: itemID, now: now)
             model.didReuse(id: itemID, at: now)
         }
 
         panel.hide { [weak self] in
-            guard action != .copyOnly else { return }
+            guard outcome.sendsCommandV else { return }
             guard Permissions.isAccessibilityTrusted else {
                 // 権限がなければクリップボードに入れるところまで。案内を出す
                 self?.showOnboarding()
@@ -171,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 Paster.postCommandV()
             }
         }
-        if action != .copyOnly {
+        if outcome.countsPaste {
             recordPaste(itemID: itemID)
         }
     }
@@ -205,17 +191,86 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         queueHUD.update(mode: current?.mode, titles: titles)
     }
 
-    // MARK: - メニュー
+    // MARK: - 設定
+
+    private func showSettings() {
+        if settingsWindow == nil {
+            let model = SettingsModel(
+                actions: .init(
+                    setSortOrder: { [weak self] order in self?.setSortOrder(order) },
+                    setHistoryLimit: { [weak self] limit, completion in
+                        guard let self else { return completion(false) }
+                        self.setHistoryLimit(limit, completion: completion)
+                    },
+                    clearHistory: { [weak self] in self?.confirmClearHistory() },
+                    unpinnedCount: { [weak self] in self?.model.unpinnedCount ?? 0 },
+                    // 履歴の一覧が変わったあとで数え直す（objectWillChange は変わる前に届くので、次の回で読む）
+                    historyChanges: self.model.objectWillChange
+                        .map { _ in () }
+                        .receive(on: RunLoop.main)
+                        .eraseToAnyPublisher(),
+                    queueHUDChanged: { [weak self] in self?.updateQueueHUD() },
+                    resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
+                    isHistoryWindowStandard: { [weak self] in self?.panel.isFrameStandard ?? true }
+                ),
+                shortcuts: shortcuts
+            )
+            let window = SettingsWindowController { SettingsTabController(model: model) }
+            window.onShow = {
+                model.refresh()
+                model.permissions.startPolling()
+                model.startObservingHistory()
+            }
+            window.onBecomeKey = { model.refresh() }
+            window.onClose = {
+                model.permissions.stopPolling()
+                model.stopObservingHistory()
+            }
+            settingsModel = model
+            settingsWindow = window
+        }
+        settingsWindow?.show()
+    }
 
     private func setSortOrder(_ order: HistorySortOrder) {
         AppSettings.sortOrder = order
         model.setSortOrder(order)
     }
 
-    private func setHistoryLimit(_ limit: Int) {
-        AppSettings.historyLimit = limit
-        let pruned = (try? store.prune(limit: limit)) ?? []
-        model.remove(ids: pruned)
+    /// 保存件数を変える。今のピン留め以外の件数が新しい件数を超えるときは、削除する前に確認を出す。
+    /// ポップアップの選び間違いで削除した履歴は戻せないため（settings-screen-2026-10-22.md §3「履歴」）。キャンセルなら false を返す
+    private func setHistoryLimit(_ limit: Int, completion: @escaping (Bool) -> Void) {
+        let apply = { [weak self] in
+            guard let self else { return }
+            AppSettings.historyLimit = limit
+            // 確認を出している間にコピーされた分も含め、押した時点の履歴を新しい件数まで減らす
+            let pruned = (try? self.store.prune(limit: limit)) ?? []
+            self.model.remove(ids: pruned)
+        }
+        let deleting = ((try? store.unpinnedCount()) ?? 0) - limit
+        guard deleting > 0 else {
+            apply()
+            return completion(true)
+        }
+        let alert = NSAlert()
+        // 思いがけず履歴が消える操作なので、注意の記号を出す（アプリのアイコンが小さく重なる）。「履歴を削除…」の確認には付けない
+        // （2026-10-24 Kazuya さんが決定。design/delete-alerts-hig-2026-10-24.md §7）
+        alert.alertStyle = .critical
+        alert.messageText = "古い履歴 \(deleting.formatted()) 件を削除しますか？"
+        alert.informativeText = "保存件数を \(limit.formatted()) 件にするため、超えた分を古いものから削除します。"
+            + "削除した履歴は戻せません。ピン留めした項目は削除されません。"
+        // 右が「削除」、左が「キャンセル」。どちらも既定のボタンにしない（⏎ では押されない）。Esc はキャンセル。
+        // 選んだのは件数で、削除そのものではないので、削除のボタンを赤くする（Apple の Alerts）
+        let delete = alert.addButton(withTitle: "削除")
+        let cancel = alert.addButton(withTitle: "キャンセル")
+        delete.hasDestructiveAction = true
+        delete.keyEquivalent = ""
+        cancel.keyEquivalent = "\u{1b}"
+        presentInSettings(alert) { response in
+            guard response == .alertFirstButtonReturn else { return completion(false) }
+            apply()
+            completion(true)
+        }
     }
 
     private func showOnboarding() {
@@ -227,16 +282,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         onboarding?.show()
     }
 
+    /// 「履歴を削除…」の確認。削除そのものを選んだ操作なので、「削除」を既定のボタン（⏎）にし、赤くしない（Apple の Alerts。
+    /// settings-screen-2026-10-22.md §3「履歴」）
     private func confirmClearHistory() {
+        let count = (try? store.unpinnedCount()) ?? 0
+        guard count > 0 else { return }
         let alert = NSAlert()
-        alert.messageText = "履歴を削除しますか？"
-        alert.informativeText = "ピン留めした項目は残ります。この操作は取り消せません。"
+        alert.messageText = "履歴 \(count.formatted()) 件を削除しますか？"
+        alert.informativeText = "削除した履歴は戻せません。ピン留めした項目と、FIFO / LIFO のキューは削除されません。"
+        // 最初に足したボタンが右端で、⏎ の既定になる
         alert.addButton(withTitle: "削除")
-        alert.addButton(withTitle: "キャンセル")
-        alert.buttons.first?.hasDestructiveAction = true
-        NSApp.activate()
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let ids = (try? store.deleteAll(keepPinned: true)) ?? []
-        model.remove(ids: ids)
+        let cancel = alert.addButton(withTitle: "キャンセル")
+        cancel.keyEquivalent = "\u{1b}"
+        presentInSettings(alert) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            // 確認を出している間にコピーされた分も含め、押した時点のピン留め以外を全部削除する
+            let ids = (try? self.store.deleteAll(keepPinned: true)) ?? []
+            self.model.remove(ids: ids)
+        }
+    }
+
+    private func presentInSettings(_ alert: NSAlert, completion: @escaping (NSApplication.ModalResponse) -> Void) {
+        if let settingsWindow {
+            settingsWindow.present(alert, completion: completion)
+        } else {
+            NSApp.activate()
+            completion(alert.runModal())
+        }
     }
 }

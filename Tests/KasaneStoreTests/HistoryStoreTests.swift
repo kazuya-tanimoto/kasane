@@ -115,6 +115,15 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(titles, ["1", "3", "4"], "ピン留めは件数に含めず、古い 2 が消える")
     }
 
+    func testUnpinnedCountLeavesOutPinned() throws {
+        let a = try store.save(textCapture("A"), limit: 100)
+        _ = try store.save(textCapture("B"), limit: 100)
+        _ = try store.save(textCapture("C"), limit: 100)
+        try store.setPinned(true, itemID: a.item.id!)
+        XCTAssertEqual(try store.unpinnedCount(), 2)
+        XCTAssertEqual(try store.count(), 3)
+    }
+
     func testLargeDataGoesToFileAndIsDeleted() throws {
         let big = Data(repeating: 7, count: HistoryStore.inlineDataLimit + 1)
         let capture = Capture(

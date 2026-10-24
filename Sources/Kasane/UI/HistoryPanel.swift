@@ -162,12 +162,30 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible && !isHiding }
     var isKey: Bool { panel.isKeyWindow }
+    /// 開いたときに一番前が Kasane のウインドウ（設定、初回の案内）だったか。そのときはペーストせずにコピーだけにする
+    private(set) var openedOverKasane = false
+    /// ⌘, で設定を開く。履歴ウインドウはほかのウインドウより上に出るので、閉じてから開く
+    var onOpenSettings: (() -> Void)?
+
+    /// 覚えている位置と大きさが、今の文字の大きさでの標準と同じか（設定の「標準に戻す」を出すかどうか）
+    var isFrameStandard: Bool {
+        guard let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame else { return true }
+        return WindowPlacement.isStandard(
+            savedSize: AppSettings.historyWindowSize,
+            savedOffset: AppSettings.historyWindowOffset,
+            defaultSize: Self.defaultSize(for: textSize),
+            minSize: Self.minSize(for: textSize),
+            in: screen
+        )
+    }
 
     func toggle() {
         isVisible ? hide() : show()
     }
 
     func show() {
+        openedOverKasane = NSWorkspace.shared.frontmostApplication?.processIdentifier
+            == ProcessInfo.processInfo.processIdentifier
         model.prepareForShow()
         position()
         isHiding = false
@@ -386,6 +404,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
                 hide()
                 return true
             }
+            if characters == ",", flags.isDisjoint(with: [.shift, .option, .control]) {
+                hide { [weak self] in self?.onOpenSettings?() }
+                return true
+            }
             if let action = Self.editAction(characters, flags: flags) {
                 if action == #selector(NSText.paste(_:)), pasteAsOneLine() {
                     return true
@@ -425,7 +447,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     /// ⌘V・⌘C・⌘X・⌘A・⌘Z（⇧⌘Z）を検索欄の編集の操作に置き換える。
     /// Kasane はメニューバーにメニューを出さないので「編集」メニューがなく、
     /// ふつうのアプリのようにはこれらのキーが検索欄に届かない
-    private static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
+    static func editAction(_ characters: String, flags: NSEvent.ModifierFlags) -> Selector? {
         guard flags.isDisjoint(with: [.option, .control]) else { return nil }
         let shift = flags.contains(.shift)
         switch characters {

@@ -3,15 +3,6 @@ import Combine
 import KasaneCore
 import KasaneStore
 
-enum PasteAction {
-    /// 元のアプリに自動ペーストする（⏎、⌘1〜9）
-    case paste
-    /// 書式なしで自動ペーストする（⇧⏎）
-    case plainText
-    /// クリップボードにコピーするだけ（⌘⏎）
-    case copyOnly
-}
-
 /// 種類での絞り込み
 enum KindFilter: String, CaseIterable, Identifiable {
     case all, text, image, url, file
@@ -178,6 +169,9 @@ final class HistoryModel: ObservableObject {
 
     func summary(id: Int64) -> ClipSummary? { summaryByID[id] }
 
+    /// ピン留め以外の件数（設定の「履歴を削除…」を押せるか）
+    var unpinnedCount: Int { summaries.reduce(0) { $0 + ($1.isPinned ? 0 : 1) } }
+
     private func rebuild() {
         summaries.sort(by: sortOrder.areInIncreasingOrder)
         summaryByID = Dictionary(summaries.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -228,11 +222,14 @@ final class HistoryModel: ObservableObject {
 
     // MARK: - ウインドウからの操作
 
-    /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選ぶ
+    /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選び、一覧を先頭まで戻す
     func prepareForShow() {
         if !query.isEmpty { query = "" }
         if kindFilter != .all { kindFilter = .all }
         selectedID = visible.first?.id
+        // 選択が前から先頭のままだと selectedID の変化でスクロールしないので、毎回先頭まで戻す。
+        // 一覧をスクロールしたまま閉じると、次に開いたときに途中から出ていた（2026-10-24、Kazuya さんの確認）
+        scrollToken += 1
         loadPreview()
         focusToken += 1
     }
@@ -370,7 +367,7 @@ extension HistorySortOrder {
     var displayName: String {
         switch self {
         case .recent: return "コピー日時順"
-        case .mostPasted: return "貼り付け回数順"
+        case .mostPasted: return "ペースト回数順"
         }
     }
 }

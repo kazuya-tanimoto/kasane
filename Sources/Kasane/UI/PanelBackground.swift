@@ -2,29 +2,14 @@ import AppKit
 import KasaneCore
 import SwiftUI
 
-/// 背景のぼかしの半径の選択肢（設定画面ができるまではメニューで選ぶ）
+/// 背景のぼかしの半径（設定の「ぼかしの強さ」）
 enum BlurPreset {
-    static let radii = [0, 10, 20, 30, 45, 64]
     static let defaultRadius = 20
     /// 半径の上限。これより大きくしても見た目はほとんど変わらない
     static let maxRadius = 64
 }
 
-/// FIFO / LIFO 中の小さいウインドウを出す位置
-enum HUDPosition: String, CaseIterable {
-    case topRight, topLeft, bottomRight, bottomLeft
-
-    var displayName: String {
-        switch self {
-        case .topRight: return "右上"
-        case .topLeft: return "左上"
-        case .bottomRight: return "右下"
-        case .bottomLeft: return "左下"
-        }
-    }
-}
-
-/// 見た目の設定。メニューで変えると、開いているウインドウにもすぐ反映する
+/// 見た目の設定。設定画面で変えると、開いているウインドウにもすぐ反映する
 @MainActor
 final class AppearanceSettings: ObservableObject {
     static let shared = AppearanceSettings()
@@ -35,7 +20,7 @@ final class AppearanceSettings: ObservableObject {
     @Published var accent: AccentColor = AppSettings.accentColor {
         didSet { AppSettings.accentColor = accent }
     }
-    /// 履歴ウインドウの一覧とプレビューの文字の大きさ。メニューと ⌘+ / ⌘− で変える
+    /// 履歴ウインドウの一覧とプレビューの文字の大きさ。設定と ⌘+ / ⌘− で変える
     @Published var historyTextSize: TextSizeLevel = AppSettings.historyTextSize {
         didSet { AppSettings.historyTextSize = historyTextSize }
     }

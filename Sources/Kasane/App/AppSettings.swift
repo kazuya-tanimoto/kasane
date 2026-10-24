@@ -30,7 +30,8 @@ enum AppSettings {
 
     /// 履歴に残さないアプリのバンドルID
     static var excludedBundleIDs: Set<String> {
-        Set(defaults.stringArray(forKey: "excludedBundleIDs") ?? [])
+        get { Set(defaults.stringArray(forKey: "excludedBundleIDs") ?? []) }
+        set { defaults.set(newValue.sorted(), forKey: "excludedBundleIDs") }
     }
 
     /// クリップボードの変更を確認する間隔（秒）
@@ -47,7 +48,8 @@ enum AppSettings {
 
     /// 履歴ウインドウを開いたら英数に切り替え、閉じたら戻すか（初期値はオン）
     static var switchesToASCIIOnOpen: Bool {
-        defaults.object(forKey: "switchesToASCIIOnOpen") as? Bool ?? true
+        get { defaults.object(forKey: "switchesToASCIIOnOpen") as? Bool ?? true }
+        set { defaults.set(newValue, forKey: "switchesToASCIIOnOpen") }
     }
 
     /// プレビューの下に詳細を出すか（⌘I）
@@ -123,9 +125,23 @@ enum AppSettings {
         set { defaults.set(newValue.map(NSStringFromPoint), forKey: "historyWindowOffset") }
     }
 
-    static var hudPosition: HUDPosition {
-        get { HUDPosition(rawValue: defaults.string(forKey: "hudPosition") ?? "") ?? .topRight }
-        set { defaults.set(newValue.rawValue, forKey: "hudPosition") }
+    /// 小さいウインドウを出す側（左は左上、右は右上）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
+    static var hudSide: HUDSide {
+        get {
+            if let side = HUDSide(rawValue: defaults.string(forKey: "hudSide") ?? "") {
+                return side
+            }
+            let side = HUDSide(legacyPosition: defaults.string(forKey: "hudPosition"))
+            defaults.set(side.rawValue, forKey: "hudSide")
+            return side
+        }
+        set { defaults.set(newValue.rawValue, forKey: "hudSide") }
+    }
+
+    /// 設定ウインドウで最後に見たタブ。次に開いたときに出す
+    static var settingsTab: String? {
+        get { defaults.string(forKey: "settingsTab") }
+        set { defaults.set(newValue, forKey: "settingsTab") }
     }
 
     static var hasCompletedOnboarding: Bool {
@@ -133,9 +149,17 @@ enum AppSettings {
         set { defaults.set(newValue, forKey: "hasCompletedOnboarding") }
     }
 
-    /// グローバルショートカット。`defaults write <bundle id> hotkey.history "opt+v"` の形で上書きできる
-    static func hotKey(_ name: String, default value: String) -> String {
-        defaults.string(forKey: "hotkey.\(name)") ?? value
+    /// グローバルショートカット。前の版の `defaults write <bundle id> hotkey.history "opt+v"` の設定は、初めて読むときに 1 回だけ読み替える
+    static func shortcut(_ slot: ShortcutSlot) -> Shortcut {
+        shortcutStore.shortcut(slot)
+    }
+
+    static func setShortcut(_ shortcut: Shortcut, for slot: ShortcutSlot) {
+        shortcutStore.setShortcut(shortcut, for: slot)
+    }
+
+    private static var shortcutStore: ShortcutStore {
+        ShortcutStore(read: { defaults.string(forKey: $0) }, write: { defaults.set($1, forKey: $0) })
     }
 
     static var dataDirectory: URL {
