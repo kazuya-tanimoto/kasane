@@ -291,7 +291,7 @@ private struct AppearanceSample: View {
             ForEach(Array(Self.sampleRows.enumerated()), id: \.offset) { index, row in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(index == 0 ? appearance.accent.color : Color.primary.opacity(0.18))
+                        .fill(index == 0 ? appearance.accent.selectedIconFill : Color.primary.opacity(0.18))
                         .frame(width: 8 * scale, height: 8 * scale)
                     Text(sampleTitle(row, scale: scale))
                         .font(.system(size: 7.5 * scale))
@@ -322,13 +322,14 @@ private struct AppearanceSample: View {
 
     private static let sampleRows = ["git push origin main", "git push --tags", "push 通知の設定"]
 
-    /// 見本の行の題名。「push」をアクセントの色・太字にする（実物と同じ計算）
+    /// 見本の行の題名。「push」の後ろをアクセントの色で塗り、太字にする（実物と同じ計算）
     private func sampleTitle(_ title: String, scale: CGFloat) -> AttributedString {
         var result = AttributedString(title)
         typealias Attributes = AttributeScopes.SwiftUIAttributes
         for match in MatchHighlighter.ranges(query: "push", title: title) {
             guard let range = Range(NSRange(location: match.lowerBound, length: match.count), in: result) else { continue }
-            result[range][Attributes.ForegroundColorAttribute.self] = appearance.accent.matchText
+            result[range][Attributes.BackgroundColorAttribute.self] = appearance.accent.matchFill
+            result[range][Attributes.ForegroundColorAttribute.self] = AccentColor.onMatchFill
             result[range][Attributes.FontAttribute.self] = .system(size: 7.5 * scale, weight: .bold)
         }
         return result

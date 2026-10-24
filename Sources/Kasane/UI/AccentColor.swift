@@ -35,14 +35,37 @@ enum AccentColor: String, CaseIterable {
         })
     }
 
-    /// 検索で一致した文字の色。白や黒を混ぜず、色みと彩度を保ったまま明るさだけを変えて、
+    /// 検索で一致した文字の後ろに敷く塗りの色。白や黒を混ぜず、色みと彩度を保ったまま明るさだけを変えて、
     /// いちばん条件の悪い地で 4.6 以上（「コントラストを上げる」がオンなら 7.0 以上）にする（計算は ContrastFit）
-    var matchText: Color {
-        let tone = self.tone
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            let dark = Self.isDark(appearance)
-            let base = tone.map { dark ? $0.dark : $0.light } ?? Self.systemAccent(in: appearance)
-            return NSColor(ContrastFit.matchText(base, dark: dark, increasedContrast: Self.isHighContrast(appearance)))
+    var matchFill: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in matchFill(in: appearance) })
+    }
+
+    private func matchFill(in appearance: NSAppearance) -> NSColor {
+        let dark = Self.isDark(appearance)
+        let base = tone.map { dark ? $0.dark : $0.light } ?? Self.systemAccent(in: appearance)
+        return NSColor(ContrastFit.matchFill(base, dark: dark, increasedContrast: Self.isHighContrast(appearance)))
+    }
+
+    /// 塗りの上の文字の色（ライトは白、ダークは #1D1D1F）
+    static let onMatchFill = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(AccentColor.isDark(appearance) ? ContrastFit.onMatchFillDark : ContrastFit.onMatchFillLight)
+    })
+
+    /// 選んだ行のアイコンの四角の色。ライトはアクセントの色、ダークは一致した文字の塗りと同じ色
+    /// （ダークでアクセントの色のままだと、藍・臙脂などは行の地との差が 2 前後で、選んでいる行が分かりにくいため。
+    /// design/match-highlight-2026-10-24.md §4）
+    var selectedIconFill: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            if Self.isDark(appearance) { return matchFill(in: appearance) }
+            return tone.map { NSColor($0.light) } ?? Self.systemAccentNSColor(in: appearance)
+        })
+    }
+
+    /// 選んだ行のアイコンの記号の色。ライトはアクセントの上の文字の色、ダークは #1D1D1F
+    var selectedIconSymbol: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            Self.isDark(appearance) ? NSColor(ContrastFit.onMatchFillDark) : foreground(in: appearance)
         })
     }
 
@@ -62,7 +85,7 @@ enum AccentColor: String, CaseIterable {
         return color
     }
 
-    /// 小さいウインドウの次の番号の色（小さいウインドウは今のまま、の決定なので、一致した文字の matchText とは別）。
+    /// 小さいウインドウの次の番号の色（小さいウインドウは今のまま、の決定なので、一致した文字の matchFill とは別）。
     /// ダークでは暗い背景に沈む色（藍・江戸紫・臙脂など）があるので、白を 40% 混ぜて明るくする。
     /// ライトでは明るめの色（青磁・抹茶など）がウインドウの灰色の背景で読みにくいので、
     /// コントラストが 4.5 以上になるまで黒を混ぜる
@@ -98,18 +121,17 @@ enum AccentColor: String, CaseIterable {
 
     /// アクセントカラーの上に載せる文字の色
     var foreground: Color {
+        Color(nsColor: NSColor(name: nil) { appearance in foreground(in: appearance) })
+    }
+
+    private func foreground(in appearance: NSAppearance) -> NSColor {
         guard let tone else {
             // システムのアクセントカラーは利用者が変えられる（黄色など明るい色もある）ので、明るさで白か黒を選ぶ
-            return Color(nsColor: NSColor(name: nil) { appearance in
-                let accent = Self.systemAccentNSColor(in: appearance)
-                let luminance = 0.2126 * accent.redComponent + 0.7152 * accent.greenComponent + 0.0722 * accent.blueComponent
-                return luminance > 0.6 ? NSColor(hex: 0x1D1D1F) : .white
-            })
+            let accent = Self.systemAccentNSColor(in: appearance)
+            let luminance = 0.2126 * accent.redComponent + 0.7152 * accent.greenComponent + 0.0722 * accent.blueComponent
+            return luminance > 0.6 ? NSColor(hex: 0x1D1D1F) : .white
         }
-        let darkText = tone.darkTextOnDark
-        return Color(nsColor: NSColor(name: nil) { appearance in
-            Self.isDark(appearance) && darkText ? NSColor(hex: 0x1D1D1F) : .white
-        })
+        return Self.isDark(appearance) && tone.darkTextOnDark ? NSColor(hex: 0x1D1D1F) : .white
     }
 
     static func isDark(_ appearance: NSAppearance) -> Bool {
