@@ -20,6 +20,8 @@ final class SettingsModel: ObservableObject {
         var historyChanges: AnyPublisher<Void, Never>
         /// 小さいウインドウの位置か文字の大きさが変わった
         var queueHUDChanged: () -> Void
+        /// URL のタイトルと画像を取りに行くスイッチが変わった（オフなら取っている途中のものもやめる）
+        var fetchesLinkPreviewsChanged: (Bool) -> Void
         var resetHistoryWindowFrame: () -> Void
         /// 履歴ウインドウの位置と大きさが標準のままか
         var isHistoryWindowStandard: () -> Bool
@@ -115,6 +117,7 @@ final class SettingsModel: ObservableObject {
     func setFetchesLinkPreviews(_ value: Bool) {
         fetchesLinkPreviews = value
         AppSettings.fetchesLinkPreviews = value
+        actions.fetchesLinkPreviewsChanged(value)
     }
 
     func addExcludedApp(bundleID: String) {
