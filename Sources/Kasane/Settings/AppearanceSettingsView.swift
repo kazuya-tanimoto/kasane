@@ -6,7 +6,7 @@ import SwiftUI
 struct AppearanceSettingsView: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject var appearance: AppearanceSettings
-    /// 「標準に戻す」を押したあとの案内
+    /// 「標準に戻す」を押したあとの案内。また動かすまで出す
     @State private var didResetWindow = false
 
     init(model: SettingsModel) {
@@ -169,7 +169,8 @@ struct AppearanceSettingsView: View {
                     ))
                 }
                 SettingsDivider()
-                SettingsRow(title: "位置と大きさ", description: didResetWindow ? "次に開くときは、標準の位置と大きさで表示されます" : nil) {
+                // 戻したあとにまた動かしたときは、案内を消す（ボタンが「標準に戻す」に戻るのに、案内だけ残らないように）
+                SettingsRow(title: "位置と大きさ", description: didResetWindow && model.isHistoryWindowStandard ? "次に開くときは、標準の位置と大きさで表示されます" : nil) {
                     if model.isHistoryWindowStandard {
                         Text("標準のままです").foregroundStyle(.secondary)
                     } else {
