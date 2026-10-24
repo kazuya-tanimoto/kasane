@@ -356,21 +356,25 @@ private extension Color {
 }
 
 /// ペーストなどの操作ボタン。
-/// ペーストも他と同じ色にし、太字で区別する（色付きのボタンは「選ばれている」ように見えるため。2026-10-18 決定）
+/// ペーストだけをアクセントで塗り、太字も残す。塗られたボタンが 1 つだけなら、Mac の「⏎ で押されるボタン」と同じに見える
+/// （2026-10-22 決定。accent-usage-2026-10-22.md §4。色の見分けにくい人にも太字で主な操作と分かるように）
 private struct ActionStyle: ButtonStyle {
     var isPrimary = false
     /// ピン留め中や ⌘I の詳細がオンのとき、絞り込みの選択中と同じく白く浮かせる
     var isOn = false
+    @Environment(\.kasaneAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .foregroundStyle(isOn ? Color.raisedText : .primary)
+            .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
                 let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-                if isOn {
+                if isPrimary {
+                    shape.fill(accent.color)
+                } else if isOn {
                     RaisedFill(shape: shape)
                 } else {
                     ActionFill(shape: shape)
@@ -436,9 +440,10 @@ private struct ItemListView: View {
     private func row(_ item: ClipSummary) -> some View {
         ItemRow(
             item: item,
+            // 行の入力として渡す（行は HistoryModel を見ていないので、クエリが変わったことを入力の違いで伝える）
+            matches: model.matchRanges(for: item),
             isSelected: model.selectedID == item.id,
-            shortcut: model.shortcutNumber(for: item.id),
-            model: model
+            shortcut: model.shortcutNumber(for: item.id)
         )
         .id(item.id)
         .contentShape(Rectangle())
@@ -488,31 +493,35 @@ private struct SelectionBackground: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous)
-            .fill(isSelected ? (colorScheme == .dark ? Color.white.opacity(0.13) : Color.white) : Color.clear)
+            // ダークは不透明の #3D4047。半透明だと後ろの画面で地の明るさが変わり、一致した文字のコントラストが保てないため
+            // （accent-usage-2026-10-22.md「実装で気をつけること」。今までの白 13% をふつうのダークのガラスに重ねた色とほぼ同じ）
+            .fill(isSelected ? (colorScheme == .dark ? Color(nsColor: NSColor(ContrastFit.darkBackground)) : Color.white) : Color.clear)
             .shadow(color: isSelected && colorScheme == .light ? .black.opacity(0.10) : .clear, radius: 5, y: 2)
     }
 }
 
 private struct ItemRow: View {
     let item: ClipSummary
+    /// 題名の中で、検索の語が当たった文字の位置（UTF-16）
+    let matches: [Range<Int>]
     let isSelected: Bool
     let shortcut: Int?
-    let model: HistoryModel
     @Environment(\.textSize) private var size
+    @Environment(\.kasaneAccent) private var accent
 
     var body: some View {
         HStack(alignment: .top, spacing: size.scaled(10)) {
-            ItemIcon(item: item, model: model)
+            ItemIcon(item: item, isSelected: isSelected)
                 .frame(width: size.scaled(44), height: size.scaled(44))
             VStack(alignment: .leading, spacing: size.scaled(3)) {
-                Text(item.title.isEmpty ? " " : item.title)
+                Text(title)
                     .font(.system(size: size.font(13)))
                     .lineLimit(2)
                     .truncationMode(.tail)
                 HStack(spacing: 6) {
                     Text(item.kind.displayName)
                         .fontWeight(.semibold)
-                        .foregroundStyle(item.kind.tint)
+                        .foregroundStyle(Color.kindGray)
                     Text(subtitle)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -534,6 +543,22 @@ private struct ItemRow: View {
         .background(SelectionBackground(isSelected: isSelected))
     }
 
+    /// 一致した文字の後ろをアクセントの色で塗り、文字を太字にした題名（design/match-highlight-2026-10-24.md）。
+    /// 続けて当たった文字は 1 つの範囲なので、塗りも 1 つの面になる
+    private var title: AttributedString {
+        guard !item.title.isEmpty else { return AttributedString(" ") }
+        var result = AttributedString(item.title)
+        // AppKit と SwiftUI の両方に同じ名前の属性があるので、SwiftUI の属性を型で指定する
+        typealias Attributes = AttributeScopes.SwiftUIAttributes
+        for match in matches {
+            guard let range = Range(NSRange(location: match.lowerBound, length: match.count), in: result) else { continue }
+            result[range][Attributes.BackgroundColorAttribute.self] = accent.matchFill
+            result[range][Attributes.ForegroundColorAttribute.self] = AccentColor.onMatchFill
+            result[range][Attributes.FontAttribute.self] = .system(size: size.font(13), weight: .bold)
+        }
+        return result
+    }
+
     private var subtitle: String {
         let date = Formatters.relative.localizedString(for: item.copiedAt, relativeTo: Date())
         if let app = item.sourceAppName {
@@ -543,40 +568,32 @@ private struct ItemRow: View {
     }
 }
 
-/// 種類の色の四角。画像はサムネイル、それ以外は種類のアイコン（右下にコピー元のアプリ）
+/// 種類のアイコン（右下にコピー元のアプリ）。種類ごとの色はやめ、灰色の形だけにする。
+/// 選んだ行は四角をアクセントで塗り、記号を上に載せる文字の色にする（2026-10-23 決定、accent-usage §3.1 の C）。
+/// ダークでは、四角を一致した文字の塗りと同じ明るさにし、記号を #1D1D1F にする（2026-10-24、match-highlight §4）。
+/// 画像の行も縮小表示は出さず、同じ灰色のアイコンにする（一覧の大きさでは見分けにくく、色のある縮小表示が一致した文字より先に目を引くため。
+/// 縮小画像は作って保存し続けるが、一覧では読まない）
 private struct ItemIcon: View {
     let item: ClipSummary
-    let model: HistoryModel
-    @State private var thumbnail: NSImage?
+    let isSelected: Bool
     @Environment(\.textSize) private var size
+    @Environment(\.kasaneAccent) private var accent
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
-            if item.kind == .image, let thumbnail {
-                Image(nsImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: size.scaled(44), height: size.scaled(44))
-                    .clipShape(RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous))
-            } else {
-                RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous)
-                    .fill(item.kind.tint.opacity(0.18))
-                    .overlay {
-                        Image(systemName: item.kind.symbolName)
-                            .font(.system(size: size.scaled(18), weight: .medium))
-                            .foregroundStyle(item.kind.tint)
-                    }
-            }
+            RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous)
+                .fill(isSelected ? accent.selectedIconFill : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07)))
+                .overlay {
+                    Image(systemName: item.kind.symbolName)
+                        .font(.system(size: size.scaled(18), weight: .medium))
+                        .foregroundStyle(isSelected ? accent.selectedIconSymbol : Color.kindGray)
+                }
             if let icon = AppIconCache.icon(bundleID: item.sourceBundleID) {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: size.scaled(18), height: size.scaled(18))
                     .offset(x: size.scaled(4), y: size.scaled(4))
-            }
-        }
-        .task(id: item.id) {
-            if item.kind == .image {
-                thumbnail = await model.thumbnail(for: item.id)
             }
         }
     }
@@ -612,17 +629,6 @@ extension ClipKind {
         case .url: return "URL"
         case .image: return "画像"
         case .file: return "ファイル"
-        }
-    }
-
-    /// 種類ごとの色（モックと同じ）
-    var tint: Color {
-        switch self {
-        case .text: return Color(red: 0.23, green: 0.51, blue: 0.96)
-        case .richText: return Color(red: 0.55, green: 0.36, blue: 0.96)
-        case .url: return Color(red: 0.08, green: 0.72, blue: 0.65)
-        case .image: return Color(red: 0.98, green: 0.45, blue: 0.09)
-        case .file: return Color(red: 0.58, green: 0.64, blue: 0.72)
         }
     }
 }

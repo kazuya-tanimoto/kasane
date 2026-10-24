@@ -42,7 +42,7 @@ struct AppearanceSettingsView: View {
         SettingsBox {
             VStack(alignment: .leading, spacing: 6) {
                 Text("アクセントカラー").font(.system(size: SettingsFont.item))
-                SettingsCaption("ペーストボタン、検索で一致した文字、FIFO / LIFO の小さいウインドウの印と番号に使います")
+                SettingsCaption("ペーストボタン、選んだ行のアイコン、検索で一致した文字、FIFO / LIFO モード中の小さいウインドウの印と番号に使います")
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 10) {
                     ForEach(AccentColor.allCases, id: \.self) { accent in
                         accentButton(accent)
@@ -282,13 +282,18 @@ private struct AppearanceSample: View {
         let scale = appearance.historyTextSize.ratio
         return VStack(alignment: .leading, spacing: 5) {
             Text("Kasane").font(.system(size: 7, weight: .semibold)).frame(maxWidth: .infinity)
-            RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.08)).frame(height: 10)
-            ForEach(0..<4, id: \.self) { index in
+            // 検索欄に「push」と打ったところ。選んだ行のアイコンと、一致した文字にアクセントを使う（settings-screen §3 外観の見本）
+            Text("push")
+                .font(.system(size: 6.5))
+                .padding(.horizontal, 4)
+                .frame(maxWidth: .infinity, minHeight: 10, alignment: .leading)
+                .background(Color.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 3))
+            ForEach(Array(Self.sampleRows.enumerated()), id: \.offset) { index, row in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.primary.opacity(0.18))
+                        .fill(index == 0 ? appearance.accent.selectedIconFill : Color.primary.opacity(0.18))
                         .frame(width: 8 * scale, height: 8 * scale)
-                    Text(["git push origin main", "会議のメモ", "https://example.com", "見積書.pdf"][index])
+                    Text(sampleTitle(row, scale: scale))
                         .font(.system(size: 7.5 * scale))
                         .lineLimit(1)
                     Spacer(minLength: 0)
@@ -313,6 +318,21 @@ private struct AppearanceSample: View {
         .padding(8)
         .background(glass.clipShape(RoundedRectangle(cornerRadius: 8)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+    }
+
+    private static let sampleRows = ["git push origin main", "git push --tags", "push 通知の設定"]
+
+    /// 見本の行の題名。「push」の後ろをアクセントの色で塗り、太字にする（実物と同じ計算）
+    private func sampleTitle(_ title: String, scale: CGFloat) -> AttributedString {
+        var result = AttributedString(title)
+        typealias Attributes = AttributeScopes.SwiftUIAttributes
+        for match in MatchHighlighter.ranges(query: "push", title: title) {
+            guard let range = Range(NSRange(location: match.lowerBound, length: match.count), in: result) else { continue }
+            result[range][Attributes.BackgroundColorAttribute.self] = appearance.accent.matchFill
+            result[range][Attributes.ForegroundColorAttribute.self] = AccentColor.onMatchFill
+            result[range][Attributes.FontAttribute.self] = .system(size: 7.5 * scale, weight: .bold)
+        }
+        return result
     }
 
     private var queueWindow: some View {

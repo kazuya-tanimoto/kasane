@@ -37,6 +37,8 @@ public struct ClipItem: Codable, Sendable, Hashable, Identifiable, FetchableReco
     public var lastPastedAt: Date?
     public var isPinned: Bool
     public var pinnedAt: Date?
+    /// ファイルの行で、すべてのファイルが画像か（「画像」の絞り込みに入れる。2026-10-23）
+    public var isImageFile: Bool = false
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -72,6 +74,8 @@ public struct ClipSummary: Sendable, Hashable, Identifiable {
     public var pasteCount: Int
     public var isPinned: Bool
     public var pinnedAt: Date?
+    /// ファイルの行で、すべてのファイルが画像か
+    public var isImageFile: Bool
 
     public init(_ item: ClipItem) {
         id = item.id ?? -1
@@ -83,6 +87,7 @@ public struct ClipSummary: Sendable, Hashable, Identifiable {
         pasteCount = item.pasteCount
         isPinned = item.isPinned
         pinnedAt = item.pinnedAt
+        isImageFile = item.isImageFile
     }
 }
 
@@ -112,6 +117,8 @@ public struct Capture: Sendable {
     public var thumbnail: Data?
     public var pixelWidth: Int?
     public var pixelHeight: Int?
+    /// ファイルで、すべてのファイルが画像か（FileKinds.areAllImages）
+    public var isImageFile = false
 
     public init(
         kind: ClipKind,

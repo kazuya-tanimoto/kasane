@@ -19,6 +19,8 @@ enum CaptureBuilder {
                 kind: .file, title: names, text: paths,
                 primaryData: Data(paths.utf8), representations: raw.representations
             )
+            // すべてが画像のファイルなら「画像」の絞り込みにも入れる（行のアイコンと種類の文字は「ファイル」のまま）
+            capture.isImageFile = FileKinds.areAllImages(paths: raw.fileURLs.map(\.path))
         } else if let string = raw.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let kind: ClipKind
             if isWebURL(string) {
