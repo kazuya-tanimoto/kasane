@@ -222,11 +222,14 @@ final class HistoryModel: ObservableObject {
 
     // MARK: - ウインドウからの操作
 
-    /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選ぶ
+    /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選び、一覧を先頭まで戻す
     func prepareForShow() {
         if !query.isEmpty { query = "" }
         if kindFilter != .all { kindFilter = .all }
         selectedID = visible.first?.id
+        // 選択が前から先頭のままだと selectedID の変化でスクロールしないので、毎回先頭まで戻す。
+        // 一覧をスクロールしたまま閉じると、次に開いたときに途中から出ていた（2026-10-24、Kazuya さんの確認）
+        scrollToken += 1
         loadPreview()
         focusToken += 1
     }
