@@ -38,6 +38,12 @@ let package = Package(
             dependencies: ["KasaneCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // 調べ用（PR には入れない）
+        .testTarget(
+            name: "KasaneAppProbeTests",
+            dependencies: ["Kasane", "KasaneCore", "KasaneStore"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         .testTarget(
             name: "KasaneStoreTests",
             dependencies: [
