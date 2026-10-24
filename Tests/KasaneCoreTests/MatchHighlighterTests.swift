@@ -71,7 +71,7 @@ final class MatchHighlighterTests: XCTestCase {
 
     /// 範囲から出した点数は、検索の点数と同じ（fuzzyMatch を範囲と点数に分けても結果が変わらない）
     func testRangeScoreMatchesSearchScore() {
-        let cases = [("gtps", "git push"), ("hstvw", "historyview"), ("gco", "git checkout origin"), ("ab", "a b ab")]
+        let cases = [("gtps", "git push"), ("hstvw", "historyview"), ("gco", "git commit origin"), ("ab", "a b ab")]
         for (query, text) in cases {
             let p = Array(query.utf16), t = Array(text.utf16)
             let hit = FuzzyMatcher.fuzzyMatchRange(p, in: t, maxSpan: p.count * 3)
