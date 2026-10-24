@@ -109,12 +109,14 @@ public struct PrefetchScheduler: Sendable {
     /// 待ちの時間が過ぎた行を順番待ちに入れる
     public mutating func tick(at now: Date) {
         guard isShown else { return }
+        // nextDeadline と同じ「始めた時刻 + 待ち」の時刻で比べる。now から引き算すると、
+        // 0.5 − 0.2 が 0.29999… になるように、ちょうど待ちの時刻でも足りないと出ることがある
         var due: [Int64] = []
-        if let current = selected, now.timeIntervalSince(current.since) >= selectedDwell {
+        if let current = selected, now >= current.since.addingTimeInterval(selectedDwell) {
             due.append(current.id)
         }
         due += visibleSince
-            .filter { now.timeIntervalSince($0.value) >= visibleDwell }
+            .filter { now >= $0.value.addingTimeInterval(visibleDwell) }
             .sorted { $0.value < $1.value }
             .map(\.key)
         for id in due where !handled.contains(id) && !inFlight.contains(id) {
