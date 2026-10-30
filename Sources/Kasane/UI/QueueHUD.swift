@@ -6,7 +6,8 @@ import SwiftUI
 
 /// FIFO / LIFO 中に画面の端に出す帯（小さいウインドウ。2026-10-30 決定。requirements.md §3.6）。
 ///
-/// - 設定の「左 / 右」の側の画面の端にくっつけ、メニューバーの下から Dock の上まで出す。すき間なし、角丸なし
+/// - 設定の「左 / 右」の側の画面の端にくっつけ、メニューバーの下から画面の下まで出す。すき間なし、角丸なし。
+///   Dock は避けずにかぶせる（帯の段 .statusBar は Dock の段より手前）
 /// - 中は 1 件ずつのカード（`QueueCardContent`）。件数で大きさは変えず、入りきらない分は中をスクロールする
 /// - 内側の端をドラッグして幅を変え、変えた幅を覚える（`QueueBandLayout`）
 /// - 出すときと消すときだけ、画面の端から約 0.2 秒滑らせる。「視差効果を減らす」がオンならフェードだけ
@@ -46,7 +47,7 @@ final class QueueHUDController {
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
             self?.applyBlur(radius)
         }
-        // 画面の構成（Dock の位置、解像度、画面の抜き差し）が変わったら置き直す
+        // 画面の構成（メニューバー、解像度、画面の抜き差し）が変わったら置き直す
         screenObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
             object: nil,
@@ -101,7 +102,8 @@ final class QueueHUDController {
     // MARK: 置き場所
 
     private var screenFrame: CGRect? {
-        (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return nil }
+        return QueueBandLayout.bandArea(screenFrame: screen.frame, visibleFrame: screen.visibleFrame)
     }
 
     private var currentWidth: CGFloat {

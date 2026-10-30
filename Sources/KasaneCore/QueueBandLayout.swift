@@ -6,7 +6,8 @@ import CoreGraphics
 
 /// FIFO / LIFO の小さいウインドウ（画面の端の帯）の大きさと位置（2026-10-30 決定。requirements.md §3.6）。
 ///
-/// - 設定の「左 / 右」の側の画面の端にくっつけ、使える範囲（メニューバーと Dock を除く）の上から下まで出す
+/// - 設定の「左 / 右」の側の画面の端にくっつけ、メニューバーの下から画面の下まで出す。Dock は避けずにかぶせる
+///   （2026-10-30 Kazuya さんが決定「Dockにかぶせていいです」）
 /// - 幅は内側の端のドラッグで変える。12pt のときの幅で覚え、文字の大きさの倍率を掛けて出す
 /// - 最小（と初期）は今までの幅、最大はカードの本文が 1 行に全角 40 字になる幅（WCAG 1.4.8「40 if CJK」）
 public enum QueueBandLayout {
@@ -54,7 +55,18 @@ public enum QueueBandLayout {
         return clamp(wanted, fontSize: fontSize, screen: screen)
     }
 
-    /// 出したときの枠。`screen` は NSScreen.visibleFrame
+    /// 帯を出せる範囲。画面全体からメニューバー（とカメラの出っ張り）の分だけを除く。
+    /// Dock の分は除かない（visibleFrame は Dock の分も除くので、上端だけを使う）
+    public static func bandArea(screenFrame: CGRect, visibleFrame: CGRect) -> CGRect {
+        CGRect(
+            x: screenFrame.minX,
+            y: screenFrame.minY,
+            width: screenFrame.width,
+            height: visibleFrame.maxY - screenFrame.minY
+        )
+    }
+
+    /// 出したときの枠。`screen` は `bandArea`
     public static func frame(side: HUDSide, width: CGFloat, screen: CGRect) -> CGRect {
         let x: CGFloat
         switch side {

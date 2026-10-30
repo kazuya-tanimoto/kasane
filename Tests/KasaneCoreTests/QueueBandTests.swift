@@ -6,8 +6,8 @@ import XCTest
 @testable import KasaneCore
 
 final class QueueBandLayoutTests: XCTestCase {
-    /// MacBook Air 13 インチの使える範囲（メニューバーと下の Dock を除いた形）
-    private let screen = CGRect(x: 0, y: 70, width: 1470, height: 856)
+    /// 帯を出せる範囲（MacBook Air 13 インチの画面からメニューバーを除いた形）
+    private let screen = CGRect(x: 0, y: 0, width: 1470, height: 926)
     private let standard: CGFloat = 13
 
     func testFillsTheScreenHeightOnTheChosenSide() {
@@ -21,11 +21,22 @@ final class QueueBandLayoutTests: XCTestCase {
         XCTAssertEqual(left.height, screen.height)
     }
 
-    /// 同じ端に Dock があるときは、使える範囲がその分狭くなっているので、Dock の内側に出る
-    func testStaysInsideADockOnTheSameSide() {
-        let dockOnRight = CGRect(x: 0, y: 0, width: 1400, height: 926)
-        let frame = QueueBandLayout.frame(side: .right, width: 282, screen: dockOnRight)
-        XCTAssertEqual(frame.maxX, 1400)
+    /// Dock は避けずにかぶせるので、Dock が下でも右でも、画面の端と画面の下まで届く。上はメニューバーの下まで。
+    /// 値は CI の Mac（1024×768、メニューバー 31pt）で測った visibleFrame
+    func testCoversTheDockAndReachesTheScreenBottom() {
+        let full = CGRect(x: 0, y: 0, width: 1024, height: 768)
+        for visible in [
+            CGRect(x: 0, y: 63, width: 1024, height: 674), // Dock が下
+            CGRect(x: 0, y: 0, width: 974, height: 737), // Dock が右
+            CGRect(x: 0, y: 0, width: 1024, height: 737), // Dock を自動で隠す
+        ] {
+            let area = QueueBandLayout.bandArea(screenFrame: full, visibleFrame: visible)
+            XCTAssertEqual(area, CGRect(x: 0, y: 0, width: 1024, height: 737))
+            let frame = QueueBandLayout.frame(side: .right, width: 282, screen: area)
+            XCTAssertEqual(frame.maxX, 1024)
+            XCTAssertEqual(frame.minY, 0)
+            XCTAssertEqual(frame.maxY, 737)
+        }
     }
 
     func testInitialWidthIsThePreviousWidth() {
