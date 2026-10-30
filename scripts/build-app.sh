@@ -18,9 +18,10 @@ cd "$ROOT"
 
 # 指定がなければ「Kasane Dev」を探す。付け忘れで ad-hoc になり、アクセシビリティの許可が外れるのを防ぐ。
 # 信頼されていない証明書もここでは「ある」とみなし、下の確認でエラーにする（黙って ad-hoc にすると、許可が外れた理由が分からなくなる）
+# pipefail の下で grep -q が先に読み終えると security が SIGPIPE で失敗しうるので、先に変数に入れる
 if [ -z "$SIGN_IDENTITY" ]; then
-  if command -v security >/dev/null \
-    && security find-identity -p codesigning 2>/dev/null | grep -qF "\"$DEV_IDENTITY\""; then
+  found="$(command -v security >/dev/null && security find-identity -p codesigning 2>/dev/null || true)"
+  if grep -qF "\"$DEV_IDENTITY\"" <<<"$found"; then
     SIGN_IDENTITY="$DEV_IDENTITY"
   else
     SIGN_IDENTITY="-"
