@@ -91,8 +91,9 @@ final class HistoryModel: ObservableObject {
     @Published private(set) var scrollToken = 0
     /// 次のスクロールを、行の動きと一緒に動かすときの動き（なければすぐ送る）
     private(set) var scrollAnimation: Animation?
-    /// 「視差効果を減らす」がオンで並びを入れ替えたときに増やす。一覧を透明から戻して、入れ替わったことを見せる
-    @Published private(set) var fadeToken = 0
+    /// 「視差効果を減らす」がオンで並びを入れ替えたとき、変わった所の行（動いた行、消した行の場所に来た行）の番号を増やす。
+    /// その行だけを透明から戻して、入れ替わったことを見せる（ほかの行は動かさず、フェードもしない）
+    @Published private(set) var fadeTokens: [Int64: Int] = [:]
     @Published private(set) var isLoaded = false
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
@@ -270,7 +271,6 @@ final class HistoryModel: ObservableObject {
         case .fade:
             pinned = pinnedList
             others = otherList
-            fadeToken += 1
         case nil:
             pinned = pinnedList
             others = otherList
@@ -296,11 +296,17 @@ final class HistoryModel: ObservableObject {
         selectedID = pinnedList.first?.id ?? otherList.first?.id
     }
 
+    /// 「視差効果を減らす」がオンのとき、変わった所の行を透明から戻す。選択を決めたあとで呼ぶ
+    private func fadeChangedRow(_ id: Int64?) {
+        guard let id, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        fadeTokens[id, default: 0] += 1
+    }
+
     /// 削除・ピン留め・解除で並びが変わるときの見せ方（requirements.md §3.5、design/row-motion-login-implementation-2026-10-30.md §2）
     private enum RowMotion {
         /// 行を新しい位置まで約 0.2 秒で動かす
         case move(Animation)
-        /// 「視差効果を減らす」がオン。行は動かさず、一覧をフェードで戻す
+        /// 「視差効果を減らす」がオン。行は動かさず、一覧も送るだけ（変わった所の行のフェードは fadeChangedRow）
         case fade
 
         /// 設定は操作のたびに読む（変えた直後から効くように）
@@ -313,6 +319,8 @@ final class HistoryModel: ObservableObject {
 
     /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選び、一覧を先頭まで戻す
     func prepareForShow() {
+        // 前に開いていたときの動きの印が残っていても、開いたときの並びは動かさない
+        pendingMotion = false
         if !query.isEmpty { query = "" }
         if kindFilter != .all { kindFilter = .all }
         selectedID = visible.first?.id
@@ -327,6 +335,8 @@ final class HistoryModel: ObservableObject {
 
     /// 履歴ウインドウを閉じたとき
     func didHide() {
+        // ⌘⏎ のあとすぐ閉じたときなど、閉じている間に届いた並びは動かさない
+        pendingMotion = false
         links.hide()
     }
 
@@ -379,6 +389,7 @@ final class HistoryModel: ObservableObject {
         pendingMotion = true
         scrollsAfterApply = true
         rebuild()
+        fadeChangedRow(id)
     }
 
     func deleteSelection() {
@@ -389,6 +400,8 @@ final class HistoryModel: ObservableObject {
         pendingMotion = true
         remove(ids: [id])
         selectedID = next
+        // 消した行の場所に来た行（次に選ぶ行）を透明から戻す
+        fadeChangedRow(next)
     }
 
     // MARK: - プレビュー

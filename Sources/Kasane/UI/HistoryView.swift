@@ -424,16 +424,6 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(2)
-                // 「視差効果を減らす」がオンで並びが入れ替わったら、行は動かさず、一覧を透明から 0.15 秒で戻す
-                // （requirements.md §3.5。design/row-motion-login-implementation-2026-10-30.md §2.3）
-                .keyframeAnimator(initialValue: 1.0, trigger: model.fadeToken) { content, opacity in
-                    content.opacity(opacity)
-                } keyframes: { _ in
-                    KeyframeTrack {
-                        MoveKeyframe(0)
-                        LinearKeyframe(1, duration: 0.15)
-                    }
-                }
             }
             .scrollIndicators(.automatic)
             .onChange(of: model.selectedID) { _, id in
@@ -473,9 +463,38 @@ private struct ItemListView: View {
         .simultaneousGesture(TapGesture().onEnded {
             model.select(item.id)
         })
-        // 削除で消える行は薄くなり、下の行が詰まる。動きを付けるのは HistoryModel が withAnimation で並びを変えたときだけで、
-        // 検索や絞り込みで行が入れ替わるときは動かない（requirements.md §3.5）
-        .transition(.opacity)
+        // 「視差効果を減らす」がオンで並びが入れ替わったら、変わった所の行だけを透明から 0.15 秒で戻す。ほかの行は動かさない
+        // （requirements.md §3.5。design/row-motion-login-implementation-2026-10-30.md §2.3）
+        .keyframeAnimator(initialValue: 1.0, trigger: model.fadeTokens[item.id] ?? 0) { content, opacity in
+            content.opacity(opacity)
+        } keyframes: { _ in
+            KeyframeTrack {
+                MoveKeyframe(0)
+                LinearKeyframe(1, duration: 0.15)
+            }
+        }
+        // 削除で消える行は、薄くなりながら下から縮み、下の行が上に詰まる。動きを付けるのは HistoryModel が withAnimation で
+        // 並びを変えたときだけで、検索や絞り込みで行が入れ替わるときと、「視差効果を減らす」がオンのときは動かない
+        .transition(.opacity.combined(with: .modifier(active: CollapseFromBottom(visible: 0), identity: CollapseFromBottom(visible: 1))))
+    }
+}
+
+/// 消える行の高さを縮めて見せる（上端を残して、下から隠していく）。文字はつぶさない
+private struct CollapseFromBottom: ViewModifier, Animatable {
+    /// 見えている高さの割合（1 で全部、0 で隠れる）
+    var visible: Double
+
+    var animatableData: Double {
+        get { visible }
+        set { visible = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content.mask(alignment: .top) {
+            GeometryReader { geometry in
+                Rectangle().frame(height: geometry.size.height * visible)
+            }
+        }
     }
 }
 
