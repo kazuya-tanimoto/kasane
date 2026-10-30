@@ -1,7 +1,7 @@
 .PHONY: app run test clean dev-cert
 
-# 自己署名の証明書名。未設定なら ad-hoc 署名（ビルドのたびに権限が外れることがある）
-SIGN_IDENTITY ?= -
+# 署名に使う証明書名。未設定ならキーチェーンの「Kasane Dev」、無ければ ad-hoc（scripts/build-app.sh で決める）
+SIGN_IDENTITY ?=
 
 app:
 	SIGN_IDENTITY="$(SIGN_IDENTITY)" scripts/build-app.sh

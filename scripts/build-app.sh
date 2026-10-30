@@ -1,18 +1,31 @@
 #!/usr/bin/env bash
 # Kasane.app を組み立てる。
 #
-#   scripts/build-app.sh            # release ビルド、ad-hoc 署名
-#   SIGN_IDENTITY="Kasane Dev" scripts/build-app.sh   # 自己署名の証明書で署名（権限が外れにくい）
+#   scripts/build-app.sh            # release ビルド。キーチェーンに「Kasane Dev」があればそれで、なければ ad-hoc で署名
+#   SIGN_IDENTITY="Kasane Dev" scripts/build-app.sh   # 名前を指定して署名（無ければエラー）
+#   SIGN_IDENTITY=- scripts/build-app.sh              # 証明書があっても ad-hoc で署名
 #   CONFIG=debug scripts/build-app.sh
 set -euo pipefail
 
 CONFIG="${CONFIG:-release}"
-SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
+DEV_IDENTITY="Kasane Dev"
 BUNDLE_ID="io.github.kazuya-tanimoto.kasane"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/Kasane.app"
 
 cd "$ROOT"
+
+# 指定がなければ「Kasane Dev」を探す。付け忘れで ad-hoc になり、アクセシビリティの許可が外れるのを防ぐ。
+# 信頼されていない証明書もここでは「ある」とみなし、下の確認でエラーにする（黙って ad-hoc にすると、許可が外れた理由が分からなくなる）
+if [ -z "$SIGN_IDENTITY" ]; then
+  if command -v security >/dev/null \
+    && security find-identity -p codesigning 2>/dev/null | grep -qF "\"$DEV_IDENTITY\""; then
+    SIGN_IDENTITY="$DEV_IDENTITY"
+  else
+    SIGN_IDENTITY="-"
+  fi
+fi
 
 # 証明書が見つからないと codesign は「no identity found」としか言わないので、先に調べて対処を出す
 if [ "$SIGN_IDENTITY" != "-" ]; then
@@ -43,4 +56,8 @@ for bundle in "$BIN_DIR"/*.bundle; do
 done
 
 codesign --force --deep --sign "$SIGN_IDENTITY" --identifier "$BUNDLE_ID" "$APP"
-echo "Built: $APP (signed with: $SIGN_IDENTITY)"
+if [ "$SIGN_IDENTITY" = "-" ]; then
+  echo "Built: $APP (signed with: ad-hoc)"
+else
+  echo "Built: $APP (signed with: $SIGN_IDENTITY)"
+fi

@@ -96,11 +96,13 @@ make run    # build/Kasane.app を作って起動
 
 ad-hoc 署名だとビルドのたびに署名が変わり、アクセシビリティの許可が外れることがあります。自己署名の証明書で署名すると、ビルドし直しても許可が残ります。
 
+`make run` と `make app` は、キーチェーンに証明書「Kasane Dev」があれば自動でそれで署名し、なければ ad-hoc で署名します。どちらで署名したかは、最後の行の `signed with:` に出ます。
+
 証明書はターミナルだけで作れます。最後に画面に出る確認ダイアログで macOS のパスワードを入力します（ターミナルには入力しません）。
 
 ```sh
 make dev-cert
-make run SIGN_IDENTITY="Kasane Dev"
+make run
 ```
 
 キーチェーンアクセスで作る場合は次のとおりです。
@@ -109,11 +111,9 @@ make run SIGN_IDENTITY="Kasane Dev"
 2. 名前を `Kasane Dev`、固有名の種類を「自己署名ルート」、証明書のタイプを「コード署名」にして作成する
 3. 作った証明書をダブルクリックし、「信頼 > コード署名」を「常に信頼」にする
 4. `security find-identity -p codesigning` に `"Kasane Dev"` が出ることを確かめる
-5. その証明書で署名してビルドする
+5. `make run` でビルドする（「Kasane Dev」で自動で署名されます）
 
-```sh
-make run SIGN_IDENTITY="Kasane Dev"
-```
+別の名前の証明書を使うときは `make run SIGN_IDENTITY="証明書の名前"`、証明書があっても ad-hoc にするときは `make run SIGN_IDENTITY=-` とします。
 
 ## 初回起動時の権限
 
