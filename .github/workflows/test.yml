@@ -19,16 +19,7 @@ jobs:
         run: swift --version
       - name: probe
         run: |
-          swift scripts/probe-dock.swift
-          defaults write com.apple.dock autohide -bool true
-          killall Dock; sleep 5
-          echo "--- autohide on"
-          swift scripts/probe-dock.swift
+          swift scripts/probe-dock.swift "dock bottom"
           defaults write com.apple.dock orientation -string right
           killall Dock; sleep 5
-          echo "--- autohide on, right"
-          swift scripts/probe-dock.swift
-          defaults write com.apple.dock autohide -bool false
-          killall Dock; sleep 5
-          echo "--- autohide off, right"
-          swift scripts/probe-dock.swift
+          swift scripts/probe-dock.swift "dock right"
