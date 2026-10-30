@@ -424,6 +424,16 @@ private struct ItemListView: View {
                     }
                 }
                 .padding(2)
+                // 「視差効果を減らす」がオンで並びが入れ替わったら、行は動かさず、一覧を透明から 0.15 秒で戻す
+                // （requirements.md §3.5。design/row-motion-login-implementation-2026-10-30.md §2.3）
+                .keyframeAnimator(initialValue: 1.0, trigger: model.fadeToken) { content, opacity in
+                    content.opacity(opacity)
+                } keyframes: { _ in
+                    KeyframeTrack {
+                        MoveKeyframe(0)
+                        LinearKeyframe(1, duration: 0.15)
+                    }
+                }
             }
             .scrollIndicators(.automatic)
             .onChange(of: model.selectedID) { _, id in
@@ -432,7 +442,12 @@ private struct ItemListView: View {
             }
             .onChange(of: model.scrollToken) {
                 guard let id = model.selectedID else { return }
-                proxy.scrollTo(id)
+                // ピン留めと解除では、行が動くのと一緒に、動いた先まで一覧を送る
+                if let animation = model.scrollAnimation {
+                    withAnimation(animation) { proxy.scrollTo(id) }
+                } else {
+                    proxy.scrollTo(id)
+                }
             }
         }
     }
@@ -458,6 +473,9 @@ private struct ItemListView: View {
         .simultaneousGesture(TapGesture().onEnded {
             model.select(item.id)
         })
+        // 削除で消える行は薄くなり、下の行が詰まる。動きを付けるのは HistoryModel が withAnimation で並びを変えたときだけで、
+        // 検索や絞り込みで行が入れ替わるときは動かない（requirements.md §3.5）
+        .transition(.opacity)
     }
 }
 

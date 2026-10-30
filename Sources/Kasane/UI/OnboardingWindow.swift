@@ -1,4 +1,5 @@
 import AppKit
+import KasaneCore
 import SwiftUI
 
 /// 権限の状態。案内の画面を開いている間は1秒ごとに確認し直す
@@ -30,15 +31,31 @@ final class PermissionState: ObservableObject {
     }
 }
 
+/// 案内の「ログイン時に起動」のチェック（requirements.md §3.8）。閉じたときに、このとおりに設定する
+@MainActor
+final class LoginChoiceState: ObservableObject {
+    @Published var checked = true
+}
+
 @MainActor
 final class OnboardingWindowController: NSObject, NSWindowDelegate {
     private let state = PermissionState()
+    private let login = LoginChoiceState()
     private var window: NSWindow?
     var onClose: (() -> Void)?
 
-    func show() {
+    /// - Parameter hasCompletedOnboarding: 前に案内を閉じたことがあるか。初めてならチェックを付けて出し、
+    ///   許可が外れて出し直すときは今の設定のまま見せる（2026-10-30 決定）
+    func show(hasCompletedOnboarding: Bool) {
+        // 開いている案内をもう一度前に出すときは、使う人が変えたチェックを戻さない
+        if window?.isVisible != true {
+            login.checked = LoginItemChoice.initialValue(
+                hasCompletedOnboarding: hasCompletedOnboarding,
+                currentlyEnabled: LoginItem.isEnabled
+            )
+        }
         if window == nil {
-            let view = OnboardingView(state: state) { [weak self] in self?.window?.close() }
+            let view = OnboardingView(state: state, login: login) { [weak self] in self?.window?.close() }
             let window = NSWindow(contentViewController: NSHostingController(rootView: view))
             window.title = "Kasane の初期設定"
             window.styleMask = [.titled, .closable, .fullSizeContentView]
@@ -56,12 +73,17 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
 
     func windowWillClose(_ notification: Notification) {
         state.stopPolling()
+        // 「はじめる」「あとで設定する」、閉じるボタンのどれで閉じても、チェックのとおりに設定する
+        if let enabled = LoginItemChoice.change(checked: login.checked, currentlyEnabled: LoginItem.isEnabled) {
+            LoginItem.setEnabled(enabled)
+        }
         onClose?()
     }
 }
 
 private struct OnboardingView: View {
     @ObservedObject var state: PermissionState
+    @ObservedObject var login: LoginChoiceState
     var close: () -> Void
 
     var body: some View {
@@ -102,6 +124,8 @@ private struct OnboardingView: View {
                 }
             }
 
+            LoginItemRow(checked: $login.checked)
+
             Text("アプリを作り直したあとに許可が外れた場合は、システム設定で Kasane を一度削除してから追加し直してください。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -124,6 +148,30 @@ private struct OnboardingView: View {
         case .denied: return "拒否されています"
         case .notDetermined: return "まだ設定されていません"
         }
+    }
+}
+
+/// 「ログイン時に起動」の行（モック「初回の案内」）。許可と違って必須の手順ではないので、番号の丸は付けず、
+/// 文字の左端を許可の行の題名にそろえる
+private struct LoginItemRow: View {
+    @Binding var checked: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(isOn: $checked) {
+                Text("ログイン時に起動").font(.headline)
+            }
+            .toggleStyle(.checkbox)
+            // 1 文目は設定画面の一般タブの「ログイン時に起動」の説明と同じ文
+            Text("ログインしたときから、コピーした内容を履歴に残します。あとから設定の「一般」で変えられます。")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.leading, 38)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 }
 
