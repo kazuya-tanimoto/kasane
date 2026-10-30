@@ -9,7 +9,7 @@ import SwiftUI
 /// - 1行目: 検索欄
 /// - 2行目: 種類の絞り込み
 /// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
-/// - 一番下: 選んだ項目への操作ボタン
+/// - 右下: 選んだ項目への操作ボタン。一覧とプレビューの上に浮く Liquid Glass の帯
 ///
 /// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
@@ -17,6 +17,8 @@ struct HistoryView: View {
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    /// 右下に浮く操作ボタンの帯の高さ。一覧とプレビューの下端を、この分だけ帯に隠れない所まで送れるようにする
+    @State private var actionBarHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,8 +29,10 @@ struct HistoryView: View {
                 .padding(.bottom, 12)
             HStack(spacing: 12) {
                 ItemListView(model: model)
+                    .safeAreaPadding(.bottom, actionBarClearance)
                     .frame(width: appearance.historyTextSize.scaled(350))
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
+                    .safeAreaPadding(.bottom, actionBarClearance)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -37,8 +41,14 @@ struct HistoryView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.bottom, Self.contentBottomPadding)
+        }
+        // 帯は一覧とプレビューの上に浮かせ、下の行はガラス越しに透けて見える（requirements.md §3.3、2026-10-30 決定）
+        .overlay(alignment: .bottomTrailing) {
             ActionBar(model: model)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionBarHeight = $0 }
+                .padding(.trailing, ActionBar.margin)
+                .padding(.bottom, ActionBar.margin)
         }
         .frame(
             minWidth: minSize.width, maxWidth: .infinity,
@@ -51,6 +61,18 @@ struct HistoryView: View {
         .onChange(of: model.focusToken) {
             searchFocused = true
         }
+    }
+
+    /// 一覧とプレビューの下の余白（ウインドウの下端から）
+    private static let contentBottomPadding: CGFloat = 12
+    /// 帯と、その上に来る行やプレビューの文字との間
+    private static let actionBarGap: CGFloat = 6
+
+    /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
+    /// スクロールする所は、いちばん下までスクロールすれば帯の上に出る。↓ で選んだ行も、帯に隠れない所まで送る
+    private var actionBarClearance: CGFloat {
+        guard actionBarHeight > 0 else { return 0 }
+        return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.actionBarGap)
     }
 
     private var minSize: NSSize {
@@ -133,21 +155,24 @@ private struct Toolbar: View {
     }
 }
 
-// MARK: - 操作ボタン（一番下の帯）
+// MARK: - 操作ボタン（右下に浮く帯）
 
 /// 選んだ項目への操作ボタン。上の段（探す）と場所を分け、絞り込みのボタンと取り違えにくくする。
 /// ピン留めと削除の入口もここに置く（右クリックのメニューは作らない。2026-10-18 決定）
+///
+/// 6 つを 1 本の両端が丸い Liquid Glass の帯にまとめ、ウインドウの右下に浮かせる（requirements.md §3.3、2026-10-30 決定）。
+/// ガラスの見え方は Mac のシステム設定（外観の Liquid Glass、透明度を下げる）に従い、Kasane の不透明度とぼかしは効かない。
+/// ペーストだけはガラスにせず、アクセントの色で塗る（ガラスに色を付けると、透けて設定の色からずれるため）
 private struct ActionBar: View {
+    /// ウインドウの下と右からの間
+    static let margin: CGFloat = 10
+
     @ObservedObject var model: HistoryModel
-    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var tooltips = TooltipState()
 
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
-        HStack(spacing: 6) {
-            // 空いている所をつかんでもウインドウを動かせる
-            WindowDragArea()
-                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 26, maxHeight: 26)
+        HStack(spacing: 4) {
             Button("ペースト ⏎") { model.activateSelection(.paste) }
                 .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
@@ -184,15 +209,8 @@ private struct ActionBar: View {
             .buttonStyle(ActionStyle(isOn: model.showsDetails))
             .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 16)
-        // 上端の線は背景に置く（手前に置くと、ボタンの上に出す説明を横切る）
-        .background(alignment: .top) {
-            Rectangle()
-                .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
-                .frame(height: 1)
-        }
-        .background(WindowDragArea())
+        .padding(4)
+        .glassEffect(.regular, in: Capsule())
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
     }
@@ -357,40 +375,43 @@ private extension Color {
 
 /// ペーストなどの操作ボタン。
 /// ペーストだけをアクセントで塗り、太字も残す。塗られたボタンが 1 つだけなら、Mac の「⏎ で押されるボタン」と同じに見える
-/// （2026-10-22 決定。accent-usage-2026-10-22.md §4。色の見分けにくい人にも太字で主な操作と分かるように）
+/// （2026-10-22 決定。accent-usage-2026-10-22.md §4。色の見分けにくい人にも太字で主な操作と分かるように）。
+/// ほかのボタンは帯のガラスの上に文字だけを置き、マウスを載せた間だけ薄く塗る。形は帯に合わせて両端を丸くする
 private struct ActionStyle: ButtonStyle {
     var isPrimary = false
     /// ピン留め中や ⌘I の詳細がオンのとき、絞り込みの選択中と同じく白く浮かせる
     var isOn = false
-    @Environment(\.kasaneAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
+        ActionButtonBody(configuration: configuration, isPrimary: isPrimary, isOn: isOn)
+    }
+}
+
+private struct ActionButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let isPrimary: Bool
+    let isOn: Bool
+    @State private var isHovered = false
+    @Environment(\.kasaneAccent) private var accent
+
+    var body: some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
-                let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
                 if isPrimary {
-                    shape.fill(accent.color)
+                    Capsule().fill(accent.color)
                 } else if isOn {
-                    RaisedFill(shape: shape)
-                } else {
-                    ActionFill(shape: shape)
+                    RaisedFill(shape: Capsule())
+                } else if isHovered {
+                    Capsule().fill(Color.primary.opacity(0.08))
                 }
             }
+            .contentShape(Capsule())
+            .onHover { isHovered = $0 }
             .opacity(configuration.isPressed ? 0.7 : 1)
-    }
-}
-
-/// 操作ボタンのふだんの背景（ライトは黒 7%、ダークは白 12%）
-private struct ActionFill<S: Shape>: View {
-    let shape: S
-    @Environment(\.colorScheme) private var colorScheme
-
-    var body: some View {
-        shape.fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07))
     }
 }
 
