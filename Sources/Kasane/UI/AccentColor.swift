@@ -52,23 +52,6 @@ enum AccentColor: String, CaseIterable {
         NSColor(AccentColor.isDark(appearance) ? ContrastFit.onMatchFillDark : ContrastFit.onMatchFillLight)
     })
 
-    /// 選んだ行のアイコンの四角の色。ライトはアクセントの色、ダークは一致した文字の塗りと同じ色
-    /// （ダークでアクセントの色のままだと、藍・臙脂などは行の地との差が 2 前後で、選んでいる行が分かりにくいため。
-    /// design/match-highlight-2026-10-24.md §4）
-    var selectedIconFill: Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            if Self.isDark(appearance) { return matchFill(in: appearance) }
-            return tone.map { NSColor($0.light) } ?? Self.systemAccentNSColor(in: appearance)
-        })
-    }
-
-    /// 選んだ行のアイコンの記号の色。ライトはアクセントの上の文字の色、ダークは #1D1D1F
-    var selectedIconSymbol: Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            Self.isDark(appearance) ? NSColor(ContrastFit.onMatchFillDark) : foreground(in: appearance)
-        })
-    }
-
     /// Mac の設定のアクセントカラー。描いている appearance（ライト / ダーク）での色を読む
     /// （provider の中で、そのときの描画の appearance が渡されたものと同じとは限らないため）
     private static func systemAccent(in appearance: NSAppearance) -> SRGBColor {

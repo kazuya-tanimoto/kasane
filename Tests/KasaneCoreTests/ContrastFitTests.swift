@@ -90,9 +90,6 @@ final class ContrastFitTests: XCTestCase {
                 // 塗りの上の文字と塗り: 4.5 以上（コントラストを上げるがオンなら 7.0 以上）
                 XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillLight, lightFill), textTarget, "\(name) ライト 塗りの上の文字")
                 XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillDark, darkFill), textTarget, "\(name) ダーク 塗りの上の文字")
-                // ダークの選んだ行の四角（塗りと同じ色）と行の地: 3.0 以上、上の記号（#1D1D1F）: 4.5 以上
-                XCTAssertGreaterThanOrEqual(ContrastFit.contrast(darkFill, ContrastFit.darkBackground), 3.0, "\(name) ダーク 四角と地")
-                XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillDark, darkFill), 4.5, "\(name) ダーク 四角の記号")
             }
         }
     }

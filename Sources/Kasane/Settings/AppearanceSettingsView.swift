@@ -291,7 +291,7 @@ private struct AppearanceSample: View {
             ForEach(Array(Self.sampleRows.enumerated()), id: \.offset) { index, row in
                 HStack(spacing: 4) {
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(index == 0 ? appearance.accent.selectedIconFill : Color.primary.opacity(0.18))
+                        .fill(index == 0 ? appearance.accent.color : Color.primary.opacity(0.18))
                         .frame(width: 8 * scale, height: 8 * scale)
                     Text(sampleTitle(row, scale: scale))
                         .font(.system(size: 7.5 * scale))

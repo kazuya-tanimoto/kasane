@@ -583,11 +583,11 @@ private struct ItemIcon: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
             RoundedRectangle(cornerRadius: size.scaled(9), style: .continuous)
-                .fill(isSelected ? accent.selectedIconFill : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07)))
+                .fill(isSelected ? accent.color : (colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07)))
                 .overlay {
                     Image(systemName: item.kind.symbolName)
                         .font(.system(size: size.scaled(18), weight: .medium))
-                        .foregroundStyle(isSelected ? accent.selectedIconSymbol : Color.kindGray)
+                        .foregroundStyle(isSelected ? accent.foreground : Color.kindGray)
                 }
             if let icon = AppIconCache.icon(bundleID: item.sourceBundleID) {
                 Image(nsImage: icon)
