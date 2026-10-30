@@ -572,7 +572,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 終わったら Wi-Fi をオンに戻してください。
 
-## 15. FIFO / LIFO の小さいウインドウの帯とカード（2026-10-30 追加）
+## 16. FIFO / LIFO の小さいウインドウの帯とカード（2026-10-30 追加）
 
 見え方と手で触る所だけです。帯の位置と幅の計算、カードに何を出すかは、自動テストで確かめています。
 
