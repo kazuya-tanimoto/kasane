@@ -216,6 +216,7 @@ private struct ActionBar: View {
         }
         .padding(4)
         .glassEffect(.regular, in: Capsule())
+        .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
     }
@@ -398,6 +399,7 @@ private struct ActionButtonBody: View {
     let isOn: Bool
     @State private var isHovered = false
     @Environment(\.kasaneAccent) private var accent
+    @Environment(\.actionHoverReset) private var hoverReset
 
     var body: some View {
         configuration.label
@@ -416,7 +418,21 @@ private struct ActionButtonBody: View {
             }
             .contentShape(Capsule())
             .onHover { isHovered = $0 }
+            // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに塗りを消す
+            .onChange(of: hoverReset) { isHovered = false }
             .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+/// 履歴ウインドウを開き直すたびに変わる値（`HistoryModel.focusToken`）。操作ボタンのマウスの塗りを消すのに使う
+private struct ActionHoverResetKey: EnvironmentKey {
+    static let defaultValue = 0
+}
+
+private extension EnvironmentValues {
+    var actionHoverReset: Int {
+        get { self[ActionHoverResetKey.self] }
+        set { self[ActionHoverResetKey.self] = newValue }
     }
 }
 
