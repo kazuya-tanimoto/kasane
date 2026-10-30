@@ -163,7 +163,7 @@ private struct LoginItemRow: View {
             }
             .toggleStyle(.checkbox)
             // 1 文目は設定画面の一般タブの「ログイン時に起動」の説明と同じ文
-            Text("ログインしたときから、コピーした内容を履歴に残します。あとから設定の「一般」で変えられます。")
+            Text("ログインすると自動で起動し、コピーした内容を履歴に残します。設定の「一般」からいつでも変えられます。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
