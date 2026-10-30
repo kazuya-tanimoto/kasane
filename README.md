@@ -89,7 +89,8 @@ fzf と同じ考え方のあいまい検索です。
 git clone https://github.com/kazuya-tanimoto/kasane.git
 cd kasane
 make test   # ユニットテスト
-make run    # build/Kasane.app を作って起動
+make run    # /Applications/Kasane.app に入れて起動（今ある Kasane.app は置き換わる。履歴と設定は残る）
+make app    # build/Kasane.app を作るだけ
 ```
 
 ### 権限が外れないようにする（開発時）
