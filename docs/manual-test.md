@@ -574,7 +574,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 ## 17. 履歴ウインドウの右下に浮くボタンの帯（Liquid Glass、2026-10-30 追加）
 
-帯の位置・ペーストの色・設定の説明の文は、自動で確かめています。
+帯の位置・ペーストの色・設定の説明の文は、コードで決まっているので見なくてよいです。
 
 準備:
 

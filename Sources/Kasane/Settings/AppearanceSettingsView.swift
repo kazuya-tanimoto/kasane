@@ -98,7 +98,7 @@ struct AppearanceSettingsView: View {
             }
             // 帯のボタンは Liquid Glass で、この 2 つの設定が効かない。使う人が設定と見え方の違いに迷わないように書く
             // （requirements.md §3.3、2026-10-30 Kazuya さん「こういうのは一般人はわかんないんですよ。…明記しておいてくださいね。」）
-            SettingsCaption("履歴ウインドウの右下に浮いている「コピー ⌘⏎」などのボタンには効きません。ボタンの透け方は Mac のシステム設定に従います")
+            SettingsCaption("この設定は、履歴ウインドウの右下の「コピー ⌘⏎」などのボタンには効きません。ボタンの透け方は Mac のシステム設定に従います。")
                 .padding(.horizontal, 4)
             SettingsBox {
                 sliderRow(
