@@ -596,7 +596,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 準備: システム設定の「デスクトップと Dock」で、Dock の位置が「下」か見る。違えば「下」にする。
 
-- [ ] ⌥⌘F で始める → 帯が Dock の上で止まらずに画面の下まで届き、Dock と重なる所では帯が手前に出る。⌥⌘F で終える（Dock の位置を変えたなら元に戻す）
+- [ ] ⌥⌘F で始める → 帯が Dock の上で止まらずに画面の下まで届き、Dock と重なる所では帯が手前に出る（Dock が帯の所まで横に伸びていなければ、画面の下まで届けば OK）。⌥⌘F で終える（Dock の位置を変えたなら元に戻す）
 
 ### カード
 
