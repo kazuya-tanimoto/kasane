@@ -737,7 +737,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
    ```
 
 5. 下のコマンドで、いまビルドした Kasane を起動する
-   - Spotlight や Dock からは開かないでください。/Applications に前の Kasane があると、そちらが開きます。
+   - Spotlight や Dock からは開かないでください。/Applications に前の Kasane があると、そちらが開くことがあります。
 
    ```
    open ~/src/kasane/build/Kasane.app
