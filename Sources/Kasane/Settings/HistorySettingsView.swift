@@ -46,7 +46,7 @@ struct HistorySettingsView: View {
                     SettingsDivider()
                     SettingsRow(
                         title: "URL のタイトルと画像を表示",
-                        description: "履歴ウインドウを開くと、見えている URL のページに自動でアクセスします。パスワード再設定など、1 回限りのリンクは無効になることがあります"
+                        description: "履歴ウインドウで見えている URL と、FIFO / LIFO モード中にコピーした URL のページに、自動でアクセスします。パスワード再設定など、1 回限りのリンクは無効になることがあります"
                     ) {
                         Toggle("URL のタイトルと画像を表示", isOn: Binding(
                             get: { model.fetchesLinkPreviews },
