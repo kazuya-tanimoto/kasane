@@ -19,3 +19,5 @@ jobs:
         run: swift --version
       - name: アプリをビルド
         run: swift build --product Kasane
+      - name: probe
+        run: swift test --filter GlassProbeTests 2>&1 | grep -E "PROBE|error:|passed|failed"
