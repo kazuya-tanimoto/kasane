@@ -124,7 +124,7 @@ public enum ContrastFit {
         return nil
     }
 
-    /// 一致した文字の後ろに敷く塗りの色。ダークの選んだ行のアイコンの四角もこの色
+    /// 一致した文字の後ろに敷く塗りの色
     public static func matchFill(_ accent: SRGBColor, dark: Bool, increasedContrast: Bool) -> SRGBColor {
         fitLightness(
             accent,
