@@ -727,7 +727,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 1. 設定の「一般」で、「ログイン時に起動」がオンかオフかを覚えておく
 2. 「ログイン時に起動」をオフにする
-3. Kasane を終了する
+3. メニューバーの Kasane のアイコンから「Kasane を終了」を選ぶ
 4. ターミナル（fish）で、下のコマンドを流す
    - 初めて起動したときの案内を、もう一度出すためです。
    - ほかの設定と履歴は消えません。
@@ -736,11 +736,16 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
    defaults delete io.github.kazuya-tanimoto.kasane hasCompletedOnboarding
    ```
 
-5. Kasane を起動する
+5. 下のコマンドで、いまビルドした Kasane を起動する
+   - Spotlight や Dock からは開かないでください。/Applications に前の Kasane があると、そちらが開きます。
+
+   ```
+   open ~/src/kasane/build/Kasane.app
+   ```
 
 - [ ] チェックを付けたまま、案内の下のボタン（「はじめる」か「あとで設定する」）で閉じる → 設定の「一般」で「ログイン時に起動」がオン
 
-**準備**: Kasane を終了し、上のコマンドをもう一度流して、Kasane を起動する。
+**準備**: 準備の 3〜5 をもう一度する。
 
 - [ ] 案内の「ログイン時に起動」のチェックを外し、左上の閉じるボタンで閉じる → 設定の「一般」で「ログイン時に起動」がオフ
 
