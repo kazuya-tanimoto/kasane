@@ -50,6 +50,7 @@ public enum LinkPreviewPolicy {
 /// - 開いている間に一度入れた行は、もう一度入れない（取り直しが要るかは、取りに行く前に保存した日時で決める）
 /// - 閉じたら順番待ちを空にする。開き直したら、見えている行の待ちを始め直す
 ///   （履歴ウインドウは閉じても画面を持ったまま隠すだけなので、開き直しても「見えた」が来ないことがあるため）
+/// - FIFO / LIFO 中にキューへ入った行は、待たずにすぐ取る（request）。履歴ウインドウを閉じても残し、見えている行より先に取る
 public struct PrefetchScheduler: Sendable {
     public let visibleDwell: TimeInterval
     public let selectedDwell: TimeInterval
@@ -61,6 +62,8 @@ public struct PrefetchScheduler: Sendable {
     private(set) var selected: (id: Int64, since: Date)?
     private(set) var queue: [Int64] = []
     public private(set) var inFlight: Set<Int64> = []
+    /// すぐ取る行（FIFO / LIFO 中にキューへ入った URL。2026-10-30 決定）。閉じても空にしない
+    private(set) var requested: [Int64] = []
     /// 開いている間に順番待ちに入れた行
     private(set) var handled: Set<Int64> = []
 
@@ -106,6 +109,14 @@ public struct PrefetchScheduler: Sendable {
         selected = id.map { ($0, now) }
     }
 
+    /// 見えるのを待たずに取る行に入れる。取っている途中か、もう入っていれば何もしない
+    public mutating func request(_ id: Int64) {
+        guard !inFlight.contains(id), !requested.contains(id) else { return }
+        queue.removeAll { $0 == id }
+        handled.insert(id)
+        requested.append(id)
+    }
+
     /// 待ちの時間が過ぎた行を順番待ちに入れる
     public mutating func tick(at now: Date) {
         guard isShown else { return }
@@ -119,7 +130,7 @@ public struct PrefetchScheduler: Sendable {
             .filter { now >= $0.value.addingTimeInterval(visibleDwell) }
             .sorted { $0.value < $1.value }
             .map(\.key)
-        for id in due where !handled.contains(id) && !inFlight.contains(id) {
+        for id in due where !handled.contains(id) && !inFlight.contains(id) && !requested.contains(id) {
             handled.insert(id)
             queue.append(id)
         }
@@ -138,11 +149,11 @@ public struct PrefetchScheduler: Sendable {
         return times.min()
     }
 
-    /// 同時に取る数の空きの分だけ、順番待ちから取り出す
+    /// 同時に取る数の空きの分だけ、すぐ取る行、順番待ちの順に取り出す
     public mutating func takeNext() -> [Int64] {
         var started: [Int64] = []
-        while inFlight.count < maxConcurrent, !queue.isEmpty {
-            let id = queue.removeFirst()
+        while inFlight.count < maxConcurrent, !requested.isEmpty || !queue.isEmpty {
+            let id = requested.isEmpty ? queue.removeFirst() : requested.removeFirst()
             inFlight.insert(id)
             started.append(id)
         }
@@ -156,6 +167,7 @@ public struct PrefetchScheduler: Sendable {
     /// スイッチをオフにしたとき。取っている途中のものもやめる（呼び出し側が取り消す）
     public mutating func cancelAll() {
         queue.removeAll()
+        requested.removeAll()
         inFlight.removeAll()
         handled.removeAll()
     }

@@ -106,9 +106,9 @@ enum AppSettings {
     static var hudFontSize: Double { Double(hudTextSize.hudFontSize) }
 
     /// URL のプレビューでページのタイトルと画像を取りに行くか。
-    /// 初期値はオフ: 社内のリンクやログイン用の一度きりのリンクに、コピーしただけでアクセスしないようにする
+    /// 初期値はオン（2026-10-30 決定。10/15 はオフだった）: リンクを見分けやすくするため。一度きりのリンクが気になる人はオフにする
     static var fetchesLinkPreviews: Bool {
-        get { defaults.bool(forKey: "fetchesLinkPreviews") }
+        get { defaults.object(forKey: "fetchesLinkPreviews") as? Bool ?? true }
         set { defaults.set(newValue, forKey: "fetchesLinkPreviews") }
     }
 

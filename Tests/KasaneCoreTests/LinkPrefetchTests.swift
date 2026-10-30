@@ -140,6 +140,54 @@ final class PrefetchSchedulerTests: XCTestCase {
         XCTAssertEqual(s.takeNext(), [2])
     }
 
+    func testRequestedRowIsTakenWithoutWaiting() {
+        var s = scheduler()
+        s.request(1)
+        XCTAssertEqual(s.takeNext(), [1], "FIFO / LIFO 中にキューへ入った行は待たずに取る")
+    }
+
+    func testRequestedRowIsTakenWhileHidden() {
+        var s = scheduler()
+        s.hide()
+        s.request(1)
+        XCTAssertEqual(s.takeNext(), [1], "履歴ウインドウを閉じていても取る")
+        s.request(2)
+        s.hide()
+        XCTAssertEqual(s.takeNext(), [2], "閉じても、すぐ取る行は残す")
+    }
+
+    func testRequestedRowGoesBeforeVisibleRows() {
+        var s = scheduler()
+        s.setVisible(1, true, at: t0)
+        s.setVisible(2, true, at: t0)
+        s.setVisible(3, true, at: t0)
+        s.tick(at: t0.addingTimeInterval(2))
+        XCTAssertEqual(s.takeNext().count, 2)
+        s.request(4)
+        s.finish(s.inFlight.first!)
+        XCTAssertEqual(s.takeNext(), [4], "見えている行より先に取る")
+    }
+
+    func testRequestedRowIsNotTakenTwice() {
+        var s = scheduler()
+        s.request(1)
+        s.request(1)
+        XCTAssertEqual(s.takeNext(), [1])
+        s.request(1)
+        XCTAssertEqual(s.takeNext(), [], "取っている途中なら入れない")
+        s.setVisible(1, true, at: t0)
+        s.finish(1)
+        s.tick(at: t0.addingTimeInterval(2))
+        XCTAssertEqual(s.takeNext(), [], "開いている間に取った行は、見えても入れ直さない")
+    }
+
+    func testCancelAllDropsRequestedRows() {
+        var s = scheduler()
+        s.request(1)
+        s.cancelAll()
+        XCTAssertEqual(s.takeNext(), [])
+    }
+
     func testCancelAll() {
         var s = scheduler()
         s.setVisible(1, true, at: t0)

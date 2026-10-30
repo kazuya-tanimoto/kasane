@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 /// （design/link-prefetch-implementation-2026-10-23.md §3。いつ取りに行くかの決めごとは KasaneCore の PrefetchScheduler）。
 ///
 /// - 一覧に visibleDwell 続けて見えていた行と、selectedDwell 選んだままの行だけ取りに行く（通り過ぎただけの URL にアクセスしない）
+/// - FIFO / LIFO 中にキューへ入った URL は、コピーした時点で取りに行く（fetchNow。履歴ウインドウを閉じていても取る）
 /// - 最後に取りに行ってから 1 日たっていなければ取りに行かない（取れなかったときも同じ）
 /// - 設定のスイッチがオフの間は何もしない。保存した結果は消さずに残し、プレビューにも出さない
 @MainActor
@@ -88,6 +89,17 @@ final class LinkPrefetcher: ObservableObject {
             Self.log.info("select \(id, privacy: .public)")
         }
         scheduler.select(id, at: Date())
+        pump()
+    }
+
+    // MARK: FIFO / LIFO から
+
+    /// キューに入った URL の項目を、見えるのを待たずに取りに行く（2026-10-30 決定。requirements.md §3.3）。
+    /// 1 日以内に取りに行ったものは取り直さない（取りに行く前に、保存した日時で確かめる）
+    func fetchNow(itemID: Int64) {
+        guard isEnabled else { return }
+        Self.log.info("request \(itemID, privacy: .public)")
+        scheduler.request(itemID)
         pump()
     }
 
