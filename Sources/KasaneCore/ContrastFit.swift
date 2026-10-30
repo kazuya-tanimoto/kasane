@@ -63,13 +63,15 @@ public struct SRGBColor: Equatable, Sendable {
     }
 }
 
-/// 文字の色と地の色のコントラスト（WCAG）と、アクセントカラーで書く文字（検索で一致した文字）の色の合わせ方。
+/// 文字の色と地の色のコントラスト（WCAG）と、検索で一致した文字の後ろに敷く塗りの色の合わせ方。
 ///
-/// 一致した文字は、白や黒を混ぜずに、色みと彩度を保ったまま明るさだけを変えて、いちばん条件の悪い地で
+/// 塗りは、白や黒を混ぜずに、色みと彩度を保ったまま明るさだけを変えて、いちばん条件の悪い地で
 /// target 以上にする。白を混ぜると色が抜けて、アクセントの色に見えなくなるため
-/// （requirements.md 外観の節、design/accent-usage-2026-10-22.md §3.1。手順はモックの ksFitL と同じ）
+/// （requirements.md 外観の節、design/accent-usage-2026-10-22.md §3.1。手順はモックの ksFitL と同じ）。
+/// 色を文字に付けるだけでは、ふつうの文字との差が 3:1 に届かない（モノクロではほぼ同じ色になる）ので、
+/// 文字ではなく文字の後ろを塗る（design/match-highlight-2026-10-24.md）
 public enum ContrastFit {
-    /// 一致した文字のコントラストの目標。要件の 4.5 に少し余裕を持たせる（モックと同じ）
+    /// 塗りと地のコントラストの目標。要件の 4.5 に少し余裕を持たせる（モックと同じ）
     public static let matchTarget = 4.6
     /// Mac の「コントラストを上げる」がオンのときの目標
     public static let increasedContrastTarget = 7.0
@@ -77,6 +79,10 @@ public enum ContrastFit {
     /// いちばん条件の悪い地。ライトは選んでいない行（ガラスの上で、白より暗い）、ダークは選んだ行
     public static let lightBackground = SRGBColor(hex: 0xF4F4F7)
     public static let darkBackground = SRGBColor(hex: 0x3D4047)
+
+    /// 塗りの上の文字。ライトは白、ダークは黒に近い色（塗りはライトでは暗く、ダークでは明るいため）
+    public static let onMatchFillLight = SRGBColor(hex: 0xFFFFFF)
+    public static let onMatchFillDark = SRGBColor(hex: 0x1D1D1F)
 
     /// 種類の文字とアイコンの記号の灰色。どちらも上の地で 4.5 以上（ダークはモックの #A7AAB2 では 4.47 だったので白に寄せた）
     public static let kindGrayLight = SRGBColor(hex: 0x55585F)
@@ -118,8 +124,8 @@ public enum ContrastFit {
         return nil
     }
 
-    /// 一致した文字の色
-    public static func matchText(_ accent: SRGBColor, dark: Bool, increasedContrast: Bool) -> SRGBColor {
+    /// 一致した文字の後ろに敷く塗りの色
+    public static func matchFill(_ accent: SRGBColor, dark: Bool, increasedContrast: Bool) -> SRGBColor {
         fitLightness(
             accent,
             background: dark ? darkBackground : lightBackground,

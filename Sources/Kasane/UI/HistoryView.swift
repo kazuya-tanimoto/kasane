@@ -548,7 +548,8 @@ private struct ItemRow: View {
         .background(SelectionBackground(isSelected: isSelected))
     }
 
-    /// 一致した文字をアクセントの色・太字にした題名
+    /// 一致した文字の後ろをアクセントの色で塗り、文字を太字にした題名（design/match-highlight-2026-10-24.md）。
+    /// 続けて当たった文字は 1 つの範囲なので、塗りも 1 つの面になる
     private var title: AttributedString {
         guard !item.title.isEmpty else { return AttributedString(" ") }
         var result = AttributedString(item.title)
@@ -556,7 +557,8 @@ private struct ItemRow: View {
         typealias Attributes = AttributeScopes.SwiftUIAttributes
         for match in matches {
             guard let range = Range(NSRange(location: match.lowerBound, length: match.count), in: result) else { continue }
-            result[range][Attributes.ForegroundColorAttribute.self] = accent.matchText
+            result[range][Attributes.BackgroundColorAttribute.self] = accent.matchFill
+            result[range][Attributes.ForegroundColorAttribute.self] = AccentColor.onMatchFill
             result[range][Attributes.FontAttribute.self] = .system(size: size.font(13), weight: .bold)
         }
         return result
@@ -573,6 +575,7 @@ private struct ItemRow: View {
 
 /// 種類のアイコン（右下にコピー元のアプリ）。種類ごとの色はやめ、灰色の形だけにする。
 /// 選んだ行は四角をアクセントで塗り、記号を上に載せる文字の色にする（2026-10-23 決定、accent-usage §3.1 の C）。
+/// ダークでは、四角を一致した文字の塗りと同じ明るさにし、記号を #1D1D1F にする（2026-10-24、match-highlight §4）。
 /// 画像の行も縮小表示は出さず、同じ灰色のアイコンにする（一覧の大きさでは見分けにくく、色のある縮小表示が一致した文字より先に目を引くため。
 /// 縮小画像は作って保存し続けるが、一覧では読まない）
 private struct ItemIcon: View {

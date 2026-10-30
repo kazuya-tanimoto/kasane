@@ -1,7 +1,7 @@
 import XCTest
 @testable import KasaneCore
 
-/// 一致した文字の色（requirements.md 外観の節: 色みと彩度を保ち、明るさだけでいちばん条件の悪い地に 4.5 以上）
+/// 一致した文字の後ろの塗りの色（requirements.md 外観の節: 色みと彩度を保ち、明るさだけでいちばん条件の悪い地に 4.5 以上）
 final class ContrastFitTests: XCTestCase {
     /// モック（Match.dc.html の ksFitL）と同じ値になる（PRレビューが Python で写して確認した値）
     func testMatchTextValues() {
@@ -15,22 +15,22 @@ final class ContrastFitTests: XCTestCase {
             .mono: (0x1D1D1F, 0xF2F2F5),
         ]
         for tone in AccentTone.allCases {
-            let light = ContrastFit.matchText(tone.light, dark: false, increasedContrast: false)
-            let dark = ContrastFit.matchText(tone.dark, dark: true, increasedContrast: false)
+            let light = ContrastFit.matchFill(tone.light, dark: false, increasedContrast: false)
+            let dark = ContrastFit.matchFill(tone.dark, dark: true, increasedContrast: false)
             XCTAssertEqual(String(light.hex, radix: 16), String(expected[tone]!.light, radix: 16), "\(tone) ライト")
             XCTAssertEqual(String(dark.hex, radix: 16), String(expected[tone]!.dark, radix: 16), "\(tone) ダーク")
         }
         // システムが青（Mac の初期値）のとき
-        XCTAssertEqual(ContrastFit.matchText(SRGBColor(hex: 0x007AFF), dark: false, increasedContrast: false).hex, 0x0069DB)
-        XCTAssertEqual(ContrastFit.matchText(SRGBColor(hex: 0x0A84FF), dark: true, increasedContrast: false).hex, 0x66B2FF)
+        XCTAssertEqual(ContrastFit.matchFill(SRGBColor(hex: 0x007AFF), dark: false, increasedContrast: false).hex, 0x0069DB)
+        XCTAssertEqual(ContrastFit.matchFill(SRGBColor(hex: 0x0A84FF), dark: true, increasedContrast: false).hex, 0x66B2FF)
     }
 
     func testEveryToneReadsOnTheWorstBackground() {
         for tone in AccentTone.allCases {
             for increased in [false, true] {
                 let target = increased ? 7.0 : 4.5
-                let light = ContrastFit.matchText(tone.light, dark: false, increasedContrast: increased)
-                let dark = ContrastFit.matchText(tone.dark, dark: true, increasedContrast: increased)
+                let light = ContrastFit.matchFill(tone.light, dark: false, increasedContrast: increased)
+                let dark = ContrastFit.matchFill(tone.dark, dark: true, increasedContrast: increased)
                 XCTAssertGreaterThanOrEqual(ContrastFit.contrast(light, ContrastFit.lightBackground), target, "\(tone) ライト")
                 XCTAssertGreaterThanOrEqual(ContrastFit.contrast(dark, ContrastFit.darkBackground), target, "\(tone) ダーク")
             }
@@ -45,7 +45,7 @@ final class ContrastFitTests: XCTestCase {
                     let color = SRGBColor(hue: Double(hueStep) / 24, saturation: saturation, lightness: lightness)
                     for dark in [false, true] {
                         for increased in [false, true] {
-                            let fitted = ContrastFit.matchText(color, dark: dark, increasedContrast: increased)
+                            let fitted = ContrastFit.matchFill(color, dark: dark, increasedContrast: increased)
                             let background = dark ? ContrastFit.darkBackground : ContrastFit.lightBackground
                             XCTAssertGreaterThanOrEqual(ContrastFit.contrast(fitted, background), increased ? 7.0 : 4.5)
                         }
@@ -62,9 +62,52 @@ final class ContrastFitTests: XCTestCase {
             for (color, dark) in [(tone.light, false), (tone.dark, true)] {
                 let (h, s, _) = color.hsl
                 let background = dark ? ContrastFit.darkBackground : ContrastFit.lightBackground
-                let fitted = ContrastFit.matchText(color, dark: dark, increasedContrast: false)
+                let fitted = ContrastFit.matchFill(color, dark: dark, increasedContrast: false)
                 let lightness = try XCTUnwrap(ContrastFit.fittedLightness(color, background: background, target: ContrastFit.matchTarget))
                 XCTAssertEqual(SRGBColor(hue: h, saturation: s, lightness: lightness).hex, fitted.hex, "\(tone)")
+            }
+        }
+    }
+
+    /// 一致した文字の後ろの塗りの目安（design/match-highlight-2026-10-24.md §5）。8 色（システムは Mac の初期の青）× ライト・ダーク
+    func testMatchFillTargets() {
+        let lightRows = [SRGBColor(hex: 0xFFFFFF), ContrastFit.lightBackground] // 選んだ行・ほかの行
+        let darkRows = [ContrastFit.darkBackground, SRGBColor(hex: 0x2A2C30)] // 選んだ行・ほかの行（ガラスは仮の色）
+        var colors = AccentTone.allCases.map { ("\($0)", $0.light, $0.dark) }
+        colors.append(("システム", SRGBColor(hex: 0x007AFF), SRGBColor(hex: 0x0A84FF)))
+        for (name, light, dark) in colors {
+            for increased in [false, true] {
+                let textTarget = increased ? 7.0 : 4.5
+                let lightFill = ContrastFit.matchFill(light, dark: false, increasedContrast: increased)
+                let darkFill = ContrastFit.matchFill(dark, dark: true, increasedContrast: increased)
+                // 塗りと行の地: 3.0 以上（WCAG 1.4.11）
+                for row in lightRows {
+                    XCTAssertGreaterThanOrEqual(ContrastFit.contrast(lightFill, row), 3.0, "\(name) ライト 塗りと地")
+                }
+                for row in darkRows {
+                    XCTAssertGreaterThanOrEqual(ContrastFit.contrast(darkFill, row), 3.0, "\(name) ダーク 塗りと地")
+                }
+                // 塗りの上の文字と塗り: 4.5 以上（コントラストを上げるがオンなら 7.0 以上）
+                XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillLight, lightFill), textTarget, "\(name) ライト 塗りの上の文字")
+                XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillDark, darkFill), textTarget, "\(name) ダーク 塗りの上の文字")
+            }
+        }
+    }
+
+    /// システムの色は利用者が変えられるので、色を広く変えても塗りの上の文字が読める
+    func testTextOnFillReadsForAnySystemAccent() {
+        for hueStep in 0..<24 {
+            for saturation in [0.0, 0.3, 0.7, 1.0] {
+                for lightness in [0.2, 0.5, 0.8] {
+                    let color = SRGBColor(hue: Double(hueStep) / 24, saturation: saturation, lightness: lightness)
+                    for increased in [false, true] {
+                        let target = increased ? 7.0 : 4.5
+                        let lightFill = ContrastFit.matchFill(color, dark: false, increasedContrast: increased)
+                        let darkFill = ContrastFit.matchFill(color, dark: true, increasedContrast: increased)
+                        XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillLight, lightFill), target)
+                        XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.onMatchFillDark, darkFill), target)
+                    }
+                }
             }
         }
     }
