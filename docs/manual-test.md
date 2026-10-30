@@ -597,7 +597,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 ### 初回の案内の「ログイン時に起動」
 
-準備: 今の設定を覚えておく（設定の「一般」の「ログイン時に起動」がオンかオフか）。Kasane を終了し、ターミナル（fish）で次を動かしてから Kasane を起動する（初めて起動したときの案内を出すためです。ほかの設定と履歴は消えません）。
+準備: 今の設定を覚えておく（設定の「一般」の「ログイン時に起動」がオンかオフか）。その「ログイン時に起動」をオフにしてから Kasane を終了し、ターミナル（fish）で次を動かしてから Kasane を起動する（初めて起動したときの案内を出すためです。ほかの設定と履歴は消えません）。
 
 ```
 defaults delete io.github.kazuya-tanimoto.kasane hasCompletedOnboarding
