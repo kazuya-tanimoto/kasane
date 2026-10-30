@@ -102,6 +102,13 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "hudTextSize") }
     }
 
+    /// FIFO / LIFO の帯の幅（12pt のときの値。2026-10-30 決定）。nil なら初期の幅。
+    /// 帯の内側の端をドラッグして変える。文字の大きさの倍率を掛けて出す（`QueueBandLayout`）
+    static var hudBandWidth: CGFloat? {
+        get { (defaults.object(forKey: "hudBandWidth") as? Double).map { CGFloat($0) } }
+        set { defaults.set(newValue.map { Double($0) }, forKey: "hudBandWidth") }
+    }
+
     /// 小さいウインドウの文字の大きさ（pt）
     static var hudFontSize: Double { Double(hudTextSize.hudFontSize) }
 
