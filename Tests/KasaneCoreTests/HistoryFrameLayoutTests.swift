@@ -13,6 +13,34 @@ final class HistoryFrameLayoutTests: XCTestCase {
         XCTAssertEqual(body, CGRect(x: 104, y: 204, width: 872, height: 552))
     }
 
+    /// 本体を囲むウインドウは、本体を取り出すと元に戻る（覚えた本体の大きさで開き直しても、見える大きさが変わらない）
+    func testWindowAroundBodyIsTheInverseOfBody() {
+        let body = CGRect(x: 300, y: 150, width: 800, height: 580)
+        let around = HistoryFrameLayout.window(aroundBody: body)
+        XCTAssertEqual(around, CGRect(x: 296, y: 146, width: 808, height: 588))
+        XCTAssertEqual(HistoryFrameLayout.body(in: around), body)
+    }
+
+    /// 本体を置ける所は、画面と中心が同じで、余白の分だけ狭い（中心からのずれで覚えた位置が、余白の前と同じ所を指す）
+    func testBodyAreaKeepsTheScreenCenter() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 944)
+        let area = HistoryFrameLayout.bodyArea(in: screen)
+        XCTAssertEqual(area, CGRect(x: 4, y: 4, width: 1504, height: 936))
+        XCTAssertEqual(area.midX, screen.midX)
+        XCTAssertEqual(area.midY, screen.midY)
+    }
+
+    /// 本体で置いて余白を足したウインドウは、画面からはみ出さない
+    func testWindowAroundAPlacedBodyStaysOnScreen() {
+        let screen = CGRect(x: 0, y: 0, width: 1512, height: 944)
+        let body = WindowPlacement.frame(
+            in: HistoryFrameLayout.bodyArea(in: screen),
+            savedSize: CGSize(width: 3_000, height: 3_000), savedOffset: CGPoint(x: 900, y: 900),
+            defaultSize: CGSize(width: 800, height: 580), minSize: CGSize(width: 720, height: 420)
+        )
+        XCTAssertTrue(screen.contains(HistoryFrameLayout.window(aroundBody: body)))
+    }
+
     /// 影のウインドウの中の本体は、画面の上で履歴ウインドウの本体と重なる
     func testShadowCasterMatchesTheBodyOnScreen() {
         let shadow = HistoryFrameLayout.shadowFrame(window: window)

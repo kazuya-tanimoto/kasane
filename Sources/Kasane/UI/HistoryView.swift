@@ -54,11 +54,9 @@ struct HistoryView: View {
         }
     }
 
-    /// 最小の大きさ。ウインドウの最小の大きさには周りの余白（`HistoryFrameLayout.resizeMargin`）も入るので、その分を引く
+    /// 最小の大きさ。ウインドウの周りの余白（`HistoryFrameLayout.resizeMargin`）を除いた、角丸の本体の大きさ
     private var minSize: NSSize {
-        let window = HistoryPanelController.minSize(for: appearance.historyTextSize)
-        let margins = HistoryFrameLayout.resizeMargin * 2
-        return NSSize(width: window.width - margins, height: window.height - margins)
+        HistoryPanelController.bodyMinSize(for: appearance.historyTextSize)
     }
 
     /// 検索欄。角丸の薄い塗りの中が文字を打つ場所で、塗りの外をつかむとウインドウが動く
