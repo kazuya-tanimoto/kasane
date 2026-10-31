@@ -239,9 +239,9 @@ private struct AppearanceSample: View {
                 historyWindow
                     .padding(.top, 54)
                     .padding(.horizontal, 18)
+                // 帯は画面の端に、上から下までくっつける（§3.6）
                 queueWindow
-                    .frame(maxWidth: .infinity, alignment: model.hudSide == .left ? .topLeading : .topTrailing)
-                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.hudSide == .left ? .leading : .trailing)
             }
             .frame(height: 330)
             .clipShape(RoundedRectangle(cornerRadius: 10))
@@ -343,21 +343,31 @@ private struct AppearanceSample: View {
                     .font(.system(size: 6.5 * scale, weight: .bold))
                     .foregroundStyle(appearance.accent.foreground)
                     .padding(.horizontal, 3)
-                    .background(appearance.accent.color, in: RoundedRectangle(cornerRadius: 2))
-                Text("2 件").font(.system(size: 6.5 * scale)).foregroundStyle(.secondary)
+                    .background(appearance.accent.color, in: Capsule())
+                Text("残り 2 件").font(.system(size: 6.5 * scale)).foregroundStyle(.secondary)
             }
-            HStack(spacing: 3) {
-                Text("1").font(.system(size: 6.5 * scale, weight: .bold)).foregroundStyle(appearance.accent.text)
-                Text("会議のメモ").font(.system(size: 6.5 * scale))
-            }
-            HStack(spacing: 3) {
-                Text("2").font(.system(size: 6.5 * scale)).foregroundStyle(.secondary)
-                Text("見積書.pdf").font(.system(size: 6.5 * scale))
-            }
+            sampleCard(number: 1, title: "会議のメモ", isNext: true, scale: scale)
+            sampleCard(number: 2, title: "見積書.pdf", isNext: false, scale: scale)
+            Spacer(minLength: 0)
         }
-        .padding(6)
-        .frame(width: 78 * scale, alignment: .leading)
-        .background(glass.clipShape(RoundedRectangle(cornerRadius: 6)))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+        .padding(5)
+        .frame(width: 84 * scale, alignment: .leading)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(glass)
+    }
+
+    /// 帯の 1 件のカード。次に貼る 1 件は、番号の丸をアクセントの色そのもので塗り、地を明るくする（実物と同じ）
+    private func sampleCard(number: Int, title: String, isNext: Bool, scale: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 3) {
+            Text("\(number)")
+                .font(.system(size: 5.5 * scale, weight: .bold, design: .rounded))
+                .frame(width: 8 * scale, height: 8 * scale)
+                .foregroundStyle(isNext ? appearance.accent.foreground : Color.primary)
+                .background(Circle().fill(isNext ? appearance.accent.color : Color.primary.opacity(0.12)))
+            Text(title).font(.system(size: 6.5 * scale)).lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(3)
+        .background(Color.primary.opacity(isNext ? 0.12 : 0.06), in: RoundedRectangle(cornerRadius: 3))
     }
 }
