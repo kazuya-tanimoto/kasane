@@ -177,6 +177,7 @@ private struct LoginItemRow: View {
             Text("Mac にログインすると自動で起動し、コピーした内容を履歴に残します。設定の「一般」からいつでも変えられます。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineSpacing(OnboardingText.descriptionLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.leading, 38)
@@ -184,6 +185,16 @@ private struct LoginItemRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(OnboardingRowBackground())
     }
+}
+
+/// 案内の行の説明の文字（モック「初回の案内」: 行の高さを文字の 1.5 倍）
+@MainActor
+private enum OnboardingText {
+    /// .lineSpacing は標準の行の高さに足す値なので、1.5 倍との差を足す（.callout は macOS で 12pt、1.5 倍で 18pt）
+    static let descriptionLineSpacing: CGFloat = {
+        let font = NSFont.preferredFont(forTextStyle: .callout)
+        return max(0, font.pointSize * 1.5 - NSLayoutManager().defaultLineHeight(for: font))
+    }()
 }
 
 /// 案内の行の地（モック「初回の案内」: 灰色 50% を、ライトで 8%、ダークで 12%）
@@ -214,6 +225,7 @@ private struct PermissionRow<Actions: View>: View {
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineSpacing(OnboardingText.descriptionLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Text(status)
