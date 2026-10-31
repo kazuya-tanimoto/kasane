@@ -1,6 +1,6 @@
 import Foundation
 
-/// FIFO / LIFO の小さいウインドウを出す側（2026-10-22 決定。左は左上、右は右上に出す）。
+/// FIFO / LIFO の小さいウインドウを出す側（2026-10-22 決定。2026-10-30 から、左は画面の左端、右は右端に上下いっぱいの帯で出す）。
 /// 前の版は 4 つの角から選んでいたので、その設定があれば左右だけを引き継ぐ
 public enum HUDSide: String, CaseIterable, Sendable {
     case left, right

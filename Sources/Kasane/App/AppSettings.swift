@@ -132,7 +132,7 @@ enum AppSettings {
         set { defaults.set(newValue.map(NSStringFromPoint), forKey: "historyWindowOffset") }
     }
 
-    /// 小さいウインドウを出す側（左は左上、右は右上）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
+    /// 小さいウインドウ（画面の端の帯）を出す側（左は左端、右は右端）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
     static var hudSide: HUDSide {
         get {
             if let side = HUDSide(rawValue: defaults.string(forKey: "hudSide") ?? "") {
