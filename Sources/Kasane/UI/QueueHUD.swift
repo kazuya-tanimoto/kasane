@@ -13,10 +13,12 @@ import SwiftUI
 /// - 出すときと消すときだけ、画面の端から約 0.2 秒滑らせる。「視差効果を減らす」がオンならフェードだけ
 /// - モード中は、履歴ウインドウを開いている間も出したままにする
 /// - クリックは受け止めて下のアプリには通さないが、キーウインドウにはならない（作業中のアプリから入力先を移さない）
+/// - 影はモックどおり内側へだけ落とす。影の所のクリックは後ろのアプリに届くよう、影は別のウインドウ（`QueueBandShadowPanel`）に描く
 @MainActor
 final class QueueHUDController {
     private var panel: QueueHUDPanel
     private let container: QueueBandContainer
+    private let shadow = QueueBandShadowPanel()
     private let state = QueueBandState()
     private let links: LinkPrefetcher
     private var blurObserver: AnyCancellable?
@@ -75,6 +77,9 @@ final class QueueHUDController {
         blurState.apply(radius, to: panel)
         if wasVisible {
             panel.orderFrontRegardless()
+            if shadow.isVisible {
+                shadow.order(.below, relativeTo: panel.windowNumber)
+            }
         }
     }
 
@@ -137,6 +142,24 @@ final class QueueHUDController {
         if panel.frame != frame {
             panel.setFrame(frame, display: true)
         }
+        placeShadow()
+    }
+
+    // MARK: 影
+
+    private func shadowFrame(for band: NSRect) -> NSRect {
+        QueueBandLayout.shadowFrame(band: band, side: AppSettings.hudSide)
+    }
+
+    /// 影を帯の内側の端の外に置く（出していなければ置き場所だけ変える）
+    private func placeShadow() {
+        shadow.setFrame(shadowFrame(for: panel.frame), display: false)
+        shadow.layoutCaster(side: AppSettings.hudSide)
+    }
+
+    /// 影を帯のすぐ後ろに出す
+    private func orderShadow() {
+        shadow.order(.below, relativeTo: panel.windowNumber)
     }
 
     // MARK: 出し入れ
@@ -151,25 +174,34 @@ final class QueueHUDController {
         let wasVisible = panel.isVisible
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.setFrame(frame, display: true)
-            if !wasVisible { panel.alphaValue = 0 }
+            placeShadow()
+            if !wasVisible {
+                panel.alphaValue = 0
+                shadow.alphaValue = 0
+            }
             orderFront()
+            orderShadow()
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Self.fadeDuration
                 panel.animator().alphaValue = 1
+                shadow.animator().alphaValue = 1
             }
             return
         }
         panel.alphaValue = 1
+        shadow.alphaValue = 1
         if !wasVisible {
             panel.setFrame(collapsedFrame(from: frame), display: false)
             orderFront()
         }
+        // 影は帯の内側の端と一緒に動かす
+        placeShadow()
+        orderShadow()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Self.slideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated { self?.panel.invalidateShadow() }
+            shadow.animator().setFrame(shadowFrame(for: frame), display: false)
         }
     }
 
@@ -185,12 +217,15 @@ final class QueueHUDController {
                 guard let self, self.hideToken == token else { return }
                 self.panel.orderOut(nil)
                 self.panel.alphaValue = 1
+                self.shadow.orderOut(nil)
+                self.shadow.alphaValue = 1
             }
         }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = Self.fadeDuration
                 panel.animator().alphaValue = 0
+                shadow.animator().alphaValue = 0
             }, completionHandler: finish)
             return
         }
@@ -199,6 +234,7 @@ final class QueueHUDController {
             context.duration = Self.slideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrame(target, display: true)
+            shadow.animator().setFrame(shadowFrame(for: target), display: false)
         }, completionHandler: finish)
     }
 
@@ -225,11 +261,11 @@ final class QueueHUDController {
         guard let frame = shownFrame(width: width) else { return }
         container.contentWidth = width
         panel.setFrame(frame, display: true)
+        placeShadow()
     }
 
     private func dragEnded() {
         AppSettings.hudBandWidth = QueueBandLayout.baseWidth(for: panel.frame.width, fontSize: CGFloat(state.fontSize))
-        panel.invalidateShadow()
     }
 }
 
@@ -258,7 +294,8 @@ final class QueueHUDPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // 影はシステムのもの（周り全体）を使わず、内側へだけ別のウインドウに描く（QueueBandShadowPanel）
+        hasShadow = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         isMovable = false
@@ -266,6 +303,64 @@ final class QueueHUDPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+/// 帯の内側の端の外に落とす影だけのウインドウ（モック: box-shadow 6px 0 20px 黒 28%）。
+/// クリックは受けず、後ろのアプリに届ける
+final class QueueBandShadowPanel: NSPanel {
+    /// 帯の形をした、絵のない層。影だけを描く。帯の所はウインドウの外なので、影のうちウインドウに入る所だけが見える
+    private let caster = CALayer()
+
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        isMovable = false
+        let view = NSView()
+        view.wantsLayer = true
+        caster.shadowColor = NSColor.black.cgColor
+        caster.shadowOpacity = Float(QueueBandLayout.Metrics.shadowOpacity)
+        view.layer?.addSublayer(caster)
+        contentView = view
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    /// 影を落とす帯の形を、ウインドウの帯の側の端の外に置く。ウインドウの大きさを変えたあとに呼ぶ
+    func layoutCaster(side: HUDSide) {
+        let m = QueueBandLayout.Metrics.self
+        let size = contentView?.bounds.size ?? frame.size
+        // 帯の形は、上下の端で影が薄れないよう上下に長く、幅は帯の幅が変わっても足りるよう広くする
+        let overhang = size.width
+        let reach: CGFloat = 4000
+        let bandRect = CGRect(
+            x: side == .right ? size.width : -reach,
+            y: -overhang,
+            width: reach,
+            height: size.height + overhang * 2
+        )
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        caster.frame = bandRect
+        caster.shadowPath = CGPath(rect: CGRect(origin: .zero, size: bandRect.size), transform: nil)
+        // 影は内側へずらす。右の帯なら左へ
+        caster.shadowOffset = CGSize(width: (side == .right ? -1 : 1) * m.shadowOffset, height: 0)
+        // CSS のぼかしは標準偏差がぼかしの半分のガウス。shadowRadius は半分の値にした（Mac でモックと見比べてはいない）
+        caster.shadowRadius = m.shadowBlur / 2
+        CATransaction.commit()
+    }
 }
 
 /// 帯の中身と、内側の端のつかむ所を並べる。
@@ -372,7 +467,7 @@ struct QueueHUDView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 6 * scale) {
+            VStack(alignment: .leading, spacing: QueueBandLayout.Metrics.itemSpacing * scale) {
                 header
                 if state.clips.isEmpty {
                     Text("コピーするとここに追加されます")
@@ -390,8 +485,7 @@ struct QueueHUDView: View {
                     )
                 }
             }
-            .padding(.horizontal, QueueBandLayout.Metrics.bandPadding * scale)
-            .padding(.vertical, 12 * scale)
+            .padding(QueueBandLayout.Metrics.bandPadding * scale)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(.automatic)
@@ -401,15 +495,16 @@ struct QueueHUDView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8 * scale) {
+        let m = QueueBandLayout.Metrics.self
+        return HStack(spacing: m.headerSpacing * scale) {
             Text(state.mode == .lifo ? "LIFO" : "FIFO")
-                .font(.system(size: state.fontSize - 1, weight: .bold))
-                .padding(.horizontal, 8 * scale)
-                .padding(.vertical, 2 * scale)
+                .font(.system(size: state.fontSize * m.badgeFontRatio, weight: .bold))
+                .padding(.horizontal, m.badgePaddingHorizontal * scale)
+                .padding(.vertical, m.badgePaddingVertical * scale)
                 .foregroundStyle(appearance.accent.foreground)
                 .background(Capsule().fill(appearance.accent.color))
             Text("残り \(state.clips.count) 件")
-                .font(.system(size: state.fontSize))
+                .font(.system(size: state.fontSize * m.countFontRatio))
                 .foregroundStyle(.secondary)
         }
     }
@@ -459,7 +554,7 @@ struct QueueCardView: View {
         let m = QueueBandLayout.Metrics.self
         HStack(alignment: .top, spacing: m.numberGap * scale) {
             Text("\(number)")
-                .font(.system(size: fontSize * 0.75, weight: .bold, design: .rounded))
+                .font(.system(size: fontSize * m.numberFontRatio, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
@@ -467,35 +562,49 @@ struct QueueCardView: View {
                 .frame(minWidth: m.numberDiameter * scale, minHeight: m.numberDiameter * scale)
                 .foregroundStyle(isNext ? accent.foreground : Color.primary)
                 .background(Capsule().fill(isNext ? accent.color : numberFill))
-            VStack(alignment: .leading, spacing: 4 * scale) {
+                .padding(.top, m.numberTopOffset * scale)
+            VStack(alignment: .leading, spacing: m.contentSpacing * scale) {
                 picture
                 if let heading = content.heading {
                     Text(heading)
                         .font(.system(size: fontSize, weight: .semibold))
+                        .lineSpacing(lineSpacing)
                         .lineLimit(1)
                 }
                 Text(content.body)
                     .font(.system(size: fontSize))
                     .foregroundStyle(content.bodyIsSecondary ? Color.secondary : Color.primary)
+                    .lineSpacing(lineSpacing)
                     .lineLimit(content.bodyLines)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(m.cardPadding * scale)
+        .padding(.horizontal, m.cardPadding * scale)
+        .padding(.vertical, m.cardPaddingVertical * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8 * scale, style: .continuous).fill(cardFill))
+        .background(RoundedRectangle(cornerRadius: m.cardRadius * scale, style: .continuous).fill(cardFill))
+    }
+
+    /// 行の高さをモックの「文字の大きさの 1.45 倍」にするための、行の間に足す分。
+    /// システムの文字の標準の行の高さを引く（足りていれば 0）
+    private var lineSpacing: CGFloat {
+        let font = NSFont.systemFont(ofSize: fontSize)
+        let natural = NSLayoutManager().defaultLineHeight(for: font)
+        return max(0, fontSize * QueueBandLayout.Metrics.lineHeightRatio - natural)
     }
 
     @ViewBuilder
     private var picture: some View {
         if let image = content.picture == .thumbnail ? thumbnail : (content.picture == .linkImage ? linkImage : nil) {
-            // 横はカードの幅いっぱい、縦は横の 9/16 まで（はみ出す分は切る）
+            // 横はカードの幅いっぱい、縦はモックの高さ（はみ出す分は切る）
+            let m = QueueBandLayout.Metrics.self
             Color.clear
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .frame(height: m.pictureHeight * scale)
                 .overlay(Image(nsImage: image).resizable().scaledToFill())
-                .clipShape(RoundedRectangle(cornerRadius: 4 * scale, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: m.pictureRadius * scale, style: .continuous))
         }
     }
 

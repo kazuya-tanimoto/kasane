@@ -39,6 +39,20 @@ final class QueueBandLayoutTests: XCTestCase {
         }
     }
 
+    /// 影は帯の内側の端の外にだけ出し、帯には重ねない。大きさはモックの影を画面の割合で戻した値（10.7pt ずらし、ぼかし 35.6pt）
+    func testShadowSitsOutsideTheInnerEdge() {
+        let band = CGRect(x: 1000, y: 0, width: 282, height: 737)
+        let right = QueueBandLayout.shadowFrame(band: band, side: .right)
+        XCTAssertEqual(right.maxX, band.minX)
+        XCTAssertEqual(right.minY, band.minY)
+        XCTAssertEqual(right.height, band.height)
+        let left = QueueBandLayout.shadowFrame(band: band, side: .left)
+        XCTAssertEqual(left.minX, band.maxX)
+        XCTAssertEqual(QueueBandLayout.Metrics.shadowOffset, 10.7, accuracy: 0.05)
+        XCTAssertEqual(QueueBandLayout.Metrics.shadowBlur, 35.6, accuracy: 0.05)
+        XCTAssertEqual(right.width, 10.7 + 35.6 * 1.5, accuracy: 0.1)
+    }
+
     func testInitialWidthIsThePreviousWidth() {
         let width = QueueBandLayout.width(savedBaseWidth: nil, fontSize: standard, screen: screen)
         XCTAssertEqual(width, 260 * standard / 12, accuracy: 0.001)
