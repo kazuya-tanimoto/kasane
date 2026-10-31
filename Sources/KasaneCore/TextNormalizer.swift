@@ -4,6 +4,7 @@ import Foundation
 ///
 /// - 大文字と小文字、全角と半角を同一視する
 /// - macOS ではひらがなをカタカナにそろえる（「かいぎ」で「カイギ」にヒットさせる）
+/// - 最後に NFC にそろえる。Finder のファイル名などの「カ」＋濁点の 2 文字（NFD）を、IME で打った「ガ」で当てるため（2026-10-30 決定）
 public enum TextNormalizer {
     public static func normalize(_ text: String) -> String {
         var s = text.folding(options: [.caseInsensitive, .widthInsensitive], locale: nil)
@@ -14,7 +15,8 @@ public enum TextNormalizer {
         #endif
         // 改行やタブは検索上は空白と同じに扱う
         s = String(s.map { $0.isNewline || $0 == "\t" ? " " : $0 })
-        return s
+        // 検索は UTF-16 を 1 単位ずつ比べるので、同じ文字の違う並びを比べる前にそろえる
+        return s.precomposedStringWithCanonicalMapping
     }
 
     /// 検索欄に貼り付ける文字を 1 行にする。改行とタブを空白 1 つに置き換え、前後の空白を除く

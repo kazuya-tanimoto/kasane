@@ -75,23 +75,31 @@ struct NormalizedText {
     /// 正規化後の 1 単位ごとの、元の文字の範囲。nil なら位置はそのまま
     private let sources: [Range<Int>]?
 
-    /// `perCharacter` はテストで 1 文字ずつの道を直接通すため
-    init(_ text: String, perCharacter: Bool = false) {
-        let whole = Array(TextNormalizer.normalize(text).utf16)
-        // ふつうは正規化しても長さが変わらない（大文字小文字・全角半角・ひらがな→カタカナはどれも 1 対 1）ので、位置はそのまま使う。
-        // 1 文字が伸びて別の 1 文字が縮むと、長さが同じでも位置がずれる（まれで、色の位置がずれるだけ。requirements.md §0）
-        if !perCharacter && whole.count == text.utf16.count {
-            units = whole
-            sources = nil
-            return
+    init(_ text: String) {
+        // 英数字と記号（ASCII）だけの題名は、正規化しても 1 文字が 1 単位のままなので、位置はそのまま使う
+        // （「\r\n」は 1 つの空白に縮むので、長さが変わったときは下の道に回す）
+        if text.utf8.allSatisfy({ $0 < 0x80 }) {
+            let whole = Array(TextNormalizer.normalize(text).utf16)
+            if whole.count == text.utf16.count {
+                units = whole
+                sources = nil
+                return
+            }
         }
-        // 長さが変わったとき（半角カナの濁点 2 文字が 1 文字になる、など）だけ、1 文字ずつ正規化して対応を作る
+        // それ以外は 1 文字ずつ正規化して対応を作る。全体の長さで判断すると、1 文字が伸びて（ß → ss）
+        // 別の 1 文字が縮む（「カ」＋濁点 → 「ガ」）題名で、途中から違う文字に色が付く（2026-10-30 決定）
         var units: [UInt16] = []
         var sources: [Range<Int>] = []
         var offset = 0
         for character in text {
             let length = String(character).utf16.count
-            let piece = TextNormalizer.normalize(String(character)).utf16
+            let piece: [UInt16]
+            if character.isASCII {
+                // ASCII の文字は小文字にするか空白にするだけなので、Foundation を呼ばずに済ませる
+                piece = character.isNewline || character == "\t" ? [0x20] : Array(character.lowercased().utf16)
+            } else {
+                piece = Array(TextNormalizer.normalize(String(character)).utf16)
+            }
             units += piece
             sources += Array(repeating: offset..<(offset + length), count: piece.count)
             offset += length
