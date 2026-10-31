@@ -336,7 +336,7 @@ private struct TooltipLabel: View {
     let text: String
 
     var body: some View {
-        // ボタンの文字（`ActionStyle`）と同じ 12pt
+        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
