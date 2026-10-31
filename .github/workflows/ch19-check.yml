@@ -10,6 +10,8 @@ jobs:
       - name: コマンドを 1 つずつ流し、そのたびにクリップボードの型を見る
         shell: bash
         run: |
+          exec > >(tee out.txt) 2>&1
+          trap 'tail -60 out.txt | while IFS= read -r l; do echo "::notice::$l"; done' EXIT
           set -x
           cmd=$(sed -n '/^## 19/,$p' docs/manual-test.md | grep '^cd /tmp')
           # 最後の open（Finder とテキストエディット）の前までを fish で流す。open は別に確かめる
