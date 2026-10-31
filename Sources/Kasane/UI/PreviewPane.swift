@@ -239,19 +239,23 @@ private struct URLPreview: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous))
                 }
-                HStack(spacing: size.scaled(10)) {
-                    if let icon {
-                        Image(nsImage: icon).resizable().frame(width: size.scaled(24), height: size.scaled(24))
-                    } else {
-                        Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(Color.historySub)
+                // タイトルが取れていないときは、題を作らず URL だけを本文の色で出す（小さいウインドウのカードと同じ形。
+                // requirements.md 304 行、2026-10-31 画面のデザインの決め S2）
+                if let title {
+                    HStack(spacing: size.scaled(10)) {
+                        if let icon {
+                            Image(nsImage: icon).resizable().frame(width: size.scaled(24), height: size.scaled(24))
+                        } else {
+                            Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(Color.historySub)
+                        }
+                        Text(title)
+                            .font(.system(size: size.font(17), weight: .semibold))
+                            .lineLimit(3)
                     }
-                    Text(title ?? URL(string: urlString)?.host() ?? urlString)
-                        .font(.system(size: size.font(17), weight: .semibold))
-                        .lineLimit(3)
                 }
                 Text(urlString)
                     .font(.system(size: size.font(12), design: .monospaced))
-                    .foregroundStyle(Color.historySub)
+                    .foregroundStyle(title == nil ? Color.primary : Color.historySub)
                     .textSelection(.enabled)
                     .lineLimit(8)
             }
@@ -449,7 +453,7 @@ private struct InfoTable: View {
         } else if item.kind == .file {
             entries.append(("件数", "\(content.fileURLs.count) ファイル"))
         }
-        entries.append(("使用回数", "コピー \(item.copyCount) 回 · 貼り付け \(item.pasteCount) 回"))
+        entries.append(("使用回数", "コピー \(item.copyCount) 回 · ペースト \(item.pasteCount) 回"))
         return entries
     }
 
