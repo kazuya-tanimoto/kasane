@@ -37,8 +37,8 @@ final class HistoryPanel: NSPanel {
 
 @MainActor
 final class HistoryPanelController: NSObject, NSWindowDelegate {
-    /// 文字の大きさが標準のときの、初めの大きさと最小の大きさ
-    nonisolated static let defaultSize = NSSize(width: 880, height: 560)
+    /// 文字の大きさが標準のときの、初めの大きさと最小の大きさ。初めの大きさはモック「C案 改訂版」の 800 × 580
+    nonisolated static let defaultSize = NSSize(width: 800, height: 580)
     nonisolated static let minSize = NSSize(width: 720, height: 420)
 
     /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）

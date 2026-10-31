@@ -36,27 +36,47 @@ struct ShortcutSettingsView: View {
                         row(slot)
                     }
                 }
-                SettingsCaption("欄をクリックして、新しいキーを押します。Esc で取り消します。")
+                // モック: 箱との間は 10、行の高さは 1.6 倍
+                SettingsCaption("欄をクリックして、新しいキーを押します。Esc で取り消します。", lineHeight: 1.6)
                     .padding(.horizontal, 4)
+                    .padding(.top, 10 - SettingsLayout.rowSpacing)
 
                 SettingsHeader("履歴ウインドウのキー（変更できません）")
+                // モック: 2 列に並べ、行の間に線は引かない。キーは灰色の札に、名前は灰色で
                 SettingsBox {
-                    ForEach(Array(Self.fixedKeys.enumerated()), id: \.offset) { index, entry in
-                        if index > 0 { SettingsDivider() }
-                        HStack(spacing: 16) {
-                            Text(entry.key)
-                                .font(.system(size: SettingsFont.small))
-                                .frame(width: 96, alignment: .leading)
-                            Text(entry.label)
-                            Spacer(minLength: 0)
+                    Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 0) {
+                        ForEach(Array(stride(from: 0, to: Self.fixedKeys.count, by: 2)), id: \.self) { index in
+                            GridRow {
+                                fixedKeyCell(Self.fixedKeys[index])
+                                if index + 1 < Self.fixedKeys.count {
+                                    fixedKeyCell(Self.fixedKeys[index + 1])
+                                }
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
                 }
             }
         }
         .onDisappear { recorder.cancel() }
+    }
+
+    private func fixedKeyCell(_ entry: (key: String, label: String)) -> some View {
+        HStack(spacing: 10) {
+            Text(entry.key)
+                .font(.system(size: SettingsFont.small))
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .frame(minWidth: 64)
+                .background(SettingsColor.chip, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text(entry.label)
+                .foregroundStyle(SettingsColor.sub)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ slot: ShortcutSlot) -> some View {
@@ -71,12 +91,12 @@ struct ShortcutSettingsView: View {
                 if let warning {
                     Text(warning)
                         .font(.system(size: SettingsFont.text))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(SettingsColor.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
-            recorderField(slot, current: current)
+            recorderField(slot, current: current, hasWarning: warning != nil)
             // 標準から変えた行にだけ出す。場所は空けておき、出たときに行の並びがずれないようにする
             ZStack {
                 if current != standard {
@@ -84,41 +104,48 @@ struct ShortcutSettingsView: View {
                     Button {
                         recorder.reset(slot)
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        // モック: 15pt の戻る矢印を灰色で
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 15))
+                            .foregroundStyle(SettingsColor.sub)
+                            .frame(width: 26, height: 26)
                     }
                     .buttonStyle(.borderless)
                     .help("標準のキー（\(standardName)）に戻す")
                     .accessibilityLabel("標準のキー（\(standardName)）に戻す")
                 }
             }
-            .frame(width: 22)
+            .frame(width: 26, height: 26)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .settingsRowPadding()
     }
 
-    private func recorderField(_ slot: ShortcutSlot, current: Shortcut) -> some View {
+    private func recorderField(_ slot: ShortcutSlot, current: Shortcut, hasWarning: Bool) -> some View {
         let recording = recorder.recording == slot
+        // 縁はモックの色: 押している間は青（ライト #007AFF、ダーク #0A84FF）、注意が出ている行は赤、ふだんは黒 15% / 白 15%
+        let border = recording ? Self.recordingBorder : (hasWarning ? SettingsColor.danger : Self.fieldBorder)
         return Button {
             recorder.start(slot)
         } label: {
             Text(recording ? "キーを押してください" : HotKeyCenter.displayString(current))
                 .font(.system(size: SettingsFont.item))
-                .foregroundStyle(recording ? .secondary : .primary)
-                // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように
+                .foregroundStyle(recording ? SettingsColor.sub : SettingsColor.text)
+                // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように。
+                // 外の幅は 176（中身 156＋左右 10）。2026-10-31 画面のデザインがモックを 160 から 176 に直した。余白と角はモックの値（上下 5・左右 10、角 7）
                 .frame(minWidth: 156)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(recording ? Color(nsColor: .controlAccentColor) : Color(nsColor: .separatorColor),
-                                      lineWidth: recording ? 2 : 1)
-                )
+                .padding(.vertical, 5)
+                .padding(.horizontal, 10)
+                // 地はモックの欄の色（ライト 白、ダーク 白 6%）
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Self.fieldFill))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(slot.settingsTitle)のキー、\(HotKeyCenter.displayString(current))")
     }
+
+    private static let fieldFill = SettingsColor.dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.06))
+    private static let fieldBorder = SettingsColor.dynamic(light: NSColor.black.withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.15))
+    private static let recordingBorder = SettingsColor.dynamic(light: SettingsColor.rgb(0x00, 0x7A, 0xFF), dark: SettingsColor.rgb(0x0A, 0x84, 0xFF))
 }
 
 extension ShortcutSlot {
