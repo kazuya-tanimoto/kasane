@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: PasteboardMonitor!
     private var panel: HistoryPanelController!
     private var queue: QueueController!
-    private lazy var queueHUD = QueueHUDController()
+    private lazy var queueHUD = QueueHUDController(links: model.links)
     private var statusItem: StatusItemController!
     private var shortcuts: ShortcutController!
     private var onboarding: OnboardingWindowController?
@@ -192,11 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateQueueHUD()
     }
 
-    /// モード中は、履歴ウインドウの開閉に関係なく、画面の隅にキューの全件を出す
+    /// モード中は、履歴ウインドウの開閉に関係なく、画面の端の帯にキューの全件をカードで出す
     private func updateQueueHUD() {
         let current = queue.queue
-        let titles = current?.itemsInPasteOrder.map(\.title) ?? []
-        queueHUD.update(mode: current?.mode, titles: titles)
+        queueHUD.update(mode: current?.mode, clips: current?.itemsInPasteOrder ?? [])
     }
 
     // MARK: - 設定

@@ -70,7 +70,14 @@ final class QueueController {
               let item = try? store.item(id: itemID),
               let representations = try? store.representations(itemID: itemID)
         else { return }
-        queue?.push(QueuedClip(itemID: itemID, title: item.title, text: item.text, representations: representations))
+        queue?.push(QueuedClip(
+            itemID: itemID,
+            kind: item.kind,
+            title: item.title,
+            text: item.text,
+            thumbnail: item.thumbnail,
+            representations: representations
+        ))
         onChange?()
     }
 
@@ -153,8 +160,12 @@ struct QueuedClip: Equatable {
     let id = UUID()
     /// 履歴の項目。貼った回数を数えるのに使う（履歴から消えていたら数えない）
     let itemID: Int64
+    /// 小さいウインドウのカードの出し方を決める
+    let kind: ClipKind
     let title: String
     let text: String?
+    /// 画像の縮小（PNG）。カードに出す
+    let thumbnail: Data?
     let representations: [Capture.Representation]
 
     static func == (lhs: QueuedClip, rhs: QueuedClip) -> Bool { lhs.id == rhs.id }
