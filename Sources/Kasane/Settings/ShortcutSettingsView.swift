@@ -13,7 +13,7 @@ struct ShortcutSettingsView: View {
     }
 
     private static let fixedKeys: [(key: String, label: String)] = [
-        ("↑ ↓", "選択"),
+        ("↑↓", "選択"),
         ("⏎", "ペースト"),
         ("⇧⏎", "書式なしでペースト"),
         ("⌘⏎", "コピー（FIFO / LIFO 中はキューに追加）"),
