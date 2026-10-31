@@ -243,7 +243,7 @@ private struct ActionBar: View {
                 .mask(alignment: .top) { Rectangle().frame(height: 2) }
                 .padding(1)
         }
-        // 影はガラスの層には付かないので、帯の形の影を後ろに描く（モック B の 0 6px 18px 黒 28%）
+        // 影は帯の形を後ろに描いて付ける（モック B の 0 6px 18px 黒 28%）。.shadow では Kazuya さんの写真で影がほとんど見えなかった（2026-10-31）
         .background {
             Capsule()
                 .fill(Color.black.opacity(0.28))
