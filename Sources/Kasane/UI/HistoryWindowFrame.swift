@@ -73,6 +73,12 @@ final class HistoryShadowPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
+    // 影のウインドウは画面の上の端からはみ出す。Mac が画面の中へずらすと、切り抜いた所が本体とずれ、
+    // 本体の上の端に影が透け、下の端の外に影のない隙間ができた（2026-10-31、CI の Mac で 10pt ずれた）ので、ずらさせない
+    override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect {
+        frameRect
+    }
+
     /// 履歴ウインドウの位置と大きさに合わせる
     func follow(_ window: NSWindow) {
         setFrame(HistoryFrameLayout.shadowFrame(window: window.frame), display: true)
