@@ -8,8 +8,19 @@ enum LineHeight {
     /// 1 行ごとに足す高さ。システムの文字の標準の行の高さとの差（標準より狭くはしない）
     @MainActor
     static func extra(multiple: CGFloat, fontSize: CGFloat) -> CGFloat {
-        let natural = NSLayoutManager().defaultLineHeight(for: NSFont.systemFont(ofSize: fontSize))
-        return max(0, fontSize * multiple - natural)
+        max(0, fontSize * multiple - naturalHeight(fontSize: fontSize))
+    }
+
+    /// 標準の行の高さは文字の大きさごとに 1 回だけ測って覚える（一覧の行ごと・描くたびに NSLayoutManager を作らないため）
+    @MainActor private static var naturalHeights: [CGFloat: CGFloat] = [:]
+    @MainActor private static let layoutManager = NSLayoutManager()
+
+    @MainActor
+    private static func naturalHeight(fontSize: CGFloat) -> CGFloat {
+        if let height = naturalHeights[fontSize] { return height }
+        let height = layoutManager.defaultLineHeight(for: NSFont.systemFont(ofSize: fontSize))
+        naturalHeights[fontSize] = height
+        return height
     }
 }
 

@@ -279,8 +279,8 @@ private struct AppearanceSample: View {
     /// （地 ライト #C9D6E3→#9FB0C4、ダーク #2A3445→#121821。四角は #E07A5F・#5B8BD0・#81B29A、角 8）
     private var backdrop: some View {
         ZStack(alignment: .topLeading) {
-            LinearGradient(colors: [SettingsColor.dynamic(light: SettingsColor.rgb(0xC9, 0xD6, 0xE3), dark: SettingsColor.rgb(0x2A, 0x34, 0x45)),
-                                    SettingsColor.dynamic(light: SettingsColor.rgb(0x9F, 0xB0, 0xC4), dark: SettingsColor.rgb(0x12, 0x18, 0x21))],
+            LinearGradient(colors: [SettingsColor.dynamic(light: SettingsColor.rgb(0xC9, 0xD6, 0xE3), dark: SettingsColor.rgb(0x2A, 0x34, 0x45), system: nil),
+                                    SettingsColor.dynamic(light: SettingsColor.rgb(0x9F, 0xB0, 0xC4), dark: SettingsColor.rgb(0x12, 0x18, 0x21), system: nil)],
                            startPoint: .top, endPoint: .bottomTrailing)
             RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0xE0, 0x7A, 0x5F)))
                 .frame(width: 120, height: 100).offset(x: 14, y: 20)
@@ -345,7 +345,7 @@ private struct AppearanceSample: View {
         .shadow(color: .black.opacity(0.35), radius: 15, y: 12)
     }
 
-    private static let panelBorder = SettingsColor.dynamic(light: NSColor.white.withAlphaComponent(0.7), dark: NSColor.white.withAlphaComponent(0.12))
+    private static let panelBorder = SettingsColor.dynamic(light: NSColor.white.withAlphaComponent(0.7), dark: NSColor.white.withAlphaComponent(0.12), system: nil)
 
     private static let sampleRows = ["git push origin main", "git push --tags", "push 通知の設定"]
 

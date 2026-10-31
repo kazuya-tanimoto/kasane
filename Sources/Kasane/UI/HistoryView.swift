@@ -11,7 +11,7 @@ import SwiftUI
 /// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
 /// - 一番下: 選んだ項目への操作ボタン
 ///
-/// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
+/// FIFO / LIFO 中も同じ履歴を出す。キューは小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
     @ObservedObject var model: HistoryModel
     @ObservedObject var appearance: AppearanceSettings
@@ -313,7 +313,8 @@ private struct TooltipLabel: View {
             .frame(height: Self.height)
             .background(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color(nsColor: .windowBackgroundColor))
+                    // 地はウインドウの地と同じ色（tooltip-unpin-2026-10-19.md「背景はウインドウの背景色」）
+                    .fill(Color.panelBase)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -324,7 +325,7 @@ private struct TooltipLabel: View {
 }
 
 /// 絞り込みの丸いボタン。
-/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーは FIFO / LIFO の小さいウインドウだけに使う）
+/// 選択中は macOS の切り替えボタンのように白く浮かせる（アクセントカラーは使わない。使う所は requirements.md の「アクセントカラー」の行）
 private struct ChipStyle: ButtonStyle {
     var isOn: Bool
 
@@ -367,12 +368,9 @@ extension Color {
             ? NSColor.white.withAlphaComponent(0.09)
             : NSColor.black.withAlphaComponent(0.08)
     })
-    /// 灰の文字（モック t.sub: ライト #55585F、ダーク #A7AAB2）
-    static let historySub = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0xA7 / 255, green: 0xAA / 255, blue: 0xB2 / 255, alpha: 1)
-            : NSColor(srgbRed: 0x55 / 255, green: 0x58 / 255, blue: 0x5F / 255, alpha: 1)
-    })
+    /// 灰の文字（アプリ名・時刻・ピン・URL・詳細のラベル）。種類の文字と同じ灰（ライト #55585F、ダーク #ABAEB6）。
+    /// モック t.sub のダーク #A7AAB2 は選んだ行のダークの地 #3D4047 で 4.47 になり、4.5 に届かないため使わない（accent-implementation-2026-10-23.md）
+    static let historySub = Color.kindGray
     /// もっと薄い灰の文字（モック t.faint: ライト #7C7F86、ダーク #868991）
     static let historyFaint = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -626,7 +624,7 @@ private struct ItemRow: View {
 
 /// 種類のアイコン（右下にコピー元のアプリ）。種類ごとの色はやめ、灰色の形だけにする。
 /// 選んだ行は四角をアクセントで塗り、記号を上に載せる文字の色にする（2026-10-23 決定、accent-usage §3.1 の C）。
-/// ダークでは、四角を一致した文字の塗りと同じ明るさにし、記号を #1D1D1F にする（2026-10-24、match-highlight §4）。
+/// ダークでも、四角はアクセントの色そのもので塗り、記号は上に載せる文字の色にする（2026-10-30 に 10/23 の決定に戻した。requirements.md「選んだ行」）。
 /// 画像の行も縮小表示は出さず、同じ灰色のアイコンにする（一覧の大きさでは見分けにくく、色のある縮小表示が一致した文字より先に目を引くため。
 /// 縮小画像は作って保存し続けるが、一覧では読まない）
 private struct ItemIcon: View {

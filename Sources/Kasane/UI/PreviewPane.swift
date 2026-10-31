@@ -217,10 +217,12 @@ private struct URLPreview: View {
         links.isEnabled ? links.loaded[itemID] : nil
     }
     private var title: String? { loaded?.title }
+    private var icon: NSImage? { loaded?.icon }
     private var image: NSImage? { loaded?.image }
 
     /// 並びと大きさはモック「C案 改訂版」: 上にページの代表画像（高さ 170、角 12）、次にページの題（17pt 太字）、
-    /// 次に URL（12pt 等幅・灰色）。間 12、プレビューの中の余白 18。サイトのアイコンはモックに無いので出さない
+    /// 次に URL（12pt 等幅・灰色）。間 12、プレビューの中の余白 18。
+    /// 題の左のサイトのアイコンはモックに無いが、Kazuya さんが 14 章で確かめた表示なので残す（2026-10-31 全体の照合 R2）
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: size.scaled(12)) {
@@ -237,9 +239,16 @@ private struct URLPreview: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous))
                 }
-                Text(title ?? URL(string: urlString)?.host() ?? urlString)
-                    .font(.system(size: size.font(17), weight: .semibold))
-                    .lineLimit(3)
+                HStack(spacing: size.scaled(10)) {
+                    if let icon {
+                        Image(nsImage: icon).resizable().frame(width: size.scaled(24), height: size.scaled(24))
+                    } else {
+                        Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(Color.historySub)
+                    }
+                    Text(title ?? URL(string: urlString)?.host() ?? urlString)
+                        .font(.system(size: size.font(17), weight: .semibold))
+                        .lineLimit(3)
+                }
                 Text(urlString)
                     .font(.system(size: size.font(12), design: .monospaced))
                     .foregroundStyle(Color.historySub)
@@ -265,7 +274,24 @@ private struct FilePreview: View {
             if url.pathExtension.lowercased() == "pdf" {
                 PDFPreview(source: .url(url))
             } else if Self.quickLookCanShow(url) {
-                QuickLookPreview(url: url)
+                // 中身の下にアイコンと場所を出す（requirements.md「ファイル: アイコン、パス、Quick Look で表示できるものはその内容」）
+                VStack(spacing: 0) {
+                    QuickLookPreview(url: url)
+                    HStack(spacing: size.scaled(8)) {
+                        Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                            .resizable()
+                            .frame(width: size.scaled(16), height: size.scaled(16))
+                        Text(url.path)
+                            .font(.system(size: size.font(12)))
+                            .foregroundStyle(Color.historySub)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                    .padding(.horizontal, size.scaled(18))
+                    .padding(.vertical, size.scaled(8))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
             } else {
                 SingleFileCard(url: url)
             }
