@@ -67,30 +67,24 @@ log("windows after ⌥V: \(windows().map { "\($0.layer):\($0.bounds) a=\($0.alph
 guard var w = history() else { log("history window not found"); capture("notfound"); proc.terminate(); exit(0) }
 capture("1-open")
 
-// 見える縁から外へ d pt の所をつかんで、右へ 30 動かす
+// 見える縁から外へ d pt の所をつかんで、内へ 8 動かす（縮める。画面の端で止まらないように）
 for d: CGFloat in [4, 3, 2, 1, 0, -1, -2, -3, -5] {
     w = ensureOpen() ?? w
-    let edge = w.maxX - margin
-    drag(CGPoint(x: edge + d, y: w.midY), 30, 0)
-    let after = history() ?? w
-    log("resize-right d=\(d) width \(w.width)->\(after.width) visible=\(history() != nil)")
-    if after.width != w.width { drag(CGPoint(x: after.maxX - margin + d, y: after.midY), -30, 0) }
+    drag(CGPoint(x: w.maxX - margin + d, y: w.midY), -8, 0)
+    let after = history()
+    log("resize-right d=\(d) width \(w.width)->\(after?.width ?? -1) visible=\(after != nil)")
 }
 for d: CGFloat in [3, 1, 0, -2, -4] {
     w = ensureOpen() ?? w
-    let corner = CGPoint(x: w.maxX - margin + d, y: w.maxY - margin + d)
-    drag(corner, 30, 30)
-    let after = history() ?? w
-    log("resize-bottomright d=\(d) size \(w.size)->\(after.size) visible=\(history() != nil)")
-    if after.size != w.size { drag(CGPoint(x: after.maxX - margin + d, y: after.maxY - margin + d), -30, -30) }
+    drag(CGPoint(x: w.maxX - margin + d, y: w.maxY - margin + d), -8, -8)
+    let after = history()
+    log("resize-bottomright d=\(d) size \(w.size)->\(after?.size ?? .zero) visible=\(after != nil)")
 }
 for d: CGFloat in [3, 1, 0, -2, -4] {
     w = ensureOpen() ?? w
-    let corner = CGPoint(x: w.minX + margin - d, y: w.minY + margin - d)
-    drag(corner, -30, -30)
-    let after = history() ?? w
-    log("resize-topleft d=\(d) frame \(w)->\(after) visible=\(history() != nil)")
-    if after.size != w.size { drag(CGPoint(x: after.minX + margin - d, y: after.minY + margin - d), 30, 30) }
+    drag(CGPoint(x: w.minX + margin - d, y: w.minY + margin - d), 8, 8)
+    let after = history()
+    log("resize-topleft d=\(d) frame \(w)->\(after ?? .zero) visible=\(after != nil)")
 }
 // 上の「Kasane」の帯をつかんで動かす
 w = ensureOpen() ?? w
