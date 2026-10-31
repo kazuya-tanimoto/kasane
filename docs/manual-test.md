@@ -498,8 +498,23 @@ Kazuya さんが操作しないと確かめられない項目だけです。検�
 
 `make run` で、`/Applications` の Kasane が新しい方に置き換わります（履歴と設定は残ります）。
 
-準備: 設定の「一般」の「ログイン時に起動」がオンなら、`make run` のあとで一度オフにしてオンに戻す。
-（ログイン項目が前の `build/Kasane.app` を指したまま残らないように）
+準備（1〜3 の順に）:
+
+1. ターミナルで次を流し、`"Kasane Dev"` を含む行が出るかを見る（出なければ、証明書が無いので ad-hoc になる）
+
+```
+security find-identity -p codesigning | grep "Kasane Dev"
+```
+
+   何も出なければ、次を流して証明書を作る（最後に出る確認のダイアログで macOS のパスワードを入れる）
+
+```
+cd ~/src/kasane && make dev-cert
+```
+
+2. 依頼のコマンド（最後が `make run`）を流す
+3. 設定の「一般」の「ログイン時に起動」がオンなら、一度オフにしてオンに戻す
+   （ログイン項目が前の `build/Kasane.app` を指したまま残らないように）
 
 - [ ] `make run` の出力で、`Built:` の行の終わりが `(signed with: Kasane Dev)` になっている（`(signed with: ad-hoc)` なら NG）
 - [ ] メモで ⌥V を押し、行を選んで ⏎ を押す → メモに貼り付けられる（場所が変わっても許可が残っている）
