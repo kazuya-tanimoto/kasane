@@ -1,0 +1,13 @@
+# 一時的: 入力方法を選び直す速さを測る（測ったらブランチごと消す）
+name: ime-probe
+on: push
+jobs:
+  probe:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - name: 測る
+        run: |
+          swiftc -O scripts/tmp/ime-probe.swift -o /tmp/ime-probe
+          /tmp/ime-probe 2>&1 | tee out.txt
+          while IFS= read -r l; do echo "::notice::$l"; done < out.txt
