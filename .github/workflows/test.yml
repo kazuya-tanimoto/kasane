@@ -5,16 +5,24 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
       - name: probe
-        run: swift scripts/probe-frame.swift probe-out 2>&1 | tee probe-out.log
-      - uses: actions/upload-artifact@v4
-        with:
-          name: probe
-          path: |
-            probe-out
-            probe-out.log
+        run: |
+          swift scripts/probe-frame.swift probe-out 2>&1 | tee probe-out/../probe-out.log || true
+          grep PROBE probe-out.log | while read -r line; do echo "::notice::$line"; done
+      - name: save
+        run: |
+          git config user.name probe; git config user.email probe@example.com
+          git checkout --orphan probe/history-window-frame-out
+          git rm -rq --cached .
+          cp probe-out.log probe-out/
+          git add -f probe-out
+          git commit -qm "probe output"
+          git push -f origin HEAD:probe/history-window-frame-out
