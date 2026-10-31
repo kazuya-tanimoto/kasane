@@ -684,8 +684,8 @@ echo "https://www.rust-lang.org/?kasane="(date +%s) | pbcopy
 準備:
 
 1. デザインモック（https://claude.ai/artifact/Ln3dutffPpCU8sWcVu5c1L）を開く
-2. 下の方の「Liquid Glass 3 案（10/30 案。推奨は B）」の、真ん中の「B」を出す
-3. Mac がライトなら、モックの右上の Tweaks で theme を light にする
+2. 見出し「残りの画面の案（2026-10-30）」の下の左端にある「Liquid Glass 3 案（10/30 案。推奨は B）」の、真ん中の「B」を出す
+3. Mac の外観をダークにしておく（モックはダークで描いてあります）
 4. ⌥V で履歴ウインドウを開く
 5. ピン留めしていない行を選ぶ
 
