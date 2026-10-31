@@ -161,10 +161,18 @@ private struct LoginItemRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: $checked) {
-                Text("ログイン時に起動").font(.headline)
+            // チェックと題名の間をモックの 8pt にするため、題名は Toggle の外に置く。.checkbox はチェックの右端に題名の左端を
+            // そろえる作りで、間を決める指定がない（Apple の ToggleStyle.checkbox）。
+            // .checkbox と同じく題名を押しても切り替わるようにし、VoiceOver には Toggle の名前で読ませる
+            HStack(spacing: 8) {
+                Toggle("ログイン時に起動", isOn: $checked)
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                Text("ログイン時に起動")
+                    .font(.headline)
+                    .onTapGesture { checked.toggle() }
+                    .accessibilityHidden(true)
             }
-            .toggleStyle(.checkbox)
             // 1 文目は設定画面の一般タブの「ログイン時に起動」の説明と同じ文
             Text("Mac にログインすると自動で起動し、コピーした内容を履歴に残します。設定の「一般」からいつでも変えられます。")
                 .font(.callout)
@@ -174,7 +182,17 @@ private struct LoginItemRow: View {
         .padding(.leading, 38)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.08)))
+        .background(OnboardingRowBackground())
+    }
+}
+
+/// 案内の行の地（モック「初回の案内」: 灰色 50% を、ライトで 8%、ダークで 12%）
+private struct OnboardingRowBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(white: 0.5).opacity(colorScheme == .dark ? 0.12 : 0.08))
     }
 }
 
@@ -207,6 +225,6 @@ private struct PermissionRow<Actions: View>: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.08)))
+        .background(OnboardingRowBackground())
     }
 }
