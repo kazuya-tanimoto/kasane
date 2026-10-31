@@ -30,6 +30,14 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(try store.representations(itemID: id).map(\.type), ["public.utf8-plain-text"])
     }
 
+    func testSetThumbnailLater() throws {
+        let id = try XCTUnwrap(try store.save(textCapture("a.png"), limit: 100).item.id)
+        XCTAssertNil(try store.thumbnail(itemID: id))
+        try store.setThumbnail(Data([1, 2, 3]), itemID: id)
+        XCTAssertEqual(try store.thumbnail(itemID: id), Data([1, 2, 3]))
+        XCTAssertEqual(try store.item(id: id)?.thumbnail, Data([1, 2, 3]))
+    }
+
     func testDuplicateMovesToTop() throws {
         let t0 = Date(timeIntervalSince1970: 1_000)
         let a = try store.save(textCapture("A"), limit: 100, now: t0)

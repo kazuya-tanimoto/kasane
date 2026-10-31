@@ -75,10 +75,21 @@ final class QueueController {
             kind: item.kind,
             title: item.title,
             text: item.text,
-            thumbnail: item.thumbnail,
+            thumbnail: item.thumbnail ?? lateImageFileThumbnail(item, itemID: itemID),
             representations: representations
         ))
         onChange?()
+    }
+
+    /// 前から履歴にあって縮小の無い画像のファイル（縮小を作るようにする前にコピーしたもの）を ⌘⏎ で足したときは、
+    /// その時に 1 つ目のファイルから作って保存する。ファイルが無いなどで作れなければ nil（カードは名前だけ）
+    private func lateImageFileThumbnail(_ item: ClipItem, itemID: Int64) -> Data? {
+        guard item.kind == .file, item.isImageFile,
+              let first = item.text?.split(separator: "\n").first
+        else { return nil }
+        guard let thumbnail = CaptureBuilder.imageFileThumbnail(URL(fileURLWithPath: String(first))) else { return nil }
+        try? store.setThumbnail(thumbnail, itemID: itemID)
+        return thumbnail
     }
 
     // MARK: - Event tap
