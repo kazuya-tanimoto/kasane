@@ -75,10 +75,10 @@ struct SearchSettingsView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("検索のゆるさ").font(.system(size: SettingsFont.item))
                 Spacer()
-                // 今の段階の名前は青の太字（モック: ライト #0062CC、ダーク #4DA3FF）。大きさは決めた表の 14pt
+                // 今の段階の名前は太字（モック）。色はシステムの灰（requirements.md「設定画面の部品の色はシステムの色」）、大きさは決めた表の 14pt
                 Text(model.searchLooseness.displayName)
                     .font(.system(size: SettingsFont.text, weight: .semibold))
-                    .foregroundStyle(SettingsColor.dynamic(light: SettingsColor.rgb(0x00, 0x62, 0xCC), dark: SettingsColor.rgb(0x4D, 0xA3, 0xFF), system: .controlAccentColor))
+                    .foregroundStyle(SettingsColor.sub)
             }
             Slider(value: index, in: 0...Double(levels.count - 1), step: 1)
                 .labelsHidden()
@@ -131,12 +131,9 @@ struct SearchSettingsView: View {
         }
     }
 
-    private static let shownFill = SettingsColor.dynamic(
-        light: NSColor(srgbRed: 22 / 255, green: 94 / 255, blue: 131 / 255, alpha: 0.12),
-        dark: NSColor(srgbRed: 95 / 255, green: 163 / 255, blue: 207 / 255, alpha: 0.22),
-        system: NSColor.controlAccentColor.withAlphaComponent(0.25)
-    )
-    private static let shownText = SettingsColor.dynamic(light: SettingsColor.rgb(0x14, 0x52, 0x7A), dark: SettingsColor.rgb(0x9F, 0xCB, 0xE6), system: .labelColor)
-    private static let hiddenFill = SettingsColor.dynamic(light: NSColor.black.withAlphaComponent(0.07), dark: NSColor.white.withAlphaComponent(0.08), system: .quaternaryLabelColor)
-    private static let hiddenText = SettingsColor.dynamic(light: SettingsColor.rgb(0x5C, 0x5F, 0x66), dark: NSColor.white.withAlphaComponent(0.62), system: .secondaryLabelColor)
+    // 色はシステムの色（main と同じ。requirements.md「設定画面の部品の色はシステムの色を使う」）
+    private static let shownFill = Color.blue.opacity(0.14)
+    private static let shownText = Color.blue
+    private static let hiddenFill = Color(nsColor: .quaternaryLabelColor).opacity(0.4)
+    private static let hiddenText = SettingsColor.sub
 }

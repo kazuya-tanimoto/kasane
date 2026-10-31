@@ -53,8 +53,8 @@ struct HistoryView: View {
         }
     }
 
-    /// 一覧の幅（モック「C案 改訂版」の 320）
-    private static let listWidth: CGFloat = 320
+    /// 一覧の幅（font-size-levels-2026-10-22.md §2 の表の 350。文字の大きさの段階で割合を掛ける）
+    private static let listWidth: CGFloat = 350
 
     private var minSize: NSSize {
         HistoryPanelController.minSize(for: appearance.historyTextSize)

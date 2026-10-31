@@ -38,7 +38,8 @@ struct PreviewPane: View {
         switch content.item.kind {
         case .richText:
             if let richText = content.richText {
-                RichTextView(text: richText, bodySize: size.font(14), padding: size.scaled(18))
+                // 書式付きのテキストは、コピー元の大きさのまま、プレビューの本文と同じ割合で拡大する（font-size-levels-2026-10-22.md §2）
+                RichTextView(text: richText, scale: size.font(14) / 14)
             } else {
                 TextPreview(text: content.item.text ?? "")
             }
@@ -85,16 +86,11 @@ private struct TextPreview: View {
     }
 }
 
-/// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く。
-/// 本文がプレビューの文字（14pt）と同じ大きさになるよう全体を同じ割合で拡大・縮小し、見出しなどとの大きさの比は保つ。
-/// 行の高さは 1.7 倍、中の余白は 18（モック「C案 改訂版」。2026-10-31 画面のデザインの決定、
-/// reviews/design-fix-2026-10-31/pr-13-pending-3-2026-10-31.md）。太字・斜体・下線・リンク・文字の色と書体はそのまま
+/// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く
 private struct RichTextView: NSViewRepresentable {
     let text: NSAttributedString
-    /// 本文の文字の大きさ（文字の大きさの段階を掛けた 14pt）
-    let bodySize: CGFloat
-    /// 中の余白（文字の大きさの段階を掛けた 18pt）
-    let padding: CGFloat
+    /// 文字の大きさに掛ける割合（文字の大きさの段階。標準は 1）
+    let scale: CGFloat
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -105,11 +101,8 @@ private struct RichTextView: NSViewRepresentable {
             textView.isEditable = false
             textView.isSelectable = true
             textView.drawsBackground = false
-            let extra = LineHeight.extra(multiple: 1.7, fontSize: bodySize)
-            // 左右は、行の端の既定の余白（lineFragmentPadding）の分を引く。上下は CSS と同じく行の高さの差の半分を足す
-            let lineFragmentPadding = textView.textContainer?.lineFragmentPadding ?? 0
-            textView.textContainerInset = NSSize(width: max(0, padding - lineFragmentPadding), height: padding + extra / 2)
-            textView.textStorage?.setAttributedString(Self.fitted(text, bodySize: bodySize, lineSpacing: extra))
+            textView.textContainerInset = NSSize(width: 13 * scale, height: 18 * scale)
+            textView.textStorage?.setAttributedString(Self.scaled(text, by: scale))
         }
         return scrollView
     }
@@ -117,27 +110,15 @@ private struct RichTextView: NSViewRepresentable {
     // 項目や文字の大きさが変わるとプレビュー全体を作り直すので、ここでは何もしない
     func updateNSView(_ view: NSScrollView, context: Context) {}
 
-    /// いちばん多くの文字に使われている大きさを本文とみなし、それが `bodySize` になる割合を全部の文字に掛ける。
-    /// 行の間も足す（段落ごとの揃えなど、元の段落の書式は残す）
-    private static func fitted(_ text: NSAttributedString, bodySize: CGFloat, lineSpacing: CGFloat) -> NSAttributedString {
+    /// 各文字の大きさに割合を掛ける。見出しと本文の差など、コピー元の書式はそのまま残る
+    private static func scaled(_ text: NSAttributedString, by scale: CGFloat) -> NSAttributedString {
+        guard scale != 1 else { return text }
         let result = NSMutableAttributedString(attributedString: text)
         let whole = NSRange(location: 0, length: result.length)
-        // 大きさの指定がない部分は、NSTextView の既定（12pt）で表示される
-        var counts: [CGFloat: Int] = [:]
         result.enumerateAttribute(.font, in: whole) { value, range, _ in
-            let pointSize = (value as? NSFont)?.pointSize ?? 12
-            counts[pointSize, default: 0] += range.length
-        }
-        let base = counts.max { $0.value < $1.value }?.key ?? 12
-        let scale = base > 0 ? bodySize / base : 1
-        result.enumerateAttribute(.font, in: whole) { value, range, _ in
+            // 大きさの指定がない部分は、NSTextView の既定（12pt）で表示される
             let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: 12)
             result.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range)
-        }
-        result.enumerateAttribute(.paragraphStyle, in: whole) { value, range, _ in
-            let style = ((value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
-            style.lineSpacing = lineSpacing
-            result.addAttribute(.paragraphStyle, value: style, range: range)
         }
         return result
     }
@@ -220,8 +201,8 @@ private struct URLPreview: View {
     private var icon: NSImage? { loaded?.icon }
     private var image: NSImage? { loaded?.image }
 
-    /// 並びと大きさはモック「C案 改訂版」: 上にページの代表画像（高さ 170、角 12）、次にページの題（17pt 太字）、
-    /// 次に URL（12pt 等幅・灰色）。間 12、プレビューの中の余白 18。
+    /// 並びと大きさはモック「C案 改訂版」: 上にページの代表画像（高さ 170、角 12）、次にページの題（15pt 太字。font-size-levels-2026-10-22.md の表）、
+    /// 次に URL（12.5pt 等幅・灰色。同じ表）。間 12、プレビューの中の余白 18。
     /// 題の左のサイトのアイコンはモックに無いが、Kazuya さんが 14 章で確かめた表示なので残す（2026-10-31 全体の照合 R2）
     var body: some View {
         ScrollView {
@@ -249,12 +230,12 @@ private struct URLPreview: View {
                             Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(Color.historySub)
                         }
                         Text(title)
-                            .font(.system(size: size.font(17), weight: .semibold))
+                            .font(.system(size: size.font(15), weight: .semibold))
                             .lineLimit(3)
                     }
                 }
                 Text(urlString)
-                    .font(.system(size: size.font(12), design: .monospaced))
+                    .font(.system(size: size.font(12.5), design: .monospaced))
                     .foregroundStyle(title == nil ? Color.primary : Color.historySub)
                     .textSelection(.enabled)
                     .lineLimit(8)
