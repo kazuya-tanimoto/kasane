@@ -129,3 +129,119 @@ private final class HistoryShadowView: NSView {
         CATransaction.commit()
     }
 }
+
+/// 履歴ウインドウの中身。SwiftUI の画面の上に、端をつかんで大きさを変える所（`ResizeGrips`）を重ねる
+final class HistoryContentView: NSView {
+    private let grips = ResizeGrips()
+
+    /// 端をつかんで大きさを変え終えたとき
+    var onResizeEnd: (() -> Void)? {
+        get { grips.onResizeEnd }
+        set { grips.onResizeEnd = newValue }
+    }
+
+    init(content: NSView) {
+        super.init(frame: content.frame)
+        // SwiftUI の画面の最小の大きさ（NSHostingView の sizingOptions）がウインドウに伝わるよう、制約で四辺に付ける
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(content)
+        NSLayoutConstraint.activate([
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: trailingAnchor),
+            content.topAnchor.constraint(equalTo: topAnchor),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        grips.autoresizingMask = [.width, .height]
+        grips.frame = bounds
+        addSubview(grips)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+/// 端と角をつかんで大きさを変える所。つかむ所の外のクリックは、下の SwiftUI の画面に渡す。
+/// 縁なしのウインドウを Mac に任せると、つかめる所が前のシステムのウインドウより狭いので、自分で作る（`HistoryFrameLayout.resizeEdge`）
+private final class ResizeGrips: NSView {
+    var onResizeEnd: (() -> Void)?
+    /// いま、つかむ所の矢印のカーソルを出しているか
+    private var showsResizeCursor = false
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        return HistoryFrameLayout.edges(at: local, in: bounds.size).isEmpty ? nil : self
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self
+        ))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        updateCursor(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        updateCursor(at: NSPoint(x: -1, y: -1))
+    }
+
+    private func updateCursor(at point: NSPoint) {
+        let edges = HistoryFrameLayout.edges(at: point, in: bounds.size)
+        if let cursor = Self.cursor(for: edges) {
+            cursor.set()
+            showsResizeCursor = true
+        } else if showsResizeCursor {
+            // 端から離れたら矢印に戻す。中身の上のカーソル（検索欄の I など）は、中身が出し直す
+            NSCursor.arrow.set()
+            showsResizeCursor = false
+        }
+    }
+
+    private static func cursor(for edges: HistoryFrameLayout.Edges) -> NSCursor? {
+        let position: NSCursor.FrameResizePosition
+        switch edges {
+        case [.left, .top]: position = .topLeft
+        case [.right, .top]: position = .topRight
+        case [.left, .bottom]: position = .bottomLeft
+        case [.right, .bottom]: position = .bottomRight
+        case .left: position = .left
+        case .right: position = .right
+        case .top: position = .top
+        case .bottom: position = .bottom
+        default: return nil
+        }
+        return NSCursor.frameResize(position: position, directions: .all)
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let window else { return }
+        let edges = HistoryFrameLayout.edges(at: convert(event.locationInWindow, from: nil), in: bounds.size)
+        guard !edges.isEmpty else { return }
+        let start = NSEvent.mouseLocation
+        let startFrame = window.frame
+        let minSize = NSSize(
+            width: max(window.minSize.width, window.contentMinSize.width),
+            height: max(window.minSize.height, window.contentMinSize.height)
+        )
+        // ボタンを離すまで、ドラッグに合わせて大きさを変える
+        while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
+            let location = NSEvent.mouseLocation
+            let frame = HistoryFrameLayout.resized(
+                startFrame, edges: edges, dx: location.x - start.x, dy: location.y - start.y, minSize: minSize
+            )
+            if frame != window.frame {
+                window.setFrame(frame, display: true)
+            }
+            if next.type == .leftMouseUp { break }
+        }
+        onResizeEnd?()
+    }
+}
