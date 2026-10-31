@@ -600,7 +600,7 @@ for i in (seq 30); echo "押し出し用の行 $i" | pbcopy; sleep 1; end
 log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane" AND category == "link"'
 ```
 
-ログを消して見直すコマンド（前の手順のログと分けるため、各手順の最初に使います）:
+ログを消してから見るコマンド（前の手順のログと分けるため、各手順の最初に使います）:
 
 ```
 clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane" AND category == "link"'
@@ -618,8 +618,9 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. ⌥V で開き、URL の行が見える所までゆっくりスクロールする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開き、URL の行が見える所までゆっくりスクロールする
 
 - [ ] スクロールを止めて 2 秒待つ → 見えている URL の数だけ、ログに `fetch` と `saved` が出る（選んでいない行も）
 - [ ] ログに `saved` が出た URL の行を選ぶ → 待たずに、プレビューにタイトル・アイコン・画像が出る
@@ -628,20 +629,22 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://www.python.org/ ）
-3. 押し出し用のコマンドを、もう一度流す
-4. ⌥V で開き、その URL の行が見える所までスクロールする
-5. 1 秒以内に Esc で閉じる
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://www.python.org/ ）
+4. 押し出し用のコマンドを、もう一度流す
+5. ⌥V で開き、その URL の行が見える所までスクロールする
+6. 1 秒以内に Esc で閉じる
 
 - [ ] ⌥V で開き直し、3 秒待つ → ログに www.python.org の `fetch` が出ない
   - 開き直すと一覧は一番上に戻るので、その行は見えません。
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://developer.mozilla.org/ja/ ）
-3. 続けて、メモで文字を 1 行コピーする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://developer.mozilla.org/ja/ ）
+4. 続けて、メモで文字を 1 行コピーする
    - URL の行を 2 行目にして、開いたときに選ばれないようにするためです。
 
 - [ ] ⌥V で開き、スクロールせずに 2 秒待つ → ログに developer.mozilla.org の `fetch` と、同じ番号の `saved` が出る
@@ -654,15 +657,17 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. ⌥V で開く
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開く
 
 - [ ] トラックパッドで、一覧を一番下まで一気に流す。止まらずに、一番上まで戻す → `fetch` の件数を書く
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. ⌥V で開く
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開く
 
 - [ ] 一番上から ↓ を押し続けて、URL の行を通り過ぎる → `fetch` の件数を書く
 
@@ -670,8 +675,9 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. ⌥⌘F で FIFO モードにする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥⌘F で FIFO モードにする
 
 - [ ] 履歴ウインドウは開かずに、Arc でこの章でまだコピーしていないサイトの URL をコピーする（例: https://www.rust-lang.org/ ）→ ログに www.rust-lang.org の `fetch` と、同じ番号の `saved` が出る
 
@@ -681,9 +687,10 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 **準備**:
 
-1. ログのウインドウで ⌃C を押し、「ログを消して見直すコマンド」を流す
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする
-3. Wi-Fi をオフにする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする
+4. Wi-Fi をオフにする
 
 - [ ] ⌥V で開き、その URL の行を選ぶ → ログに `skip 番号 (offline)` が出る
 
