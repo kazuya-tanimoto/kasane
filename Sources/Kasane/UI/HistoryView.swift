@@ -31,15 +31,19 @@ struct HistoryView: View {
                 ItemListView(model: model)
                     .safeAreaPadding(.bottom, actionBarClearance)
                     .frame(width: appearance.historyTextSize.scaled(Self.listWidth))
-                PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.previewCard)
-                    )
-                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）
-                    .padding(.bottom, previewBottomClearance)
+                VStack(spacing: 0) {
+                    PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(Color.previewCard)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）。
+                    // その下の空いた所（帯の左など）は、前の下の帯の空いた所と同じく、つかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）
+                    WindowDragArea()
+                        .frame(height: previewBottomClearance)
+                }
             }
             .padding(.horizontal, Self.contentHorizontalPadding)
             .padding(.bottom, Self.contentBottomPadding)
