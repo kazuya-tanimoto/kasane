@@ -5,6 +5,7 @@ import CoreGraphics
 import XCTest
 #if canImport(AppKit)
 import AppKit
+import SwiftUI
 #endif
 @testable import KasaneCore
 
@@ -88,6 +89,36 @@ final class QueueBandLayoutTests: XCTestCase {
             print("QueueBand: \(size)pt 全角 1 字 \(QueueBandLayout.fullWidthCharacterWidth(fontSize: size))pt、最大の本文 \(maxBody)pt に \(maxLine) 字、最小の本文 \(minBody)pt に \(minLine) 字")
             XCTAssertEqual(maxLine, 40)
         }
+    }
+
+    /// 帯の文字は SwiftUI の Text で描く。AppKit の並べ方と同じかを、SwiftUI で描いて 1 行に入る字数で確かめる
+    @MainActor
+    func testSwiftUITextBreaksAfterFortyCharactersAtMaxWidth() {
+        for size: CGFloat in [13, 14.5, 16] {
+            let maxBody = QueueBandLayout.maxWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let oneLine = renderedHeight(count: 1, width: maxBody, fontSize: size)
+            var fits = 0
+            for count in 30...50 where renderedHeight(count: count, width: maxBody, fontSize: size) <= oneLine {
+                fits = count
+            }
+            // 字の幅を文字の大きさとしていた前の最大（40 × 文字の大きさ + 1）でも数える（43 字入った不具合の原因を見るため）
+            let oldBody = 40 * size + 1
+            var oldFits = 0
+            for count in 30...50 where renderedHeight(count: count, width: oldBody, fontSize: size) <= oneLine {
+                oldFits = count
+            }
+            print("QueueBand SwiftUI: \(size)pt 最大の本文 \(maxBody)pt に \(fits) 字、前の最大 \(oldBody)pt に \(oldFits) 字")
+            XCTAssertEqual(fits, 40)
+        }
+    }
+
+    @MainActor
+    private func renderedHeight(count: Int, width: CGFloat, fontSize: CGFloat) -> CGFloat {
+        let view = Text(String(repeating: "一", count: count))
+            .font(.system(size: fontSize))
+            .frame(width: width, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+        return ImageRenderer(content: view).nsImage?.size.height ?? 0
     }
 
     private func firstLineLength(width: CGFloat, fontSize: CGFloat) -> Int {
