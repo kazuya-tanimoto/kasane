@@ -147,27 +147,19 @@ final class QueueHUDController {
 
     // MARK: 影
 
-    /// 影を帯の内側の端の外に置く（出していなければ置き場所だけ変える）
-    private func placeShadow() {
-        shadow.place(
-            band: panel.frame,
-            side: AppSettings.hudSide,
-            fontSize: CGFloat(state.fontSize)
-        )
+    private func shadowFrame(for band: NSRect) -> NSRect {
+        QueueBandLayout.shadowFrame(band: band, side: AppSettings.hudSide)
     }
 
-    /// 帯が出きってから、影をふっと出す（滑っている間は帯の端が動くので出さない）
-    private func showShadow() {
-        guard state.isShown, panel.isVisible else { return }
-        placeShadow()
-        if !shadow.isVisible {
-            shadow.alphaValue = 0
-            shadow.order(.below, relativeTo: panel.windowNumber)
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = Self.fadeDuration
-            shadow.animator().alphaValue = 1
-        }
+    /// 影を帯の内側の端の外に置く（出していなければ置き場所だけ変える）
+    private func placeShadow() {
+        shadow.setFrame(shadowFrame(for: panel.frame), display: false)
+        shadow.layoutCaster(side: AppSettings.hudSide)
+    }
+
+    /// 影を帯のすぐ後ろに出す
+    private func orderShadow() {
+        shadow.order(.below, relativeTo: panel.windowNumber)
     }
 
     // MARK: 出し入れ
@@ -182,26 +174,34 @@ final class QueueHUDController {
         let wasVisible = panel.isVisible
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.setFrame(frame, display: true)
-            if !wasVisible { panel.alphaValue = 0 }
+            placeShadow()
+            if !wasVisible {
+                panel.alphaValue = 0
+                shadow.alphaValue = 0
+            }
             orderFront()
+            orderShadow()
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = Self.fadeDuration
                 panel.animator().alphaValue = 1
+                shadow.animator().alphaValue = 1
             }
-            showShadow()
             return
         }
         panel.alphaValue = 1
+        shadow.alphaValue = 1
         if !wasVisible {
             panel.setFrame(collapsedFrame(from: frame), display: false)
             orderFront()
         }
+        // 影は帯の内側の端と一緒に動かす
+        placeShadow()
+        orderShadow()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = Self.slideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
-        } completionHandler: { [weak self] in
-            MainActor.assumeIsolated { self?.showShadow() }
+            shadow.animator().setFrame(shadowFrame(for: frame), display: false)
         }
     }
 
@@ -211,19 +211,21 @@ final class QueueHUDController {
         guard panel.isVisible else { return }
         let token = UUID()
         hideToken = token
-        shadow.orderOut(nil)
         // completionHandler は @Sendable なので、変数に入れるときも印を付ける（付けないと警告が出る）
         let finish: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.hideToken == token else { return }
                 self.panel.orderOut(nil)
                 self.panel.alphaValue = 1
+                self.shadow.orderOut(nil)
+                self.shadow.alphaValue = 1
             }
         }
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = Self.fadeDuration
                 panel.animator().alphaValue = 0
+                shadow.animator().alphaValue = 0
             }, completionHandler: finish)
             return
         }
@@ -232,6 +234,7 @@ final class QueueHUDController {
             context.duration = Self.slideDuration
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().setFrame(target, display: true)
+            shadow.animator().setFrame(shadowFrame(for: target), display: false)
         }, completionHandler: finish)
     }
 
@@ -335,29 +338,27 @@ final class QueueBandShadowPanel: NSPanel {
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 
-    func place(band: CGRect, side: HUDSide, fontSize: CGFloat) {
-        let frame = QueueBandLayout.shadowFrame(band: band, side: side, fontSize: fontSize)
-        if self.frame != frame {
-            setFrame(frame, display: false)
-        }
-        let scale = QueueBandLayout.scale(fontSize: fontSize)
+    /// 影を落とす帯の形を、ウインドウの帯の側の端の外に置く。ウインドウの大きさを変えたあとに呼ぶ
+    func layoutCaster(side: HUDSide) {
         let m = QueueBandLayout.Metrics.self
-        // 帯の形は、上下の端で影が薄れないよう、ウインドウより上下に長くする
-        let overhang = frame.width
+        let size = contentView?.bounds.size ?? frame.size
+        // 帯の形は、上下の端で影が薄れないよう上下に長く、幅は帯の幅が変わっても足りるよう広くする
+        let overhang = size.width
+        let reach: CGFloat = 4000
         let bandRect = CGRect(
-            x: side == .right ? frame.width : -band.width,
+            x: side == .right ? size.width : -reach,
             y: -overhang,
-            width: band.width,
-            height: frame.height + overhang * 2
+            width: reach,
+            height: size.height + overhang * 2
         )
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         caster.frame = bandRect
         caster.shadowPath = CGPath(rect: CGRect(origin: .zero, size: bandRect.size), transform: nil)
         // 影は内側へずらす。右の帯なら左へ
-        caster.shadowOffset = CGSize(width: (side == .right ? -1 : 1) * m.shadowOffset * scale, height: 0)
+        caster.shadowOffset = CGSize(width: (side == .right ? -1 : 1) * m.shadowOffset, height: 0)
         // CSS のぼかしは標準偏差がぼかしの半分のガウス。shadowRadius は半分の値にした（Mac でモックと見比べてはいない）
-        caster.shadowRadius = m.shadowBlur * scale / 2
+        caster.shadowRadius = m.shadowBlur / 2
         CATransaction.commit()
     }
 }

@@ -58,11 +58,14 @@ public enum QueueBandLayout {
         public static let numberFontRatio: CGFloat = 7.5 / 8.5
         /// 本文の行の高さ（文字の大きさの倍率。モック line-height 1.45）
         public static let lineHeightRatio: CGFloat = 1.45
-        /// 帯の影（モック: 内側へだけ。box-shadow 6px 0 20px 黒 28%）。横のずれとぼかし
-        public static let shadowOffset: CGFloat = 6 * mockPixel
-        public static let shadowBlur: CGFloat = 20 * mockPixel
+        /// 帯の影（モック: 内側へだけ。box-shadow 6px 0 20px 黒 28%）。
+        /// 帯の外の長さなので、文字の大きさには合わせず、画面を縮めた割合（帯の幅 260pt を 146px に描いた）で戻す
+        /// （2026-10-31 画面のデザインのスレッドの決定）。値は pt
+        public static let outsidePixel: CGFloat = 260 / 146
+        public static let shadowOffset: CGFloat = 6 * outsidePixel
+        public static let shadowBlur: CGFloat = 20 * outsidePixel
         public static let shadowOpacity: CGFloat = 0.28
-        /// 影を描く所の幅。ぼかしは標準偏差がぼかしの半分のガウス（CSS の決まり）なので、その 3 倍で見えなくなる
+        /// 影を描く所の幅。CSS のぼかしは標準偏差がぼかしの半分のガウスなので、その 3 倍で見えなくなる
         public static let shadowExtent: CGFloat = shadowOffset + shadowBlur * 1.5
         /// 帯の内側の端の、ドラッグでつかめる幅（倍率は掛けない）
         public static let handleWidth: CGFloat = 6
@@ -115,8 +118,8 @@ public enum QueueBandLayout {
     }
 
     /// 帯の影を描く所。帯の内側の端の外に接し、帯と同じ高さ。影の所のクリックは後ろのアプリに届けるので、帯とは別のウインドウにする
-    public static func shadowFrame(band: CGRect, side: HUDSide, fontSize: CGFloat) -> CGRect {
-        let width = Metrics.shadowExtent * scale(fontSize: fontSize)
+    public static func shadowFrame(band: CGRect, side: HUDSide) -> CGRect {
+        let width = Metrics.shadowExtent
         let x: CGFloat
         switch side {
         case .left: x = band.maxX

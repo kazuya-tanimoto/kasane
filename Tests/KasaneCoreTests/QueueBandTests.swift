@@ -39,19 +39,18 @@ final class QueueBandLayoutTests: XCTestCase {
         }
     }
 
-    /// 影は帯の内側の端の外にだけ出し、帯には重ねない
+    /// 影は帯の内側の端の外にだけ出し、帯には重ねない。大きさはモックの影を画面の割合で戻した値（10.7pt ずらし、ぼかし 35.6pt）
     func testShadowSitsOutsideTheInnerEdge() {
         let band = CGRect(x: 1000, y: 0, width: 282, height: 737)
-        let right = QueueBandLayout.shadowFrame(band: band, side: .right, fontSize: 12)
+        let right = QueueBandLayout.shadowFrame(band: band, side: .right)
         XCTAssertEqual(right.maxX, band.minX)
-        XCTAssertEqual(right.width, QueueBandLayout.Metrics.shadowExtent, accuracy: 0.001)
         XCTAssertEqual(right.minY, band.minY)
         XCTAssertEqual(right.height, band.height)
-        let left = QueueBandLayout.shadowFrame(band: band, side: .left, fontSize: 12)
+        let left = QueueBandLayout.shadowFrame(band: band, side: .left)
         XCTAssertEqual(left.minX, band.maxX)
-        // 文字を大きくすると影も比例して大きくなる
-        let big = QueueBandLayout.shadowFrame(band: band, side: .right, fontSize: 16)
-        XCTAssertEqual(big.width, QueueBandLayout.Metrics.shadowExtent * 16 / 12, accuracy: 0.001)
+        XCTAssertEqual(QueueBandLayout.Metrics.shadowOffset, 10.7, accuracy: 0.05)
+        XCTAssertEqual(QueueBandLayout.Metrics.shadowBlur, 35.6, accuracy: 0.05)
+        XCTAssertEqual(right.width, 10.7 + 35.6 * 1.5, accuracy: 0.1)
     }
 
     func testInitialWidthIsThePreviousWidth() {
