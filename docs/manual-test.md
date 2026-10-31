@@ -586,6 +586,7 @@ git push --tags
    - 設定の「履歴」の「履歴に残さないアプリ」にターミナルを入れているときは、この章の間だけ外してください。
 4. 別のターミナルのウインドウで、下の「ログを見るコマンド」を流し、そのままにする
    - 取りに行った URL が、ここに出ます。止めるときは ⌃C です。
+   - この章では、このウインドウを「ログのウインドウ」と呼びます。
 
 押し出し用のコマンド:
 
@@ -597,6 +598,12 @@ for i in (seq 30); echo "押し出し用の行 $i" | pbcopy; sleep 1; end
 
 ```
 log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane" AND category == "link"'
+```
+
+ログを消してから見るコマンド（前の手順のログと分けるため、各手順の最初に使います）:
+
+```
+clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kasane" AND category == "link"'
 ```
 
 ログの読み方:
@@ -611,8 +618,9 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 **準備**:
 
-1. ログのウインドウで ⌘K を押す
-2. ⌥V で開き、URL の行が見える所までゆっくりスクロールする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開き、URL の行が見える所までゆっくりスクロールする
 
 - [ ] スクロールを止めて 2 秒待つ → 見えている URL の数だけ、ログに `fetch` と `saved` が出る（選んでいない行も）
 - [ ] ログに `saved` が出た URL の行を選ぶ → 待たずに、プレビューにタイトル・アイコン・画像が出る
@@ -621,20 +629,22 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 **準備**:
 
-1. ログのウインドウで ⌘K を押す（前の手順のログを消すため）
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://www.python.org/ ）
-3. 押し出し用のコマンドを、もう一度流す
-4. ⌥V で開き、その URL の行が見える所までスクロールする
-5. 1 秒以内に Esc で閉じる
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://www.python.org/ ）
+4. 押し出し用のコマンドを、もう一度流す
+5. ⌥V で開き、その URL の行が見える所までスクロールする
+6. 1 秒以内に Esc で閉じる
 
 - [ ] ⌥V で開き直し、3 秒待つ → ログに www.python.org の `fetch` が出ない
   - 開き直すと一覧は一番上に戻るので、その行は見えません。
 
 **準備**:
 
-1. ログのウインドウで ⌘K を押す
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://developer.mozilla.org/ja/ ）
-3. 続けて、メモで文字を 1 行コピーする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://developer.mozilla.org/ja/ ）
+4. 続けて、メモで文字を 1 行コピーする
    - URL の行を 2 行目にして、開いたときに選ばれないようにするためです。
 
 - [ ] ⌥V で開き、スクロールせずに 2 秒待つ → ログに developer.mozilla.org の `fetch` と、同じ番号の `saved` が出る
@@ -645,11 +655,19 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 - ログに出た `fetch` の件数を、チェックの横に書いてください。
 - 行が見えてから取りに行くまでの待ち時間（今は仮の値）を決めるのに使います。
 
-**準備**: ログのウインドウで ⌘K を押し、⌥V で開く。
+**準備**:
+
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開く
 
 - [ ] トラックパッドで、一覧を一番下まで一気に流す。止まらずに、一番上まで戻す → `fetch` の件数を書く
 
-**準備**: ログのウインドウで ⌘K を押し、⌥V で開く。
+**準備**:
+
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥V で開く
 
 - [ ] 一番上から ↓ を押し続けて、URL の行を通り過ぎる → `fetch` の件数を書く
 
@@ -657,8 +675,9 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 **準備**:
 
-1. ログのウインドウで ⌘K を押す
-2. ⌥⌘F で FIFO モードにする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. ⌥⌘F で FIFO モードにする
 
 - [ ] 履歴ウインドウは開かずに、Arc でこの章でまだコピーしていないサイトの URL をコピーする（例: https://www.rust-lang.org/ ）→ ログに www.rust-lang.org の `fetch` と、同じ番号の `saved` が出る
 
@@ -668,9 +687,10 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 
 **準備**:
 
-1. ログのウインドウで ⌘K を押す
-2. この章でまだコピーしていないサイトの URL を 1 つコピーする
-3. Wi-Fi をオフにする
+1. ログのウインドウで ⌃C を押す
+2. 「ログを消してから見るコマンド」を流す
+3. この章でまだコピーしていないサイトの URL を 1 つコピーする
+4. Wi-Fi をオフにする
 
 - [ ] ⌥V で開き、その URL の行を選ぶ → ログに `skip 番号 (offline)` が出る
 
