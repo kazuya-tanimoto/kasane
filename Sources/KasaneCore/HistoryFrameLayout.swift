@@ -33,6 +33,17 @@ public enum HistoryFrameLayout {
         window.insetBy(dx: resizeMargin, dy: resizeMargin)
     }
 
+    /// 角丸の本体を囲むウインドウの四角（本体の周りに余白を足す）
+    public static func window(aroundBody body: CGRect) -> CGRect {
+        body.insetBy(dx: -resizeMargin, dy: -resizeMargin)
+    }
+
+    /// 本体を置ける画面の所。周りの余白を足したウインドウが画面に収まるよう、余白の分だけ内へ寄せる。
+    /// 中心は画面と同じなので、中心からのずれで覚えた位置はそのまま使える
+    public static func bodyArea(in screen: CGRect) -> CGRect {
+        screen.insetBy(dx: resizeMargin, dy: resizeMargin)
+    }
+
     /// 影だけを描く別のウインドウの位置。履歴ウインドウを `shadowExtent` だけ広げた四角
     public static func shadowFrame(window: CGRect) -> CGRect {
         window.insetBy(dx: -shadowExtent, dy: -shadowExtent)

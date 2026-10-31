@@ -43,19 +43,22 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     nonisolated static let defaultSize = NSSize(width: 800, height: 580)
     nonisolated static let minSize = NSSize(width: 720, height: 420)
 
-    /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）。
-    /// 見える大きさを変えないよう、角丸の外の余白（`HistoryFrameLayout.resizeMargin`）の分をウインドウに足す
-    nonisolated static func defaultSize(for level: TextSizeLevel) -> NSSize {
-        withMargins(WindowPlacement.size(defaultSize, scaledTo: level))
+    /// 文字の大きさの段階に合わせた、角丸の本体の初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）。
+    /// 位置と大きさは本体で決めて覚え、ウインドウは周りの余白（`HistoryFrameLayout.resizeMargin`）を足した大きさにする。
+    /// 余白の前に覚えた大きさも、そのまま見える大きさとして使える
+    nonisolated static func bodyDefaultSize(for level: TextSizeLevel) -> NSSize {
+        WindowPlacement.size(defaultSize, scaledTo: level)
     }
 
+    /// 角丸の本体の最小の大きさ
+    nonisolated static func bodyMinSize(for level: TextSizeLevel) -> NSSize {
+        WindowPlacement.size(minSize, scaledTo: level)
+    }
+
+    /// ウインドウの最小の大きさ（本体の最小に余白を足す）
     nonisolated static func minSize(for level: TextSizeLevel) -> NSSize {
-        withMargins(WindowPlacement.size(minSize, scaledTo: level))
-    }
-
-    private nonisolated static func withMargins(_ size: NSSize) -> NSSize {
-        let margins = HistoryFrameLayout.resizeMargin * 2
-        return NSSize(width: size.width + margins, height: size.height + margins)
+        let window = HistoryFrameLayout.window(aroundBody: CGRect(origin: .zero, size: bodyMinSize(for: level)))
+        return window.size
     }
 
     private var panel: HistoryPanel
@@ -114,30 +117,34 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hosting.layoutSubtreeIfNeeded()
-            self.resizeForTextSize(from: old, to: level, minSize: minSize)
+            self.resizeForTextSize(from: old, to: level)
         }
     }
 
-    private func resizeForTextSize(from old: TextSizeLevel, to level: TextSizeLevel, minSize: NSSize) {
+    private func resizeForTextSize(from old: TextSizeLevel, to level: TextSizeLevel) {
+        let minSize = Self.bodyMinSize(for: level)
         if isVisible, let screen = panel.screen?.visibleFrame {
-            let frame = WindowPlacement.frame(panel.frame, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            let area = HistoryFrameLayout.bodyArea(in: screen)
+            let body = HistoryFrameLayout.body(in: panel.frame)
+            let frame = WindowPlacement.frame(body, in: area, changingTextSizeFrom: old, to: level, minSize: minSize)
             isPositioning = true
-            panel.setFrame(frame, display: true)
+            panel.setFrame(HistoryFrameLayout.window(aroundBody: frame), display: true)
             isPositioning = false
             // 位置は画面の中心からのずれで覚えているので、広げたあとの位置で覚え直す
             saveFrame()
         } else if AppSettings.historyWindowSize != nil, let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
             // 閉じている間に変えたときは、覚えている位置と大きさを同じように変える
+            let area = HistoryFrameLayout.bodyArea(in: screen)
             let current = WindowPlacement.frame(
-                in: screen,
+                in: area,
                 savedSize: AppSettings.historyWindowSize,
                 savedOffset: AppSettings.historyWindowOffset,
-                defaultSize: Self.defaultSize(for: old),
-                minSize: Self.minSize(for: old)
+                defaultSize: Self.bodyDefaultSize(for: old),
+                minSize: Self.bodyMinSize(for: old)
             )
-            let frame = WindowPlacement.frame(current, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            let frame = WindowPlacement.frame(current, in: area, changingTextSizeFrom: old, to: level, minSize: minSize)
             AppSettings.historyWindowSize = frame.size
-            AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
+            AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: area)
         }
     }
 
@@ -208,9 +215,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         return WindowPlacement.isStandard(
             savedSize: AppSettings.historyWindowSize,
             savedOffset: AppSettings.historyWindowOffset,
-            defaultSize: Self.defaultSize(for: textSize),
-            minSize: Self.minSize(for: textSize),
-            in: screen
+            defaultSize: Self.bodyDefaultSize(for: textSize),
+            minSize: Self.bodyMinSize(for: textSize),
+            in: HistoryFrameLayout.bodyArea(in: screen)
         )
     }
 
@@ -304,15 +311,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let frame = WindowPlacement.frame(
-            in: visible,
+        let body = WindowPlacement.frame(
+            in: HistoryFrameLayout.bodyArea(in: visible),
             savedSize: AppSettings.historyWindowSize,
             savedOffset: AppSettings.historyWindowOffset,
-            defaultSize: Self.defaultSize(for: textSize),
-            minSize: Self.minSize(for: textSize)
+            defaultSize: Self.bodyDefaultSize(for: textSize),
+            minSize: Self.bodyMinSize(for: textSize)
         )
         isPositioning = true
-        panel.setFrame(frame, display: false)
+        panel.setFrame(HistoryFrameLayout.window(aroundBody: body), display: false)
         isPositioning = false
     }
 
@@ -327,9 +334,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     private func saveFrame() {
         guard !isPositioning, panel.isVisible, !isHiding, let screen = panel.screen?.visibleFrame else { return }
-        let frame = panel.frame
-        AppSettings.historyWindowSize = frame.size
-        AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
+        // 覚えるのは角丸の本体の大きさ（余白を付ける前に覚えた大きさと同じ意味のまま）
+        let body = HistoryFrameLayout.body(in: panel.frame)
+        AppSettings.historyWindowSize = body.size
+        AppSettings.historyWindowOffset = WindowPlacement.offset(of: body, in: HistoryFrameLayout.bodyArea(in: screen))
     }
 
     func windowDidMove(_ notification: Notification) {
