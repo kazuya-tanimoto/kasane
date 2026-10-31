@@ -664,7 +664,9 @@ echo "https://www.rust-lang.org/?kasane="(date +%s) | pbcopy
 8. テキストエディットが開き、「見出し」の文が出るので、⌘A、⌘C を押す
 9. Dock の Finder を押し、選ばれている kasane-test.zip を ⌘C でコピーする
 
-このコマンドは Mac で試していません。5 つが履歴に出なければ教えてください。
+このコマンドは自動テスト用の Mac で流し、3 つのコピーと 2 つのファイル作りが動くのを確かめました。
+8 と 9 の手でのコピーだけは、自動では確かめられていません。
+5 つが履歴に出なければ教えてください。
 
 ```
 cd /tmp; and printf '%s' 'これは一覧で 2 行になる長い題名の確かめです。来週の打ち合わせの議題と持っていく資料をまとめます' | pbcopy; sleep 1; printf '1 行目の文です\n2 行目の文です\n3 行目の文です\n4 行目の文です\n5 行目の文です' | pbcopy; sleep 1; printf 'https://github.com/kazuya-tanimoto/kasane?kasane=%s' (date +%s) | pbcopy; echo '<h1>見出し</h1><p>本文の<b>太字</b>の文です</p>' > kasane-test.html; and textutil -inputencoding UTF-8 -convert rtf kasane-test.html -output kasane-test.rtf; and echo kasane > kasane-test.txt; and zip -q kasane-test.zip kasane-test.txt; and open -R /tmp/kasane-test.zip; and open -a TextEdit /tmp/kasane-test.rtf
