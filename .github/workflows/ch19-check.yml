@@ -1,0 +1,33 @@
+# 一時的: 19 章の準備のコマンドが Mac で動くかを確かめる（確かめたらブランチごと消す）
+name: ch19-check
+on: push
+jobs:
+  check:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - run: brew install fish
+      - name: コマンドを 1 つずつ流し、そのたびにクリップボードの型を見る
+        shell: bash
+        run: |
+          set -x
+          cmd=$(sed -n '/^## 19/,$p' docs/manual-test.md | grep '^cd /tmp')
+          # 最後の open（Finder とテキストエディット）の前までを fish で流す。open は別に確かめる
+          body="${cmd% ; and open -R*}"
+          body="${cmd%%; and open -R*}"
+          echo "$body"
+          # pbcopy の後ごとに型を記録する
+          fish -c "$(echo "$body" | sed 's/| pbcopy;/| pbcopy; osascript -e "clipboard info"; pbpaste | head -c 120; echo;/g')"
+          ls -la /tmp/kasane-test.*
+          file /tmp/kasane-test.rtf; head -c 400 /tmp/kasane-test.rtf; echo
+          textutil -convert txt -stdout /tmp/kasane-test.rtf
+          unzip -l /tmp/kasane-test.zip
+          # 拡張子 zip が public.content に入らないこと（Quick Look で出せないとみなす所）
+          cat > /tmp/ut.swift <<'S'
+          import UniformTypeIdentifiers
+          let t = UTType(filenameExtension: "zip")!
+          print(t.identifier, "content:", t.conforms(to: .content), t.localizedDescription ?? "-")
+          S
+          swift /tmp/ut.swift
+          fish -c 'open -R /tmp/kasane-test.zip; and echo open-R-ok; open -a TextEdit /tmp/kasane-test.rtf; and echo textedit-ok'
+          sleep 3; osascript -e 'tell application "TextEdit" to get text of document 1' || true
