@@ -39,6 +39,21 @@ final class QueueBandLayoutTests: XCTestCase {
         }
     }
 
+    /// 影は帯の内側の端の外にだけ出し、帯には重ねない
+    func testShadowSitsOutsideTheInnerEdge() {
+        let band = CGRect(x: 1000, y: 0, width: 282, height: 737)
+        let right = QueueBandLayout.shadowFrame(band: band, side: .right, fontSize: 12)
+        XCTAssertEqual(right.maxX, band.minX)
+        XCTAssertEqual(right.width, QueueBandLayout.Metrics.shadowExtent, accuracy: 0.001)
+        XCTAssertEqual(right.minY, band.minY)
+        XCTAssertEqual(right.height, band.height)
+        let left = QueueBandLayout.shadowFrame(band: band, side: .left, fontSize: 12)
+        XCTAssertEqual(left.minX, band.maxX)
+        // 文字を大きくすると影も比例して大きくなる
+        let big = QueueBandLayout.shadowFrame(band: band, side: .right, fontSize: 16)
+        XCTAssertEqual(big.width, QueueBandLayout.Metrics.shadowExtent * 16 / 12, accuracy: 0.001)
+    }
+
     func testInitialWidthIsThePreviousWidth() {
         let width = QueueBandLayout.width(savedBaseWidth: nil, fontSize: standard, screen: screen)
         XCTAssertEqual(width, 260 * standard / 12, accuracy: 0.001)

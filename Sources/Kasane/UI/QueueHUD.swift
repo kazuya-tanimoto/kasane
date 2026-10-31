@@ -13,10 +13,12 @@ import SwiftUI
 /// - 出すときと消すときだけ、画面の端から約 0.2 秒滑らせる。「視差効果を減らす」がオンならフェードだけ
 /// - モード中は、履歴ウインドウを開いている間も出したままにする
 /// - クリックは受け止めて下のアプリには通さないが、キーウインドウにはならない（作業中のアプリから入力先を移さない）
+/// - 影はモックどおり内側へだけ落とす。影の所のクリックは後ろのアプリに届くよう、影は別のウインドウ（`QueueBandShadowPanel`）に描く
 @MainActor
 final class QueueHUDController {
     private var panel: QueueHUDPanel
     private let container: QueueBandContainer
+    private let shadow = QueueBandShadowPanel()
     private let state = QueueBandState()
     private let links: LinkPrefetcher
     private var blurObserver: AnyCancellable?
@@ -75,6 +77,9 @@ final class QueueHUDController {
         blurState.apply(radius, to: panel)
         if wasVisible {
             panel.orderFrontRegardless()
+            if shadow.isVisible {
+                shadow.order(.below, relativeTo: panel.windowNumber)
+            }
         }
     }
 
@@ -137,6 +142,32 @@ final class QueueHUDController {
         if panel.frame != frame {
             panel.setFrame(frame, display: true)
         }
+        placeShadow()
+    }
+
+    // MARK: 影
+
+    /// 影を帯の内側の端の外に置く（出していなければ置き場所だけ変える）
+    private func placeShadow() {
+        shadow.place(
+            band: panel.frame,
+            side: AppSettings.hudSide,
+            fontSize: CGFloat(state.fontSize)
+        )
+    }
+
+    /// 帯が出きってから、影をふっと出す（滑っている間は帯の端が動くので出さない）
+    private func showShadow() {
+        guard state.isShown, panel.isVisible else { return }
+        placeShadow()
+        if !shadow.isVisible {
+            shadow.alphaValue = 0
+            shadow.order(.below, relativeTo: panel.windowNumber)
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = Self.fadeDuration
+            shadow.animator().alphaValue = 1
+        }
     }
 
     // MARK: 出し入れ
@@ -157,6 +188,7 @@ final class QueueHUDController {
                 context.duration = Self.fadeDuration
                 panel.animator().alphaValue = 1
             }
+            showShadow()
             return
         }
         panel.alphaValue = 1
@@ -169,7 +201,7 @@ final class QueueHUDController {
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().setFrame(frame, display: true)
         } completionHandler: { [weak self] in
-            MainActor.assumeIsolated { self?.panel.invalidateShadow() }
+            MainActor.assumeIsolated { self?.showShadow() }
         }
     }
 
@@ -179,6 +211,7 @@ final class QueueHUDController {
         guard panel.isVisible else { return }
         let token = UUID()
         hideToken = token
+        shadow.orderOut(nil)
         // completionHandler は @Sendable なので、変数に入れるときも印を付ける（付けないと警告が出る）
         let finish: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
@@ -225,11 +258,11 @@ final class QueueHUDController {
         guard let frame = shownFrame(width: width) else { return }
         container.contentWidth = width
         panel.setFrame(frame, display: true)
+        placeShadow()
     }
 
     private func dragEnded() {
         AppSettings.hudBandWidth = QueueBandLayout.baseWidth(for: panel.frame.width, fontSize: CGFloat(state.fontSize))
-        panel.invalidateShadow()
     }
 }
 
@@ -258,7 +291,8 @@ final class QueueHUDPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // 影はシステムのもの（周り全体）を使わず、内側へだけ別のウインドウに描く（QueueBandShadowPanel）
+        hasShadow = false
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
         isMovable = false
@@ -266,6 +300,66 @@ final class QueueHUDPanel: NSPanel {
 
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
+}
+
+/// 帯の内側の端の外に落とす影だけのウインドウ（モック: box-shadow 6px 0 20px 黒 28%）。
+/// クリックは受けず、後ろのアプリに届ける
+final class QueueBandShadowPanel: NSPanel {
+    /// 帯の形をした、絵のない層。影だけを描く。帯の所はウインドウの外なので、影のうちウインドウに入る所だけが見える
+    private let caster = CALayer()
+
+    init() {
+        super.init(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered,
+            defer: false
+        )
+        level = .statusBar
+        collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        isOpaque = false
+        backgroundColor = .clear
+        hasShadow = false
+        ignoresMouseEvents = true
+        hidesOnDeactivate = false
+        isReleasedWhenClosed = false
+        isMovable = false
+        let view = NSView()
+        view.wantsLayer = true
+        caster.shadowColor = NSColor.black.cgColor
+        caster.shadowOpacity = Float(QueueBandLayout.Metrics.shadowOpacity)
+        view.layer?.addSublayer(caster)
+        contentView = view
+    }
+
+    override var canBecomeKey: Bool { false }
+    override var canBecomeMain: Bool { false }
+
+    func place(band: CGRect, side: HUDSide, fontSize: CGFloat) {
+        let frame = QueueBandLayout.shadowFrame(band: band, side: side, fontSize: fontSize)
+        if self.frame != frame {
+            setFrame(frame, display: false)
+        }
+        let scale = QueueBandLayout.scale(fontSize: fontSize)
+        let m = QueueBandLayout.Metrics.self
+        // 帯の形は、上下の端で影が薄れないよう、ウインドウより上下に長くする
+        let overhang = frame.width
+        let bandRect = CGRect(
+            x: side == .right ? frame.width : -band.width,
+            y: -overhang,
+            width: band.width,
+            height: frame.height + overhang * 2
+        )
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        caster.frame = bandRect
+        caster.shadowPath = CGPath(rect: CGRect(origin: .zero, size: bandRect.size), transform: nil)
+        // 影は内側へずらす。右の帯なら左へ
+        caster.shadowOffset = CGSize(width: (side == .right ? -1 : 1) * m.shadowOffset * scale, height: 0)
+        // CSS のぼかしは標準偏差がぼかしの半分のガウス。shadowRadius は半分の値にした（Mac でモックと見比べてはいない）
+        caster.shadowRadius = m.shadowBlur * scale / 2
+        CATransaction.commit()
+    }
 }
 
 /// 帯の中身と、内側の端のつかむ所を並べる。
