@@ -39,7 +39,7 @@ struct HistoryView: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）
-                    .padding(.bottom, actionBarClearance)
+                    .padding(.bottom, previewBottomClearance)
             }
             .padding(.horizontal, Self.contentHorizontalPadding)
             .padding(.bottom, Self.contentBottomPadding)
@@ -67,17 +67,24 @@ struct HistoryView: View {
 
     /// 一覧とプレビューの左右の余白
     private static let contentHorizontalPadding: CGFloat = 12
-    /// 一覧とプレビューの下の余白（ウインドウの下端から）
-    private static let contentBottomPadding: CGFloat = 12
-    /// 帯と、その上に来る行やプレビューの文字との間
+    /// 一覧とプレビューの下の余白（ウインドウの下端から）。一覧は帯の下まで続く（モック B の 6px、2026-10-31 画面のデザイン）
+    private static let contentBottomPadding: CGFloat = 6
+    /// 帯と、いちばん下までスクロールした一覧の行との間
     private static let actionBarGap: CGFloat = 6
+    /// 帯と、プレビューの地の下端との間（モック B: プレビューの下 56px − 帯の下 10px − 帯の高さ 30px）
+    private static let previewGap: CGFloat = 16
 
     /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
     /// 一覧は帯の下までスクロールでき（行が透けて見える）、いちばん下までスクロールすれば帯の上に出る。↓ で選んだ行も、帯に隠れない所まで送る。
-    /// プレビューは、この高さだけ上で地を終える
     private var actionBarClearance: CGFloat {
         guard actionBarHeight > 0 else { return 0 }
         return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.actionBarGap)
+    }
+
+    /// プレビューの地を終える高さ（ウインドウの下端から数えると、帯の下の間 + 帯の高さ + previewGap）
+    private var previewBottomClearance: CGFloat {
+        guard actionBarHeight > 0 else { return 0 }
+        return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.previewGap)
     }
 
     private var minSize: NSSize {
@@ -336,7 +343,7 @@ private struct TooltipLabel: View {
     let text: String
 
     var body: some View {
-        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま
+        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま（ボタンの文字は 11pt）
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
@@ -424,8 +431,9 @@ private struct ActionButtonBody: View {
 
     var body: some View {
         configuration.label
-            // 文字はモック B の値（10、ペーストは太字 700）
-            .font(.system(size: 10, weight: isPrimary ? .bold : .regular))
+            // 11pt（モック B の 10px を、一覧の題の文字との釣り合いで Mac の標準の段にした。2026-10-31 画面のデザイン）。
+            // ペーストの太字は 600（2026-10-18 の決まり）
+            .font(.system(size: 11, weight: isPrimary ? .semibold : .regular))
             // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
             .padding(.horizontal, isPrimary ? 9 : 8)
             .padding(.vertical, 5)
