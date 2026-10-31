@@ -243,7 +243,13 @@ private struct ActionBar: View {
                 .mask(alignment: .top) { Rectangle().frame(height: 2) }
                 .padding(1)
         }
-        .shadow(color: .black.opacity(0.28), radius: 9, y: 6)
+        // 影はガラスの層には付かないので、帯の形の影を後ろに描く（モック B の 0 6px 18px 黒 28%）
+        .background {
+            Capsule()
+                .fill(Color.black.opacity(0.28))
+                .blur(radius: 9)
+                .offset(y: 6)
+        }
         .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
@@ -431,11 +437,10 @@ private struct ActionButtonBody: View {
 
     var body: some View {
         configuration.label
-            // 11pt（モック B の 10px を、一覧の題の文字との釣り合いで Mac の標準の段にした。2026-10-31 画面のデザイン）。
+            // 12pt。11pt では小さく、帯が一覧の上まで届かなかった（2026-10-31 Kazuya さん「フォントちっちゃくないですか？」）。
             // ペーストの太字は 600（2026-10-18 の決まり）
-            .font(.system(size: 11, weight: isPrimary ? .semibold : .regular))
-            // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
-            .padding(.horizontal, isPrimary ? 9 : 8)
+            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
+            .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
