@@ -168,9 +168,9 @@ final class QueueBandLayoutTests: XCTestCase {
 }
 
 final class QueueCardContentTests: XCTestCase {
-    func testTextShowsTheBodyWithLineBreaksUpToThreeLines() {
+    func testTextJoinsLinesWithSlashesUpToThreeLines() {
         let card = QueueCardContent.make(kind: .text, title: "a b", text: "a\nb", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
-        XCTAssertEqual(card.body, "a\nb")
+        XCTAssertEqual(card.body, "a / b")
         XCTAssertEqual(card.bodyLines, 3)
         XCTAssertEqual(card.picture, .none)
         XCTAssertNil(card.heading)
@@ -233,6 +233,21 @@ final class QueueCardContentTests: XCTestCase {
     func testEmptyTextKeepsTheCardHeight() {
         let card = QueueCardContent.make(kind: .text, title: "", text: "", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
         XCTAssertEqual(card.body, " ")
+    }
+
+    // MARK: 改行を「 / 」でつなぐ（合意したモックの 1 枚目のカード）
+
+    func testJoinedLinesMatchesTheMock() {
+        XCTAssertEqual(
+            QueueCardContent.joinedLines("name: kasane\nversion: 0.1.0\ndescription: clipboard"),
+            "name: kasane / version: 0.1.0 / description: clipboard"
+        )
+    }
+
+    func testJoinedLinesDropsEmptyLinesIndentAndWindowsLineEnds() {
+        XCTAssertEqual(QueueCardContent.joinedLines("a\r\n\r\n    b  \n\n\tc\n"), "a / b / c")
+        XCTAssertEqual(QueueCardContent.joinedLines("one line"), "one line")
+        XCTAssertEqual(QueueCardContent.joinedLines("\n \n"), "")
     }
 
     // MARK: カードの絵の大きさ

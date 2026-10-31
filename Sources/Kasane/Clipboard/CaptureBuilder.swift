@@ -41,7 +41,8 @@ enum CaptureBuilder {
             capture.romaji = Romanizer.romaji(for: string)
         } else if let image = raw.representations.first(where: { imageTypes.contains($0.type) }) {
             let info = imageInfo(image.data)
-            let size = info.width.flatMap { w in info.height.map { h in "\(w)×\(h)" } }
+            // 大きさはどの画面も「1920 × 1080 px」と書く（2026-10-31 画面のデザインの決め S3。詳細の書き方にそろえた）
+            let size = info.width.flatMap { w in info.height.map { h in "\(w) × \(h) px" } }
             capture = Capture(
                 kind: .image, title: size.map { "画像 \($0)" } ?? "画像", text: nil,
                 primaryData: image.data, representations: raw.representations,
