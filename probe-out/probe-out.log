@@ -1,0 +1,35 @@
+PROBE blur 0 status=0
+PROBE blur 20 status=0
+PROBE blur 20 status=0
+PROBE shadow layout bounds=(0.0, 0.0, 10.0, 10.0) layer=(0.0, 0.0, 10.0, 10.0) flipped=false
+2026-10-31 05:03:45.707 swift-frontend[1191:6966] This NSLayoutConstraint is being configured with a constant that exceeds internal limits.  A smaller value will be substituted, but this problem should be fixed. Break on BOOL _NSLayoutConstraintNumberExceedsLimit(void) to debug.  This will be logged only once.  This may break in the future.
+PROBE shadow layout bounds=(0.0, 0.0, 550.0, 470.0) layer=(0.0, 0.0, 550.0, 470.0) flipped=false
+PROBE capture 1-start.png status=0
+PROBE resize-right titled inset=-3.0 before=(300.0, 220.0) after=(339.0, 220.0)
+PROBE resize-right titled inset=0.0 before=(300.0, 220.0) after=(339.0, 220.0)
+PROBE resize-right titled inset=2.0 before=(300.0, 220.0) after=(339.0, 220.0)
+PROBE resize-right titled inset=5.0 before=(300.0, 220.0) after=(300.0, 220.0)
+PROBE resize-bottomleft titled before=(60.0, 63.0, 300.0, 220.0) after=(35.0, 63.0, 325.0, 220.0)
+PROBE resize-top titled before=(60.0, 63.0, 300.0, 220.0) after=(60.0, 63.0, 300.0, 250.0)
+PROBE resize-right A inset=-3.0 before=(300.0, 220.0) after=(300.0, 220.0)
+PROBE resize-right A inset=0.0 before=(300.0, 220.0) after=(300.0, 220.0)
+PROBE resize-right A inset=2.0 before=(300.0, 220.0) after=(339.0, 220.0)
+PROBE resize-right A inset=5.0 before=(300.0, 220.0) after=(300.0, 220.0)
+PROBE resize-bottomleft A before=(60.0, 400.0, 300.0, 220.0) after=(60.0, 400.0, 300.0, 220.0)
+PROBE resize-top A before=(60.0, 400.0, 300.0, 220.0) after=(60.0, 400.0, 300.0, 250.0)
+PROBE resize-right B inset=0.0 before=(310.0, 230.0) after=(310.0, 230.0)
+PROBE resize-right B inset=3.0 before=(310.0, 230.0) after=(350.0, 230.0)
+PROBE resize-right B inset=6.0 before=(310.0, 230.0) after=(310.0, 230.0)
+PROBE resize-right B inset=8.0 before=(310.0, 230.0) after=(310.0, 230.0)
+PROBE resize-right B inset=10.0 before=(310.0, 230.0) after=(310.0, 230.0)
+PROBE resize-bottomleft B before=(520.0, 380.0, 310.0, 230.0) after=(490.0, 350.0, 340.0, 260.0)
+PROBE resize-top B before=(520.0, 380.0, 310.0, 230.0) after=(520.0, 380.0, 310.0, 260.0)
+PROBE seen ["6@?": 15, "2@?": 1, "1@A": 3, "2@A": 1, "1@?": 6, "6@A": 15, "6@bg": 60, "2@bg": 4, "1@bg": 4, "6@B": 45, "1@B": 6, "2@B": 3]
+PROBE move titled before=(60.0, 63.0) after=(110.0, 20.0) shadowFollows=(400.0, 260.0)
+PROBE move A before=(60.0, 400.0) after=(60.0, 400.0) shadowFollows=(400.0, 260.0)
+PROBE move B before=(520.0, 380.0) after=(570.0, 340.0) shadowFollows=(450.0, 220.0)
+PROBE shadow layout bounds=(0.0, 0.0, 630.0, 510.0) layer=(0.0, 0.0, 630.0, 510.0) flipped=false
+PROBE capture 2-moved-resized.png status=0
+PROBE click-through-shadow at=(765.0, 310.0) bgClicks 4->5
+PROBE click-corner-outside bgClicks 5->5
+PROBE key B isKey=true typed='?' seen=["2@bg": 5, "2@B": 5, "1@B": 8, "2@A": 2, "6@?": 30, "2@?": 2, "1@bg": 5, "6@bg": 60, "6@A": 30, "1@A": 4, "10@B": 2, "6@B": 60, "1@?": 7]
