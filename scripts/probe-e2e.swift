@@ -53,6 +53,13 @@ func capture(_ name: String) {
 }
 func open() { key(9, flags: .maskAlternate); Thread.sleep(forTimeInterval: 1.2) }
 func log(_ s: String) { print("PROBE \(label) \(s)") }
+/// 外をクリックすると閉じるので、閉じていたら開き直してから、今の位置を返す
+func ensureOpen() -> CGRect? {
+    if let w = history() { return w }
+    log("(reopen)")
+    open()
+    return history()
+}
 
 log("windows at launch: \(windows().map { "\($0.layer):\($0.bounds)" })")
 open()
@@ -62,41 +69,42 @@ capture("1-open")
 
 // 見える縁から外へ d pt の所をつかんで、右へ 30 動かす
 for d: CGFloat in [4, 3, 2, 1, 0, -1, -2, -3, -5] {
-    w = history() ?? w
+    w = ensureOpen() ?? w
     let edge = w.maxX - margin
     drag(CGPoint(x: edge + d, y: w.midY), 30, 0)
     let after = history() ?? w
-    log("resize-right d=\(d) width \(w.width)->\(after.width)")
+    log("resize-right d=\(d) width \(w.width)->\(after.width) visible=\(history() != nil)")
     if after.width != w.width { drag(CGPoint(x: after.maxX - margin + d, y: after.midY), -30, 0) }
 }
 for d: CGFloat in [3, 1, 0, -2, -4] {
-    w = history() ?? w
+    w = ensureOpen() ?? w
     let corner = CGPoint(x: w.maxX - margin + d, y: w.maxY - margin + d)
     drag(corner, 30, 30)
     let after = history() ?? w
-    log("resize-bottomright d=\(d) size \(w.size)->\(after.size)")
+    log("resize-bottomright d=\(d) size \(w.size)->\(after.size) visible=\(history() != nil)")
     if after.size != w.size { drag(CGPoint(x: after.maxX - margin + d, y: after.maxY - margin + d), -30, -30) }
 }
 for d: CGFloat in [3, 1, 0, -2, -4] {
-    w = history() ?? w
+    w = ensureOpen() ?? w
     let corner = CGPoint(x: w.minX + margin - d, y: w.minY + margin - d)
     drag(corner, -30, -30)
     let after = history() ?? w
-    log("resize-topleft d=\(d) frame \(w)->\(after)")
+    log("resize-topleft d=\(d) frame \(w)->\(after) visible=\(history() != nil)")
     if after.size != w.size { drag(CGPoint(x: after.minX + margin - d, y: after.minY + margin - d), 30, 30) }
 }
 // 上の「Kasane」の帯をつかんで動かす
-w = history() ?? w
+w = ensureOpen() ?? w
 drag(CGPoint(x: w.midX, y: w.minY + margin + 14), 60, 40)
 let moved = history() ?? w
-log("move origin \(w.origin)->\(moved.origin)")
+log("move origin \(w.origin)->\(moved.origin) visible=\(history() != nil)")
 log("windows after move: \(windows().map { "\($0.layer):\($0.bounds)" })")
 // キー入力（検索欄に abc）
+w = ensureOpen() ?? w
 key(0); key(11); key(8)
 Thread.sleep(forTimeInterval: 0.5)
 capture("2-typed")
 // 影の所（下の縁の 40pt 下）をクリックすると、履歴ウインドウが閉じるか（クリックが後ろに届くと閉じる）
-w = history() ?? w
+w = ensureOpen() ?? w
 click(CGPoint(x: w.midX, y: w.maxY + 40))
 Thread.sleep(forTimeInterval: 0.5)
 log("after clicking the shadow, history visible=\(history() != nil)")
