@@ -649,8 +649,6 @@ private struct ItemIcon: View {
                 Image(nsImage: icon)
                     .resizable()
                     .frame(width: size.scaled(18), height: size.scaled(18))
-                    // 周りに 1px の輪（モック: 黒 18%）。白いアイコンでも四角の地と分かれるように
-                    .overlay(RoundedRectangle(cornerRadius: size.scaled(5), style: .continuous).stroke(Color.black.opacity(0.18), lineWidth: 1))
                     .offset(x: size.scaled(4), y: size.scaled(4))
             }
         }
