@@ -234,4 +234,20 @@ final class QueueCardContentTests: XCTestCase {
         let card = QueueCardContent.make(kind: .text, title: "", text: "", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
         XCTAssertEqual(card.body, " ")
     }
+
+    // MARK: カードの絵の大きさ
+
+    func testCardPictureIsWideEnoughForTheBand() {
+        // 横長（Retina のスクリーンショット）: 長い辺＝横を帯のピクセル数にする
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 3024, height: 1964, pixelWidth: 1400), 1400)
+        // 縦長: 横を帯の幅にするため、長い辺（縦）を伸ばす
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 1000, height: 2000, pixelWidth: 1400), 2000)
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 2000, height: 3000, pixelWidth: 1400), 2100)
+    }
+
+    func testCardPictureIsNeverLargerThanTheOriginalOrTheLimit() {
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 300, height: 200, pixelWidth: 1400), 300)
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 1000, height: 9000, pixelWidth: 1400), 4096)
+        XCTAssertEqual(QueueBandLayout.cardPictureMaxPixel(width: 0, height: 100, pixelWidth: 1400), 0)
+    }
 }

@@ -79,6 +79,42 @@ enum CaptureBuilder {
         return (thumbnail(source), width, height)
     }
 
+    // MARK: - FIFO / LIFO のカードの絵
+
+    // カードに出す絵は、横が帯の幅のピクセル数以上になる大きさで元の絵から作る（DB の 128px の縮小を帯の幅に広げるとぼやけるため。
+    // 2026-10-31 の照合）。大きさの計算は QueueBandLayout.cardPictureMaxPixel
+
+    /// 画像の項目の元の絵（クリップボードから取った中身）から作る。画像の型の中身を順に試す
+    static func cardPicture(representations: [Capture.Representation], pixelWidth: CGFloat) -> CGImage? {
+        for representation in representations where UTType(representation.type)?.conforms(to: .image) == true {
+            guard let source = CGImageSourceCreateWithData(representation.data as CFData, nil),
+                  let image = cardPicture(source, pixelWidth: pixelWidth)
+            else { continue }
+            return image
+        }
+        return nil
+    }
+
+    /// 画像のファイルから作る。読めなければ nil
+    static func cardPicture(fileURL: URL, pixelWidth: CGFloat) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+        return cardPicture(source, pixelWidth: pixelWidth)
+    }
+
+    private static func cardPicture(_ source: CGImageSource, pixelWidth: CGFloat) -> CGImage? {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        guard let width = properties?[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties?[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0
+        else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: QueueBandLayout.cardPictureMaxPixel(width: width, height: height, pixelWidth: pixelWidth),
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
     /// 長い辺 128px の PNG
     private static func thumbnail(_ source: CGImageSource) -> Data? {
         let options: [CFString: Any] = [

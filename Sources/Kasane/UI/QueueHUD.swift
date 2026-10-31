@@ -553,7 +553,7 @@ struct QueueHUDView: View {
 
     private func thumbnail(for clip: QueuedClip) -> NSImage? {
         guard clip.kind == .image || clip.kind == .file else { return nil }
-        return clip.thumbnail.flatMap(NSImage.init(data:))
+        return clip.picture ?? clip.thumbnail.flatMap(NSImage.init(data:))
     }
 
     private func linkImage(for clip: QueuedClip) -> NSImage? {

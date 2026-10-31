@@ -82,7 +82,49 @@ final class QueueController {
         if item.thumbnail == nil {
             makeLateImageFileThumbnail(item, clipID: clip.id, itemID: itemID)
         }
+        makeCardPicture(item, clip: clip)
         onChange?()
+    }
+
+    /// カードの絵を、積んだ時点で元の絵から帯の最大の幅 × 画面の倍率の大きさで裏で作って足す
+    /// （画像は積んだ中身の元の絵、画像のファイルは 1 つ目のファイル）。作れるまでと作れないときは DB の 128px の縮小を出す
+    /// （2026-10-31 の照合。128px を帯の幅に広げるとぼやけるため）
+    private func makeCardPicture(_ item: ClipItem, clip: QueuedClip) {
+        guard let pixelWidth = Self.cardPixelWidth() else { return }
+        let representations = clip.representations
+        let fileURL: URL?
+        switch item.kind {
+        case .image:
+            fileURL = nil
+        case .file where item.isImageFile:
+            guard let first = item.text?.split(separator: "\n").first else { return }
+            fileURL = URL(fileURLWithPath: String(first))
+        default:
+            return
+        }
+        let clipID = clip.id
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let image = fileURL.map { CaptureBuilder.cardPicture(fileURL: $0, pixelWidth: pixelWidth) }
+                ?? CaptureBuilder.cardPicture(representations: representations, pixelWidth: pixelWidth)
+            guard let image else { return }
+            let box = CardPictureBox(image: image)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.queue?.update(where: { $0.id == clipID }) {
+                        $0.picture = NSImage(cgImage: box.image, size: .zero)
+                    }
+                    self.onChange?()
+                }
+            }
+        }
+    }
+
+    /// 帯がいちばん広くなるとき（いちばん大きい文字で全角 40 字）のカードの横のピクセル数
+    private static func cardPixelWidth() -> CGFloat? {
+        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return nil }
+        let largest = TextSizeLevel.allCases.map(\.hudFontSize).max() ?? TextSizeLevel.default.hudFontSize
+        return QueueBandLayout.maxWidth(fontSize: largest, screen: screen.frame) * screen.backingScaleFactor
     }
 
     /// 前から履歴にあって縮小の無い画像のファイル（縮小を作るようにする前にコピーしたもの）を ⌘⏎ で足したときは、
@@ -193,8 +235,15 @@ struct QueuedClip: Equatable {
     /// 画像と画像のファイルの縮小（PNG）。カードに出す。前からある画像のファイルは積んだあとで足す
     var thumbnail: Data?
     let representations: [Capture.Representation]
+    /// カードに出す、帯の幅に合う大きさの絵。積んだあとで裏で作って足す。無いうちは thumbnail を出す
+    var picture: NSImage?
 
     static func == (lhs: QueuedClip, rhs: QueuedClip) -> Bool { lhs.id == rhs.id }
+}
+
+/// 裏で作った絵をメインスレッドへ渡すための入れ物（CGImage は作ったあと変えない）
+private struct CardPictureBox: @unchecked Sendable {
+    let image: CGImage
 }
 
 private let queueEventTapCallback: CGEventTapCallBack = { _, type, event, refcon in
