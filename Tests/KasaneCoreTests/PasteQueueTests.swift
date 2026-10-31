@@ -33,4 +33,13 @@ final class PasteQueueTests: XCTestCase {
         q.push("C")
         XCTAssertEqual(q.itemsInPasteOrder, ["B", "C"])
     }
+
+    /// 積んだあとで中身を変えても、並びと次に貼るものは変わらない
+    func testUpdateKeepsTheOrder() {
+        var q = PasteQueue<String>(mode: .fifo)
+        ["A", "B", "C"].forEach { q.push($0) }
+        q.update(where: { $0 == "B" }) { $0 = "b" }
+        XCTAssertEqual(q.itemsInPasteOrder, ["A", "b", "C"])
+        XCTAssertEqual(q.next, "A")
+    }
 }

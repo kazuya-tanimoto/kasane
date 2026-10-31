@@ -35,6 +35,13 @@ public struct PasteQueue<Element: Equatable>: Equatable {
         items.append(element)
     }
 
+    /// 積んだあとで中身を変える（並びは変えない）。後から作った縮小を足すときに使う
+    public mutating func update(where match: (Element) -> Bool, _ change: (inout Element) -> Void) {
+        for index in items.indices where match(items[index]) {
+            change(&items[index])
+        }
+    }
+
     /// 次の項目を取り出す（貼り付けが済んだときに呼ぶ）
     @discardableResult
     public mutating func popNext() -> Element? {
