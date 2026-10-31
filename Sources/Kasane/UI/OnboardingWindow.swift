@@ -69,6 +69,9 @@ final class OnboardingWindowController: NSObject, NSWindowDelegate {
         state.startPolling()
         NSApp.activate()
         window?.makeKeyAndOrderFront(nil)
+        // activate() は頼むだけで、ほかのアプリが前にあると前に出ないことがある（Apple の NSApplication.activate()）。
+        // 起動したことに気づけるよう、前に出なくても案内のウインドウだけは前に置く
+        window?.orderFrontRegardless()
     }
 
     func windowWillClose(_ notification: Notification) {
