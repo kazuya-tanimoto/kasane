@@ -11,7 +11,8 @@ final class HistoryPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.borderless, .resizable, .nonactivatingPanel],
+            // 端をつかんで大きさを変えるのは自分で作る（`HistoryContentView`）ので、.resizable は付けない
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -54,6 +55,8 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     private var panel: HistoryPanel
     private let shadow = HistoryShadowPanel()
     private let hosting: NSHostingView<HistoryView>
+    /// ウインドウの中身。SwiftUI の画面と、端をつかんで大きさを変える所
+    private let content: HistoryContentView
     private let model: HistoryModel
     private var keyMonitor: Any?
     private var isHiding = false
@@ -74,12 +77,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         self.model = model
         panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.defaultSize))
         hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
+        content = HistoryContentView(content: hosting)
         super.init()
         hosting.sizingOptions = [.minSize]
         // タイトルバーは隠しているので、その分の余白を空けない
         hosting.safeAreaRegions = []
         hosting.frame = NSRect(origin: .zero, size: HistoryPanelController.defaultSize)
-        panel.contentView = hosting
+        content.frame = hosting.frame
+        content.onResizeEnd = { [weak self] in self?.saveFrame() }
+        panel.contentView = content
         panel.delegate = self
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
             self?.applyBlur(radius)
@@ -147,7 +153,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         old.contentView = nil
         panel = HistoryPanel(contentRect: old.frame)
         panel.setFrame(old.frame, display: false)
-        panel.contentView = hosting
+        panel.contentView = content
         panel.delegate = self
         blurState = WindowBlurState()
         // 起動したときと同じく、出す前に半径を付ける

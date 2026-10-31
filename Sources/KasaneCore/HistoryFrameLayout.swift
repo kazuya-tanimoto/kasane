@@ -19,10 +19,14 @@ public enum HistoryFrameLayout {
     /// その 3 倍とずらした分で見えなくなる
     public static let shadowExtent: CGFloat = shadowOffsetY + shadowBlur * 1.5
 
-    /// 角丸の外に残す、ほとんど透明な余白。縁なしのウインドウは、ウインドウの端の内側 1〜4pt ほどでしか
-    /// 大きさを変えられず、角の透明な所では斜めに大きさを変えられない（2026-10-31、CI の Mac で確かめた）。
-    /// 余白を付けると、つかめる所が見える縁の外 2pt から内 1pt になり、今のシステムのウインドウ（外 3pt から内 2pt）に近くなる
+    /// 角丸の外に残す、ほとんど透明な余白。端をつかんで大きさを変える所の、見える縁の外側の分
     public static let resizeMargin: CGFloat = 3
+    /// 端をつかめる所の幅（ウインドウの端から内へ）。見える縁の外 3pt から内 3pt まで。
+    /// 縁なしのウインドウは、Mac に任せるとウインドウの端の内側 3pt ほどでしかつかめず、角の透明な所では斜めに大きさを変えられない。
+    /// 前のシステムのウインドウは見える縁の外 3pt から内 3pt でつかめた（2026-10-31、CI の Mac で 1pt ずつ測った）ので、自分でつかむ所を作って合わせる
+    public static let resizeEdge: CGFloat = resizeMargin + 3
+    /// 角で斜めに大きさを変えられる所の、ウインドウの角からの長さ
+    public static let resizeCorner: CGFloat = resizeMargin + 13
 
     /// ウインドウの中の、角丸の本体の四角
     public static func body(in window: CGRect) -> CGRect {
@@ -37,5 +41,54 @@ public enum HistoryFrameLayout {
     /// 影のウインドウの中での、角丸の本体の四角（影はここを避けて外にだけ描く）
     public static func shadowCaster(inShadowOfSize size: CGSize) -> CGRect {
         CGRect(origin: .zero, size: size).insetBy(dx: shadowExtent + resizeMargin, dy: shadowExtent + resizeMargin)
+    }
+
+    /// ウインドウのどの端をつかんだか
+    public struct Edges: OptionSet, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        public static let left = Edges(rawValue: 1)
+        public static let right = Edges(rawValue: 2)
+        public static let bottom = Edges(rawValue: 4)
+        public static let top = Edges(rawValue: 8)
+    }
+
+    /// ウインドウの中の点（左下が原点）が、どの端をつかむ所か。つかむ所でなければ空
+    public static func edges(at point: CGPoint, in size: CGSize) -> Edges {
+        let bounds = CGRect(origin: .zero, size: size)
+        guard bounds.contains(point) else { return [] }
+        var result: Edges = []
+        let nearLeft = point.x < resizeCorner, nearRight = point.x > size.width - resizeCorner
+        let nearBottom = point.y < resizeCorner, nearTop = point.y > size.height - resizeCorner
+        // 角は、2 つの端の近くが重なる所
+        if (nearLeft || nearRight) && (nearBottom || nearTop) {
+            result.insert(nearLeft ? .left : .right)
+            result.insert(nearBottom ? .bottom : .top)
+            return result
+        }
+        if point.x < resizeEdge { result.insert(.left) }
+        if point.x > size.width - resizeEdge { result.insert(.right) }
+        if point.y < resizeEdge { result.insert(.bottom) }
+        if point.y > size.height - resizeEdge { result.insert(.top) }
+        return result
+    }
+
+    /// つかんだ端を (dx, dy) 動かしたあとのウインドウの四角（画面の座標、左下が原点）。
+    /// 最小の大きさより小さくはせず、そのときは反対側の端を動かさない
+    public static func resized(_ frame: CGRect, edges: Edges, dx: CGFloat, dy: CGFloat, minSize: CGSize) -> CGRect {
+        var result = frame
+        if edges.contains(.right) {
+            result.size.width = max(frame.width + dx, minSize.width)
+        } else if edges.contains(.left) {
+            result.size.width = max(frame.width - dx, minSize.width)
+            result.origin.x = frame.maxX - result.width
+        }
+        if edges.contains(.top) {
+            result.size.height = max(frame.height + dy, minSize.height)
+        } else if edges.contains(.bottom) {
+            result.size.height = max(frame.height - dy, minSize.height)
+            result.origin.y = frame.maxY - result.height
+        }
+        return result
     }
 }
