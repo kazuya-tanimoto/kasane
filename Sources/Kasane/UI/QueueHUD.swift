@@ -179,7 +179,8 @@ final class QueueHUDController {
         guard panel.isVisible else { return }
         let token = UUID()
         hideToken = token
-        let finish = { [weak self] in
+        // completionHandler は @Sendable なので、変数に入れるときも印を付ける（付けないと警告が出る）
+        let finish: @Sendable () -> Void = { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.hideToken == token else { return }
                 self.panel.orderOut(nil)
