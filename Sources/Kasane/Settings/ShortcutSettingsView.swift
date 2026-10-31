@@ -122,7 +122,7 @@ struct ShortcutSettingsView: View {
 
     private func recorderField(_ slot: ShortcutSlot, current: Shortcut, hasWarning: Bool) -> some View {
         let recording = recorder.recording == slot
-        // 縁はモックの色: 押している間は青（ライト #007AFF、ダーク #0A84FF）、注意が出ている行は赤、ふだんは黒 15% / 白 15%
+        // 縁: 押している間は Mac のアクセントの色、注意が出ている行は赤、ふだんは黒 15% / 白 15%（モック）
         let border = recording ? Self.recordingBorder : (hasWarning ? SettingsColor.danger : Self.fieldBorder)
         return Button {
             recorder.start(slot)
@@ -143,9 +143,10 @@ struct ShortcutSettingsView: View {
         .accessibilityLabel("\(slot.settingsTitle)のキー、\(HotKeyCenter.displayString(current))")
     }
 
-    private static let fieldFill = SettingsColor.dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.06))
-    private static let fieldBorder = SettingsColor.dynamic(light: NSColor.black.withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.15))
-    private static let recordingBorder = SettingsColor.dynamic(light: SettingsColor.rgb(0x00, 0x7A, 0xFF), dark: SettingsColor.rgb(0x0A, 0x84, 0xFF))
+    private static let fieldFill = SettingsColor.dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.06), system: .textBackgroundColor)
+    private static let fieldBorder = SettingsColor.dynamic(light: NSColor.black.withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.15), system: .separatorColor)
+    /// 押している間の縁は Mac のアクセントの色（requirements.md「設定画面の部品の色はシステムの色」。Mac の標準の青なら、モックの #007AFF / #0A84FF と同じ）
+    private static let recordingBorder = Color(nsColor: .controlAccentColor)
 }
 
 extension ShortcutSlot {
