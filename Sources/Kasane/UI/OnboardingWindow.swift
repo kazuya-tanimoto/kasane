@@ -177,16 +177,38 @@ private struct LoginItemRow: View {
             Text("ログインしたときから、コピーした内容を履歴に残します。あとから設定の「一般」で変えられます。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineSpacing(LoginRowStyle.descriptionLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.leading, 38)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(OnboardingRowBackground())
+        .background(LoginRowBackground())
     }
 }
 
-/// 案内の行の地。許可の行 1・2 の今までの地と同じ（モックの注記「1 と 2 は今のまま」。足したログインの行もそろえる）
+/// ログインの行の説明の行間（Kazuya さんが「7：OK」と答えたモック「初回の案内」の点線の行: 12px・行の高さ 1.5）。
+/// .lineSpacing は標準の行の高さに足す値なので、1.5 倍との差を足す（.callout は macOS で 12pt、1.5 倍で 18pt）
+@MainActor
+private enum LoginRowStyle {
+    static let descriptionLineSpacing: CGFloat = {
+        let font = NSFont.preferredFont(forTextStyle: .callout)
+        return max(0, font.pointSize * 1.5 - NSLayoutManager().defaultLineHeight(for: font))
+    }()
+}
+
+/// ログインの行の地（同じモックの点線の行: 灰色 50% を、ライトで 8%、ダークで 12%）。
+/// 許可の行 1・2 は、モックの注記「1 と 2 は今のまま」なので、下の今までの地のまま
+private struct LoginRowBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(white: 0.5).opacity(colorScheme == .dark ? 0.12 : 0.08))
+    }
+}
+
+/// 許可の行 1・2 の地。今までの地と同じ（モックの注記「1 と 2 は今のまま」）
 private struct OnboardingRowBackground: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 12, style: .continuous)
