@@ -173,7 +173,15 @@ private struct ActionBar: View {
     static let margin: CGFloat = 10
 
     @ObservedObject var model: HistoryModel
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var tooltips = TooltipState()
+
+    /// 帯のガラスに付ける色。モック B の帯の地（ダーク rgba(60,62,70,0.45)、ライト rgba(255,255,255,0.45)）
+    private static func barTint(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 60 / 255, green: 62 / 255, blue: 70 / 255).opacity(0.45)
+            : Color.white.opacity(0.45)
+    }
 
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
@@ -189,8 +197,7 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.togglePinSelection()
             } label: {
-                Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
-                    .labelStyle(.titleAndIcon)
+                Text("ピン ⌘P")
             }
             .buttonStyle(ActionStyle(isOn: isPinned))
             .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
@@ -199,8 +206,7 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.deleteSelection()
             } label: {
-                Label("⌘D", systemImage: "trash")
-                    .labelStyle(.titleAndIcon)
+                Text("削除 ⌘D")
             }
             .buttonStyle(ActionStyle())
             .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
@@ -208,14 +214,26 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.showsDetails.toggle()
             } label: {
-                Label("⌘I", systemImage: "info.circle")
-                    .labelStyle(.titleAndIcon)
+                Text("詳細 ⌘I")
             }
             .buttonStyle(ActionStyle(isOn: model.showsDetails))
             .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
         .padding(4)
-        .glassEffect(.regular, in: Capsule())
+        // 地・縁・光の線・影は、Kazuya さんが OK したモック「Liquid Glass 3 案」の B の値に合わせる（2026-10-31）
+        .glassEffect(.regular.tint(Self.barTint(colorScheme)), in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.28 : 0.75), lineWidth: 1)
+        }
+        .overlay(alignment: .top) {
+            // 上の内側の光の線
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.35 : 0.9), lineWidth: 1)
+                .mask(alignment: .top) { Rectangle().frame(height: 2) }
+                .padding(1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 9, y: 6)
         .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
