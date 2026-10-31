@@ -15,34 +15,33 @@ enum SettingsLayout {
     static let boxCornerRadius: CGFloat = 12
 }
 
-/// 設定画面の色（モック「設定画面 10/22 案」の KS_THEMES。ライト / ダーク）。
-/// Mac の「コントラストを上げる」がオンのときは、モックの色をやめて Mac の色にする（requirements.md「設定画面の部品の色はシステムの色を使う」）
+/// 設定画面の色。Mac のシステムの色を使う（requirements.md「設定画面の部品の色はシステムの色を使う（アクセントカラーは使わない）」。
+/// 2026-10-31 にモックの決まった色へ変えたのを、Kazuya さんの了解が無いので戻した。fixes-without-asking-2026-10-31.md の前の 9）。
+/// システムの色なので、ダークと「コントラストを上げる」にも Mac が合わせる
 enum SettingsColor {
-    /// 箱の地（ライト 白、ダーク 白 5%）。ライトでは周りより明るい白い箱にする
-    static let box = dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.05), system: .controlBackgroundColor)
-    /// 箱の縁と、行の間の線（ライト 黒 8%、ダーク 白 8%）
-    static let line = dynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.white.withAlphaComponent(0.08), system: .separatorColor)
-    /// 本文の色（ライト #1D1D1F、ダーク #F2F2F5）
-    static let text = dynamic(light: rgb(0x1D, 0x1D, 0x1F), dark: rgb(0xF2, 0xF2, 0xF5), system: .labelColor)
-    /// ウインドウの地（ライト #F5F5F7、ダーク #26282D）
-    static let window = dynamic(light: rgb(0xF5, 0xF5, 0xF7), dark: rgb(0x26, 0x28, 0x2D), system: .windowBackgroundColor)
-    /// 見出しと説明の灰色（ライト #61646B、ダーク #A7AAB2）
-    static let sub = dynamic(light: rgb(0x61, 0x64, 0x6B), dark: rgb(0xA7, 0xAA, 0xB2), system: .secondaryLabelColor)
-    /// 文字のボタンの地、キーや検索の書き方の札の地（ライト 黒 6%、ダーク 白 10%）
-    static let chip = dynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.10), system: .quaternaryLabelColor)
-    /// 箱の中の、一段沈んだ地（検索の例。ライト 黒 3.5%、ダーク 白 4%）
-    static let inset = dynamic(light: NSColor.black.withAlphaComponent(0.035), dark: NSColor.white.withAlphaComponent(0.04), system: .quaternaryLabelColor)
-    /// 一覧の下の ＋ − の帯の地（ライト #F7F7F9、ダーク 白 3%）
-    static let footer = dynamic(light: rgb(0xF7, 0xF7, 0xF9), dark: NSColor.white.withAlphaComponent(0.03), system: .controlBackgroundColor)
-    /// 赤い文（ライト #C62828、ダーク #FF6B6B）
-    static let danger = dynamic(light: rgb(0xC6, 0x28, 0x28), dark: rgb(0xFF, 0x6B, 0x6B), system: .systemRed)
+    /// 箱の地（main と同じ）
+    static let box = Color(nsColor: .quaternaryLabelColor).opacity(0.25)
+    /// 箱の縁と、行の間の線
+    static let line = Color(nsColor: .separatorColor)
+    /// 本文の色
+    static let text = Color(nsColor: .labelColor)
+    /// ウインドウの地
+    static let window = Color(nsColor: .windowBackgroundColor)
+    /// 見出しと説明の灰色
+    static let sub = Color(nsColor: .secondaryLabelColor)
+    /// 文字のボタン、キーや検索の書き方の札の地
+    static let chip = Color(nsColor: .tertiarySystemFill)
+    /// 箱の中の、一段沈んだ地（検索の例）
+    static let inset = Color(nsColor: .quaternarySystemFill)
+    /// 一覧の下の ＋ − の帯の地
+    static let footer = Color(nsColor: .quaternarySystemFill)
+    /// 赤い文
+    static let danger = Color(nsColor: .systemRed)
 
-    /// `system` が nil の色（見本の絵など）は、コントラストを上げてもモックの色のまま
-    static func dynamic(light: NSColor, dark: NSColor, system: NSColor?) -> Color {
+    /// ライトとダークで色を変える（外観タブの見本の絵だけに使う。見本は履歴ウインドウの絵なので、設定画面の色の決めの外）
+    static func dynamic(light: NSColor, dark: NSColor) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
-            let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua])
-            if let system, match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua { return system }
-            return match == .darkAqua || match == .accessibilityHighContrastDarkAqua ? dark : light
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
         })
     }
 
@@ -195,27 +194,19 @@ struct FittingScroll<Content: View>: View {
     }
 }
 
-/// 状態の印（許可の行）。モック: 直径 20 の丸を緑（#2F9E44）か橙（#D97706）で塗り、白い ✓ か ! を太字で置く
+/// 状態の印（許可の行）。Mac の記号（settings-screen-2026-10-22.md §3 の文字の表「変えない: 許可の状態の前の印（SF Symbols の印）」）
 struct StatusMark: View {
     var ok: Bool
 
     var body: some View {
-        Text(ok ? "✓" : "!")
-            .font(.system(size: SettingsFont.small, weight: .bold))
-            .foregroundStyle(.white)
-            .frame(width: 20, height: 20)
-            .background(Circle().fill(Color(nsColor: ok ? SettingsColor.rgb(0x2F, 0x9E, 0x44) : SettingsColor.rgb(0xD9, 0x77, 0x06))))
+        Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+            .foregroundStyle(ok ? Color.green : Color.orange)
+            .font(.system(size: 15))
             .accessibilityHidden(true)
     }
 }
 
-/// 許可の状態の文の色（モック: 許可は緑 ライト #2B8A3E・ダーク #69DB7C、それ以外は橙 #B45309）
-enum StatusTextColor {
-    static let ok = SettingsColor.dynamic(light: SettingsColor.rgb(0x2B, 0x8A, 0x3E), dark: SettingsColor.rgb(0x69, 0xDB, 0x7C), system: .systemGreen)
-    static let attention = Color(nsColor: SettingsColor.rgb(0xB4, 0x53, 0x09))
-}
-
-/// 文字のボタン（「システム設定を開く」「標準に戻す」など）。モック: 平らな灰の地（黒 6% / 白 10%）、角 7、上下 4・左右 10。
+/// 文字のボタン（「システム設定を開く」「標準に戻す」など）。モックの形: 平らな地、角 7、上下 4・左右 10（色はシステムの色）。
 /// 文字の大きさは置く所で決める（ふだん 14pt、いちばん下の行は 13pt。settings-screen-2026-10-22.md §3）
 struct SettingsButtonStyle: ButtonStyle {
     /// 文字の色。nil なら本文の色（「履歴を削除…」だけ赤）

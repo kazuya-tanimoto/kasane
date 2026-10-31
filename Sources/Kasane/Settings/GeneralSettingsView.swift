@@ -93,7 +93,7 @@ struct GeneralSettingsView: View {
             Spacer(minLength: 0)
             Text(state)
                 .font(.system(size: SettingsFont.text))
-                .foregroundStyle(ok ? StatusTextColor.ok : StatusTextColor.attention)
+                .foregroundStyle(SettingsColor.sub)
                 .fixedSize()
             Button("システム設定を開く", action: open)
                 .buttonStyle(.settings)
