@@ -15,11 +15,15 @@ struct AppearanceSettingsView: View {
     }
 
     private static let sampleWidth: CGFloat = 250
+    private static let boxSpacing: CGFloat = 14
+    /// 見出しと、その下の箱の間（モック: 8）
+    private static let headerSpacing: CGFloat = 8
 
     var body: some View {
         FittingScroll {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+            // モック: 左の列と見本の間は 18、左の列の箱の間は 14
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: Self.boxSpacing) {
                     accentBox
                     background
                     historyWindow
@@ -40,7 +44,8 @@ struct AppearanceSettingsView: View {
 
     private var accentBox: some View {
         SettingsBox {
-            VStack(alignment: .leading, spacing: 6) {
+            // モック: 箱の中の上下 12・左右 14。説明との間 2、色の並びとの間 10
+            VStack(alignment: .leading, spacing: 2) {
                 Text("アクセントカラー").font(.system(size: SettingsFont.item))
                 SettingsCaption("ペーストボタン、選んだ行のアイコン、検索で一致した文字、FIFO / LIFO モード中の小さいウインドウの印と番号に使います")
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 10) {
@@ -48,12 +53,12 @@ struct AppearanceSettingsView: View {
                         accentButton(accent)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.top, 8)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("アクセントカラー")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
     }
 
@@ -90,76 +95,86 @@ struct AppearanceSettingsView: View {
     // MARK: - 背景
 
     private var background: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader(title: "背景（履歴ウインドウと小さいウインドウ）") {
                 if !model.isBackgroundStandard {
                     Button("標準に戻す") { model.resetBackground() }
                 }
             }
+            .frame(minHeight: 24)
+            // モック: 2 つを 1 つの箱に、線を引かずに間 12 で並べる（箱の中の上下 12・左右 14）
             SettingsBox {
-                sliderRow(
-                    title: "不透明度",
-                    value: Binding(
-                        get: { (appearance.opacity * 100).rounded() },
-                        set: { appearance.opacity = min(max($0, 10), 100) / 100 }
-                    ),
-                    range: 10...100,
-                    unit: "%",
-                    caption: "低いほど後ろが透けて見えます。標準は 70%"
-                )
-                SettingsDivider()
-                if appearance.usesSystemMaterial {
-                    SettingsRow(title: "後ろをぼかす", description: "この Mac では強さを変えられないため、ぼかすかどうかだけを選べます") {
-                        Toggle("後ろをぼかす", isOn: Binding(
-                            get: { appearance.blurRadius > 0 },
-                            set: { appearance.blurRadius = $0 ? BlurPreset.defaultRadius : 0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                } else {
+                VStack(alignment: .leading, spacing: 12) {
                     sliderRow(
-                        title: "ぼかしの強さ",
+                        title: "不透明度",
                         value: Binding(
-                            get: { Double(appearance.blurRadius) },
-                            set: { appearance.blurRadius = Int(min(max($0, 0), Double(BlurPreset.maxRadius)).rounded()) }
+                            get: { (appearance.opacity * 100).rounded() },
+                            set: { appearance.opacity = min(max($0, 10), 100) / 100 }
                         ),
-                        range: 0...Double(BlurPreset.maxRadius),
-                        unit: "",
-                        caption: appearance.blurRadius == 0 ? "0 ではぼかしません" : "強いほど後ろがぼやけます。標準は \(BlurPreset.defaultRadius)"
+                        range: 10...100,
+                        unit: "%",
+                        caption: "低いほど後ろが透けて見えます。標準は 70%"
                     )
+                    if appearance.usesSystemMaterial {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("後ろをぼかす").font(.system(size: SettingsFont.item))
+                                SettingsCaption("この Mac では強さを変えられないため、ぼかすかどうかだけを選べます")
+                            }
+                            Spacer(minLength: 0)
+                            Toggle("後ろをぼかす", isOn: Binding(
+                                get: { appearance.blurRadius > 0 },
+                                set: { appearance.blurRadius = $0 ? BlurPreset.defaultRadius : 0 }
+                            ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                        }
+                    } else {
+                        sliderRow(
+                            title: "ぼかしの強さ",
+                            value: Binding(
+                                get: { Double(appearance.blurRadius) },
+                                set: { appearance.blurRadius = Int(min(max($0, 0), Double(BlurPreset.maxRadius)).rounded()) }
+                            ),
+                            range: 0...Double(BlurPreset.maxRadius),
+                            unit: "",
+                            caption: appearance.blurRadius == 0 ? "0 ではぼかしません" : "強いほど後ろがぼやけます。標準は \(BlurPreset.defaultRadius)"
+                        )
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
         }
-        .padding(.top, 4)
     }
 
     private func sliderRow(title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String, caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // モック: 名前との間 4、数値の欄 52、説明との間 2
+        VStack(alignment: .leading, spacing: 0) {
             Text(title).font(.system(size: SettingsFont.item))
-            HStack(spacing: 8) {
+                .padding(.bottom, 4)
+            HStack(spacing: 10) {
                 Slider(value: value, in: range, step: 1)
                     .labelsHidden()
                     .accessibilityLabel(title)
                 TextField(title, value: value, format: .number.precision(.fractionLength(0)))
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 48)
+                    .frame(width: 52)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("\(title)（数値）")
                 Text(unit)
-                    .frame(width: 14, alignment: .leading)
-                    .foregroundStyle(.secondary)
+                    .frame(width: 18, alignment: .leading)
+                    .foregroundStyle(SettingsColor.sub)
             }
             SettingsCaption(caption)
+                .padding(.top, 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
     }
 
     // MARK: - 履歴ウインドウ
 
     private var historyWindow: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader("履歴ウインドウ")
             SettingsBox {
                 SettingsRow(title: "文字の大きさ", description: "一覧とプレビューに使います。履歴ウインドウでは ⌘+ / ⌘− でも変えられます") {
@@ -172,7 +187,7 @@ struct AppearanceSettingsView: View {
                 // 戻したあとにまた動かしたときは、案内を消す（ボタンが「標準に戻す」に戻るのに、案内だけ残らないように）
                 SettingsRow(title: "位置と大きさ", description: didResetWindow && model.isHistoryWindowStandard ? "次に開くときは、標準の位置と大きさで表示されます" : nil) {
                     if model.isHistoryWindowStandard {
-                        Text("標準のままです").foregroundStyle(.secondary)
+                        Text("標準のままです").foregroundStyle(SettingsColor.sub)
                     } else {
                         Button("標準に戻す") {
                             model.resetHistoryWindowFrame()
@@ -187,7 +202,7 @@ struct AppearanceSettingsView: View {
     // MARK: - 小さいウインドウ
 
     private var queueWindow: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader("FIFO / LIFO の小さいウインドウ")
             SettingsBox {
                 SettingsRow(title: "位置") {
@@ -233,7 +248,12 @@ private struct AppearanceSample: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("見本").font(.system(size: SettingsFont.text, weight: .semibold))
+            // モック: 見出しと同じ灰色の太字。絵との間 6、左に 2
+            Text("見本")
+                .font(.system(size: SettingsFont.text, weight: .semibold))
+                .foregroundStyle(SettingsColor.sub)
+                .padding(.leading, 2)
+                .padding(.bottom, -2)
             ZStack(alignment: .top) {
                 backdrop
                 historyWindow
@@ -244,8 +264,8 @@ private struct AppearanceSample: View {
                     .padding(8)
             }
             .frame(height: 330)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            // モック: 角 12、縁なし
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityHidden(true)
             SettingsCaption("変更はすぐに、この見本と表示中の小さいウインドウに反映されます。")
         }

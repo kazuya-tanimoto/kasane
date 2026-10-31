@@ -19,7 +19,8 @@ struct PreviewPane: View {
                 mainView(for: content)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if showsDetails {
-                    Divider().opacity(0.5)
+                    // 上の線（モック: 1px、ライト 黒 8%、ダーク 白 9%）
+                    Rectangle().fill(Color.hairline).frame(height: 1)
                     InfoTable(content: content)
                         .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -73,7 +74,8 @@ private struct TextPreview: View {
         ScrollView {
             Text(text.count > Self.maxLength ? String(text.prefix(Self.maxLength)) + "\n…" : text)
                 .font(.system(size: size.font(14)))
-                .lineSpacing(size.scaled(5))
+                // 行の高さは文字の 1.7 倍（モック）
+                .lineSpacing(LineHeight.spacing(multiple: 1.7, fontSize: size.font(14)))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(size.scaled(18))
@@ -193,43 +195,38 @@ private struct URLPreview: View {
         links.isEnabled ? links.loaded[itemID] : nil
     }
     private var title: String? { loaded?.title }
-    private var icon: NSImage? { loaded?.icon }
     private var image: NSImage? { loaded?.image }
 
+    /// 並びと大きさはモック「C案 改訂版」: 上にページの代表画像（高さ 170、角 12）、次にページの題（17pt 太字）、
+    /// 次に URL（12pt 等幅・灰色）。間 12、プレビューの中の余白 18。サイトのアイコンはモックに無いので出さない
     var body: some View {
-        VStack(alignment: .leading, spacing: size.scaled(12)) {
-            HStack(spacing: size.scaled(10)) {
-                if let icon {
-                    Image(nsImage: icon).resizable().frame(width: size.scaled(24), height: size.scaled(24))
-                } else {
-                    Image(systemName: "link").font(.system(size: size.scaled(20))).foregroundStyle(.secondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: size.scaled(12)) {
+                // ページの代表画像（og:image）。SNS で共有したときに出るサムネイルと同じもの。
+                // 高さをそろえ、はみ出す分は上下か左右を切る（画像ごとに題の位置が動かないように）
+                if let image {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: size.scaled(170))
+                        .overlay {
+                            Image(nsImage: image)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous))
                 }
-                // macOS の Title 3（15pt）。段階で大きさを変えるため数値で指定する
                 Text(title ?? URL(string: urlString)?.host() ?? urlString)
-                    .font(.system(size: size.font(15), weight: .semibold))
+                    .font(.system(size: size.font(17), weight: .semibold))
                     .lineLimit(3)
+                Text(urlString)
+                    .font(.system(size: size.font(12), design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .lineLimit(8)
             }
-            Text(urlString)
-                .font(.system(size: size.font(12.5), design: .monospaced))
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-                .lineLimit(8)
-            // ページの代表画像（og:image）。SNS で共有したときに出るサムネイルと同じもの
-            if let image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: 300, alignment: .leading)
-                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.08))
-                    )
-            }
-            Spacer()
+            .padding(size.scaled(18))
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(size.scaled(16))
-        .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: "\(itemID)-\(links.isEnabled)") {
             // 保存してある結果をすぐ出す。取りに行く・取り直すのは LinkPrefetcher（選んだまま少し止まったとき）
             await links.loadSaved(itemID: itemID)
@@ -340,7 +337,7 @@ private struct InfoTable: View {
     /// 表示する項目（ラベルと値）
     private var entries: [(String, String)] {
         let item = content.item
-        var entries: [(String, String)] = [("種類", item.kind.displayName)]
+        var entries: [(String, String)] = [(Self.kindLabel, item.kind.displayName)]
         entries.append(("コピー元", item.sourceAppName ?? "不明"))
         entries.append(("コピー日時", Formatters.dateTime.string(from: item.copiedAt)))
         if let text = item.text, item.kind == .text || item.kind == .richText {
@@ -371,15 +368,22 @@ private struct InfoTable: View {
             }
         }
         .font(.system(size: size.font(11.5)))
+        // モック: 上 10・左右 18・下 12
         .padding(.horizontal, size.scaled(18))
-        .padding(.vertical, size.scaled(10))
+        .padding(.top, size.scaled(10))
+        .padding(.bottom, size.scaled(12))
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private static let kindLabel = "種類"
+
+    /// ラベルの列は幅 76 にそろえ（モック）、種類の値だけ太字にする
     @ViewBuilder
     private func cell(_ entry: (String, String)) -> some View {
         Text(entry.0).foregroundStyle(.secondary)
+            .frame(width: size.scaled(76), alignment: .leading)
         Text(entry.1).lineLimit(1).truncationMode(.middle)
+            .fontWeight(entry.0 == Self.kindLabel ? .semibold : nil)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
