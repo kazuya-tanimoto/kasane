@@ -204,11 +204,32 @@ final class HistoryStoreTests: XCTestCase {
             try db.execute(sql: insert, arguments: ["richText", "見出し", "見出し\n本文", "c"])
             try db.execute(sql: insert, arguments: ["url", "https://example.com", "https://example.com\n", "d"])
         }
-        try HistoryStore.migrator.migrate(db)
+        try HistoryStore.migrator.migrate(db, upTo: "v2-list-title")
         let titles = try db.read { db in
             try String.fetchAll(db, sql: "SELECT title FROM item ORDER BY contentHash")
         }
         XCTAssertEqual(titles, ["会議 10時から", "画像 10×10", "見出し 本文", "https://example.com"], "画像の見出しは変えない")
+    }
+
+    /// 2026-10-31 より前に保存した画像の題「画像 1920×1080」を、移行で「画像 1920 × 1080 px」に 1 回だけ書き直す
+    func testMigrationRewritesOldImageSizeTitles() throws {
+        let db = try DatabaseQueue()
+        try HistoryStore.migrator.migrate(db, upTo: "v4-link-preview")
+        try db.write { db in
+            let insert = """
+                INSERT INTO item (kind, title, text, contentHash, byteSize, createdAt, copiedAt, copyCount, pasteCount, isPinned)
+                VALUES (?, ?, ?, ?, 0, '2026-10-30 00:00:00', '2026-10-30 00:00:00', 1, 0, 0)
+                """
+            try db.execute(sql: insert, arguments: ["image", "画像 1920×1080", nil, "a"])
+            try db.execute(sql: insert, arguments: ["image", "画像", nil, "b"])
+            try db.execute(sql: insert, arguments: ["image", "画像 10 × 10 px", nil, "c"])
+            try db.execute(sql: insert, arguments: ["text", "画像 3×4", "画像 3×4", "d"])
+        }
+        try HistoryStore.migrator.migrate(db)
+        let titles = try db.read { db in
+            try String.fetchAll(db, sql: "SELECT title FROM item ORDER BY contentHash")
+        }
+        XCTAssertEqual(titles, ["画像 1920 × 1080 px", "画像", "画像 10 × 10 px", "画像 3×4"], "テキストの行と、大きさの無い画像は変えない")
     }
 
     #if canImport(UniformTypeIdentifiers)
