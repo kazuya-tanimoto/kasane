@@ -49,10 +49,13 @@ struct PreviewPane: View {
             URLPreview(itemID: content.item.id ?? -1, urlString: content.item.text ?? "", links: links)
         case .image:
             if let image = content.image {
+                // モック: 角 10、影 0 10 30 黒 25%、プレビューの中の余白 18
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .padding(size.scaled(16))
+                    .clipShape(RoundedRectangle(cornerRadius: size.scaled(10), style: .continuous))
+                    .shadow(color: .black.opacity(0.25), radius: size.scaled(15), y: size.scaled(10))
+                    .padding(size.scaled(18))
             } else if let pdf = content.pdfData {
                 PDFPreview(source: .data(pdf))
             } else {
@@ -75,7 +78,7 @@ private struct TextPreview: View {
             Text(text.count > Self.maxLength ? String(text.prefix(Self.maxLength)) + "\n…" : text)
                 .font(.system(size: size.font(14)))
                 // 行の高さは文字の 1.7 倍（モック）
-                .lineSpacing(LineHeight.spacing(multiple: 1.7, fontSize: size.font(14)))
+                .lineHeight(1.7, fontSize: size.font(14))
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
                 .padding(size.scaled(18))
@@ -220,7 +223,7 @@ private struct URLPreview: View {
                     .lineLimit(3)
                 Text(urlString)
                     .font(.system(size: size.font(12), design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.historySub)
                     .textSelection(.enabled)
                     .lineLimit(8)
             }
@@ -380,7 +383,7 @@ private struct InfoTable: View {
     /// ラベルの列は幅 76 にそろえ（モック）、種類の値だけ太字にする
     @ViewBuilder
     private func cell(_ entry: (String, String)) -> some View {
-        Text(entry.0).foregroundStyle(.secondary)
+        Text(entry.0).foregroundStyle(Color.historySub)
             .frame(width: size.scaled(76), alignment: .leading)
         Text(entry.1).lineLimit(1).truncationMode(.middle)
             .fontWeight(entry.0 == Self.kindLabel ? .semibold : nil)

@@ -65,6 +65,7 @@ struct GeneralSettingsView: View {
                         NSWorkspace.shared.activateFileViewerSelecting([AppSettings.dataDirectory])
                     }
                 }
+                .buttonStyle(.settings)
                 .font(.system(size: SettingsFont.small))
                 .padding(.top, 2)
                 .padding(.horizontal, 4)
@@ -91,9 +92,11 @@ struct GeneralSettingsView: View {
             }
             Spacer(minLength: 0)
             Text(state)
+                .font(.system(size: SettingsFont.text))
                 .foregroundStyle(ok ? StatusTextColor.ok : StatusTextColor.attention)
                 .fixedSize()
             Button("システム設定を開く", action: open)
+                .buttonStyle(.settings)
         }
         .settingsRowPadding()
     }

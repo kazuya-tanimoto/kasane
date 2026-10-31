@@ -21,9 +21,13 @@ enum SettingsColor {
     static let box = dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.05))
     /// 箱の縁と、行の間の線（ライト 黒 8%、ダーク 白 8%）
     static let line = dynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.white.withAlphaComponent(0.08))
+    /// 本文の色（ライト #1D1D1F、ダーク #F2F2F5）
+    static let text = dynamic(light: rgb(0x1D, 0x1D, 0x1F), dark: rgb(0xF2, 0xF2, 0xF5))
+    /// ウインドウの地（ライト #F5F5F7、ダーク #26282D）
+    static let window = dynamic(light: rgb(0xF5, 0xF5, 0xF7), dark: rgb(0x26, 0x28, 0x2D))
     /// 見出しと説明の灰色（ライト #61646B、ダーク #A7AAB2）
     static let sub = dynamic(light: rgb(0x61, 0x64, 0x6B), dark: rgb(0xA7, 0xAA, 0xB2))
-    /// キーや検索の書き方の札の地（ライト 黒 6%、ダーク 白 10%）
+    /// 文字のボタンの地、キーや検索の書き方の札の地（ライト 黒 6%、ダーク 白 10%）
     static let chip = dynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.10))
     /// 箱の中の、一段沈んだ地（検索の例。ライト 黒 3.5%、ダーク 白 4%）
     static let inset = dynamic(light: NSColor.black.withAlphaComponent(0.035), dark: NSColor.white.withAlphaComponent(0.04))
@@ -153,7 +157,7 @@ struct SettingsCaption: View {
     var body: some View {
         Text(text)
             .font(.system(size: SettingsFont.text))
-            .lineSpacing(lineHeight.map { LineHeight.spacing(multiple: $0, fontSize: SettingsFont.text) } ?? 0)
+            .lineHeight(lineHeight ?? 0, fontSize: SettingsFont.text)
             .foregroundStyle(SettingsColor.sub)
             .fixedSize(horizontal: false, vertical: true)
     }
@@ -175,12 +179,15 @@ struct FittingScroll<Content: View>: View {
         ScrollView(.vertical) {
             content
                 .font(.system(size: SettingsFont.text))
+                .foregroundStyle(SettingsColor.text)
                 .padding(SettingsLayout.padding)
                 .frame(width: SettingsLayout.width, alignment: .topLeading)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         }
         .scrollDisabled(height <= maxHeight)
         .frame(width: SettingsLayout.width, height: min(height, maxHeight))
+        // ウインドウの地（モック: ライト #F5F5F7、ダーク #26282D）。上のタブの帯は Mac 標準のまま
+        .background(SettingsColor.window)
     }
 }
 
@@ -202,4 +209,26 @@ struct StatusMark: View {
 enum StatusTextColor {
     static let ok = SettingsColor.dynamic(light: SettingsColor.rgb(0x2B, 0x8A, 0x3E), dark: SettingsColor.rgb(0x69, 0xDB, 0x7C))
     static let attention = Color(nsColor: SettingsColor.rgb(0xB4, 0x53, 0x09))
+}
+
+/// 文字のボタン（「システム設定を開く」「標準に戻す」など）。モック: 平らな灰の地（黒 6% / 白 10%）、角 7、上下 4・左右 10。
+/// 文字の大きさは置く所で決める（ふだん 14pt、いちばん下の行は 13pt。settings-screen-2026-10-22.md §3）
+struct SettingsButtonStyle: ButtonStyle {
+    /// 文字の色。nil なら本文の色（「履歴を削除…」だけ赤）
+    var tint: Color?
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? (tint ?? SettingsColor.text) : SettingsColor.sub)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(SettingsColor.chip, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+extension ButtonStyle where Self == SettingsButtonStyle {
+    static var settings: SettingsButtonStyle { SettingsButtonStyle() }
 }

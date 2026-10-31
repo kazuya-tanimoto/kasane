@@ -75,9 +75,9 @@ struct SearchSettingsView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text("検索のゆるさ").font(.system(size: SettingsFont.item))
                 Spacer()
-                // 今の段階の名前は、スライダーと同じ青の太字（モック: ライト #0062CC、ダーク #4DA3FF）
+                // 今の段階の名前は青の太字（モック: ライト #0062CC、ダーク #4DA3FF）。大きさは決めた表の 14pt
                 Text(model.searchLooseness.displayName)
-                    .font(.system(size: SettingsFont.item, weight: .semibold))
+                    .font(.system(size: SettingsFont.text, weight: .semibold))
                     .foregroundStyle(SettingsColor.dynamic(light: SettingsColor.rgb(0x00, 0x62, 0xCC), dark: SettingsColor.rgb(0x4D, 0xA3, 0xFF)))
             }
             Slider(value: index, in: 0...Double(levels.count - 1), step: 1)
@@ -125,8 +125,8 @@ struct SearchSettingsView: View {
                 // 3.5 文字分（14pt × 3.5）。「出ない」でも札の幅がそろう
                 .frame(minWidth: SettingsFont.text * 3.5)
                 .background(Capsule().fill(shown ? Self.shownFill : Self.hiddenFill))
-            Text("\(Text(example.query).font(.system(size: SettingsFont.item, design: .monospaced))) → \(example.item)（\(example.note)）")
-                .font(.system(size: SettingsFont.item))
+            // 14pt（settings-screen-2026-10-22.md §3 の文字の表。モックの絵は 15 で描いているが、決めた表に従う）
+            Text("\(Text(example.query).font(.system(size: SettingsFont.text, design: .monospaced))) → \(example.item)（\(example.note)）")
             Spacer(minLength: 0)
         }
     }

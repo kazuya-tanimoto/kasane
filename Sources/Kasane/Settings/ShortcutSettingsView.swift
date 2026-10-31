@@ -96,7 +96,7 @@ struct ShortcutSettingsView: View {
                 }
             }
             Spacer(minLength: 0)
-            recorderField(slot, current: current)
+            recorderField(slot, current: current, hasWarning: warning != nil)
             // 標準から変えた行にだけ出す。場所は空けておき、出たときに行の並びがずれないようにする
             ZStack {
                 if current != standard {
@@ -104,7 +104,11 @@ struct ShortcutSettingsView: View {
                     Button {
                         recorder.reset(slot)
                     } label: {
-                        Image(systemName: "arrow.uturn.backward")
+                        // モック: 15pt の戻る矢印を灰色で
+                        Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 15))
+                            .foregroundStyle(SettingsColor.sub)
+                            .frame(width: 26, height: 26)
                     }
                     .buttonStyle(.borderless)
                     .help("標準のキー（\(standardName)）に戻す")
@@ -116,30 +120,32 @@ struct ShortcutSettingsView: View {
         .settingsRowPadding()
     }
 
-    private func recorderField(_ slot: ShortcutSlot, current: Shortcut) -> some View {
+    private func recorderField(_ slot: ShortcutSlot, current: Shortcut, hasWarning: Bool) -> some View {
         let recording = recorder.recording == slot
+        // 縁はモックの色: 押している間は青（ライト #007AFF、ダーク #0A84FF）、注意が出ている行は赤、ふだんは黒 15% / 白 15%
+        let border = recording ? Self.recordingBorder : (hasWarning ? SettingsColor.danger : Self.fieldBorder)
         return Button {
             recorder.start(slot)
         } label: {
             Text(recording ? "キーを押してください" : HotKeyCenter.displayString(current))
                 .font(.system(size: SettingsFont.item))
-                .foregroundStyle(recording ? .secondary : .primary)
-                // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように
+                .foregroundStyle(recording ? SettingsColor.sub : SettingsColor.text)
                 // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように。
                 // モックの幅 160（余白込み）では収まらないので、この幅を残す。余白と角はモックの値（上下 5・左右 10、角 7）
                 .frame(minWidth: 156)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 10)
-                .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 7)
-                        .strokeBorder(recording ? Color(nsColor: .controlAccentColor) : Color(nsColor: .separatorColor),
-                                      lineWidth: recording ? 2 : 1)
-                )
+                // 地はモックの欄の色（ライト 白、ダーク 白 6%）
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Self.fieldFill))
+                .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).strokeBorder(border, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(slot.settingsTitle)のキー、\(HotKeyCenter.displayString(current))")
     }
+
+    private static let fieldFill = SettingsColor.dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.06))
+    private static let fieldBorder = SettingsColor.dynamic(light: NSColor.black.withAlphaComponent(0.15), dark: NSColor.white.withAlphaComponent(0.15))
+    private static let recordingBorder = SettingsColor.dynamic(light: SettingsColor.rgb(0x00, 0x7A, 0xFF), dark: SettingsColor.rgb(0x0A, 0x84, 0xFF))
 }
 
 extension ShortcutSlot {

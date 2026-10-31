@@ -66,11 +66,10 @@ struct HistorySettingsView: View {
 
                 HStack(spacing: 10) {
                     // ピン留め以外が 0 件のときは押せなくする（押しても何も消えないため）
-                    Button {
+                    Button("履歴を削除…") {
                         model.actions.clearHistory()
-                    } label: {
-                        Text("履歴を削除…").foregroundStyle(model.hasUnpinnedHistory ? SettingsColor.danger : Color.secondary)
                     }
+                    .buttonStyle(SettingsButtonStyle(tint: SettingsColor.danger))
                     .disabled(!model.hasUnpinnedHistory)
                     SettingsCaption("ピン留めした項目と、FIFO / LIFO のキューは削除されません")
                 }
@@ -93,6 +92,8 @@ struct HistorySettingsView: View {
                 // モック: 上から 64 の所に、真ん中にそろえて出す
                 if model.excludedApps.isEmpty {
                     SettingsCaption("アプリはまだありません。＋ で追加できます")
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
                         .padding(.top, 64)
                 }
             }
@@ -122,7 +123,10 @@ struct HistorySettingsView: View {
                         model.chooseAppToAdd()
                     }
                 } label: {
-                    Image(systemName: "plus")
+                    // モック: 16pt の「＋」「−」を本文の色で
+                    Text("＋")
+                        .font(.system(size: 16))
+                        .foregroundStyle(SettingsColor.text)
                         .frame(width: 26, height: 22)
                 }
                 .menuStyle(.button)
@@ -135,7 +139,9 @@ struct HistorySettingsView: View {
                     model.removeExcludedApp(bundleID: selectedApp)
                     self.selectedApp = nil
                 } label: {
-                    Image(systemName: "minus")
+                    Text("−")
+                        .font(.system(size: 16))
+                        .foregroundStyle(selectedApp == nil ? SettingsColor.sub : SettingsColor.text)
                         .frame(width: 26, height: 22)
                 }
                 .buttonStyle(.borderless)

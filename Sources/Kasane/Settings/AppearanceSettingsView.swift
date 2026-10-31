@@ -67,23 +67,24 @@ struct AppearanceSettingsView: View {
         return Button {
             appearance.accent = accent
         } label: {
+            // モック: 丸 22、名前との間 4。選んだ色は 2pt あけて 2pt の輪（本文の色）、ほかは内側に 1px の灰（35%）の輪
             VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(accent == .system
-                              ? AnyShapeStyle(AngularGradient(colors: [.blue, .purple, .pink, .orange, .green, .blue], center: .center))
-                              : AnyShapeStyle(accent.color))
-                        .frame(width: 22, height: 22)
-                    if selected {
-                        Circle()
-                            .strokeBorder(Color.primary.opacity(0.75), lineWidth: 2)
-                            .frame(width: 28, height: 28)
+                Circle()
+                    .fill(accent == .system
+                          ? AnyShapeStyle(AngularGradient(colors: [.blue, .purple, .pink, .orange, .green, .blue], center: .center))
+                          : AnyShapeStyle(accent.color))
+                    .overlay(Circle().strokeBorder(Color.gray.opacity(selected ? 0 : 0.35), lineWidth: 1))
+                    .frame(width: 22, height: 22)
+                    .overlay {
+                        if selected {
+                            Circle()
+                                .strokeBorder(SettingsColor.text, lineWidth: 2)
+                                .frame(width: 30, height: 30)
+                        }
                     }
-                }
-                .frame(width: 30, height: 30)
                 Text(accent.displayName)
                     .font(.system(size: SettingsFont.colorName))
-                    .foregroundStyle(selected ? .primary : .secondary)
+                    .foregroundStyle(selected ? SettingsColor.text : SettingsColor.sub)
             }
             .contentShape(Rectangle())
         }
@@ -99,6 +100,7 @@ struct AppearanceSettingsView: View {
             SettingsHeader(title: "背景（履歴ウインドウと小さいウインドウ）") {
                 if !model.isBackgroundStandard {
                     Button("標準に戻す") { model.resetBackground() }
+                        .buttonStyle(.settings)
                 }
             }
             .frame(minHeight: 24)
@@ -193,6 +195,7 @@ struct AppearanceSettingsView: View {
                             model.resetHistoryWindowFrame()
                             didResetWindow = true
                         }
+                        .buttonStyle(.settings)
                     }
                 }
             }
@@ -267,24 +270,24 @@ private struct AppearanceSample: View {
             // モック: 角 12、縁なし
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityHidden(true)
-            SettingsCaption("変更はすぐに、この見本と表示中の小さいウインドウに反映されます。")
+            SettingsCaption("変更はすぐに、この見本と表示中の小さいウインドウに反映されます。", lineHeight: 1.6)
+                .padding(.horizontal, 2)
         }
     }
 
-    /// 後ろの画面の代わり。透け具合とぼかしが分かるよう、色と線のある絵にする
+    /// 後ろの画面の代わり。透け具合とぼかしが分かるよう、モックと同じく、斜めのグラデーションに 3 つの色の四角を置く
+    /// （地 ライト #C9D6E3→#9FB0C4、ダーク #2A3445→#121821。四角は #E07A5F・#5B8BD0・#81B29A、角 8）
     private var backdrop: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 0.36, green: 0.55, blue: 0.78), Color(red: 0.86, green: 0.62, blue: 0.45)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            VStack(spacing: 12) {
-                ForEach(0..<12, id: \.self) { index in
-                    Capsule()
-                        .fill(Color.white.opacity(index.isMultiple(of: 2) ? 0.55 : 0.3))
-                        .frame(width: CGFloat(80 + (index * 37) % 120), height: 6)
-                        .frame(maxWidth: .infinity, alignment: index.isMultiple(of: 3) ? .leading : .trailing)
-                }
-            }
-            .padding(14)
+        ZStack(alignment: .topLeading) {
+            LinearGradient(colors: [SettingsColor.dynamic(light: SettingsColor.rgb(0xC9, 0xD6, 0xE3), dark: SettingsColor.rgb(0x2A, 0x34, 0x45)),
+                                    SettingsColor.dynamic(light: SettingsColor.rgb(0x9F, 0xB0, 0xC4), dark: SettingsColor.rgb(0x12, 0x18, 0x21))],
+                           startPoint: .top, endPoint: .bottomTrailing)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0xE0, 0x7A, 0x5F)))
+                .frame(width: 120, height: 100).offset(x: 14, y: 20)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0x5B, 0x8B, 0xD0)))
+                .frame(width: 120, height: 110).offset(x: 110, y: 130)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0x81, 0xB2, 0x9A)))
+                .frame(width: 100, height: 70).offset(x: 30, y: 210)
         }
     }
 
@@ -294,7 +297,7 @@ private struct AppearanceSample: View {
     private var glass: some View {
         ZStack {
             backdrop.blur(radius: sampleBlur)
-            Color(nsColor: .windowBackgroundColor).opacity(appearance.opacity)
+            Color.panelBase.opacity(appearance.opacity)
         }
     }
 
@@ -336,9 +339,13 @@ private struct AppearanceSample: View {
             .padding(.top, 2)
         }
         .padding(8)
-        .background(glass.clipShape(RoundedRectangle(cornerRadius: 8)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+        // モック: 角 12、縁 1px（ライト 白 70%、ダーク 白 12%）、影 0 12 30 黒 35%
+        .background(glass.clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Self.panelBorder, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 15, y: 12)
     }
+
+    private static let panelBorder = SettingsColor.dynamic(light: NSColor.white.withAlphaComponent(0.7), dark: NSColor.white.withAlphaComponent(0.12))
 
     private static let sampleRows = ["git push origin main", "git push --tags", "push 通知の設定"]
 
