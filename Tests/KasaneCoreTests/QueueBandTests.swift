@@ -48,7 +48,9 @@ final class QueueBandLayoutTests: XCTestCase {
         for size: CGFloat in [13, 14.5, 16] {
             let max = QueueBandLayout.maxWidth(fontSize: size, screen: screen)
             let body = max - QueueBandLayout.chromeWidth(fontSize: size)
-            XCTAssertEqual(body, 40 * size, accuracy: 0.001)
+            // 40 字分に、丸めで 39 字目で折り返さないための余裕を足す。余裕は 1 字より小さく、41 字目は入らない
+            XCTAssertEqual(body, 40 * size + QueueBandLayout.maxWidthSlack, accuracy: 0.001)
+            XCTAssertLessThan(body, 41 * size)
         }
         // 文字を大きくすると最大も広がる
         XCTAssertGreaterThan(

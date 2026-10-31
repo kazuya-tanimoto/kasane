@@ -15,6 +15,9 @@ public enum QueueBandLayout {
     public static let baseWidth: CGFloat = 260
     /// 1 行に出す全角の字数の上限
     public static let maxCharacters: CGFloat = 40
+    /// 最大の幅に足す余裕。本文の幅がちょうど 40 字分だと、描画の丸めで 39 字目で折り返すことがあるため。
+    /// 全角 1 字（12pt 以上）より小さいので、41 字目は入らない
+    public static let maxWidthSlack: CGFloat = 1
 
     /// 余白など（12pt のときの値。倍率を掛けて使う）。カードの描画も同じ値を使う
     public enum Metrics {
@@ -43,9 +46,9 @@ public enum QueueBandLayout {
         min(baseWidth * scale(fontSize: fontSize), screen.width)
     }
 
-    /// 全角 1 字の幅は文字の大きさとほぼ同じなので、本文が 40 字になる幅。帯が画面からはみ出さないよう、画面の幅で止める
+    /// 全角 1 字の幅は文字の大きさとほぼ同じなので、本文が 40 字になる幅（と余裕）。帯が画面からはみ出さないよう、画面の幅で止める
     public static func maxWidth(fontSize: CGFloat, screen: CGRect) -> CGFloat {
-        let wanted = maxCharacters * fontSize + chromeWidth(fontSize: fontSize)
+        let wanted = maxCharacters * fontSize + maxWidthSlack + chromeWidth(fontSize: fontSize)
         return max(min(wanted, screen.width), minWidth(fontSize: fontSize, screen: screen))
     }
 
