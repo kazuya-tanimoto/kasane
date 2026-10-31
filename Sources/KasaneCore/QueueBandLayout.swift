@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 #if canImport(CoreGraphics)
 // macOS では CGFloat や CGRect の計算は CoreGraphics にあり、Foundation だけでは見えない
 import CoreGraphics
@@ -9,14 +12,14 @@ import CoreGraphics
 /// - 設定の「左 / 右」の側の画面の端にくっつけ、メニューバーの下から画面の下まで出す。Dock は避けずにかぶせる
 ///   （2026-10-30 Kazuya さんが決定「Dockにかぶせていいです」）
 /// - 幅は内側の端のドラッグで変える。12pt のときの幅で覚え、文字の大きさの倍率を掛けて出す
-/// - 最小（と初期）は今までの幅、最大はカードの本文が 1 行に全角 40 字になる幅（WCAG 1.4.8「40 if CJK」）
+/// - 最小（と初期）は今までの幅、最大はカードの本文が 1 行に全角 40 字になる幅（WCAG 1.4.8「40 if CJK」）。字の幅は測る
 public enum QueueBandLayout {
     /// 12pt のときの、今までの幅。初期と最小に使う
     public static let baseWidth: CGFloat = 260
     /// 1 行に出す全角の字数の上限
     public static let maxCharacters: CGFloat = 40
     /// 最大の幅に足す余裕。本文の幅がちょうど 40 字分だと、描画の丸めで 39 字目で折り返すことがあるため。
-    /// 全角 1 字（12pt 以上）より小さいので、41 字目は入らない
+    /// 全角 1 字より十分小さいので、41 字目は入らない
     public static let maxWidthSlack: CGFloat = 1
 
     /// 余白など（12pt のときの値。倍率を掛けて使う）。カードの描画も同じ値を使う。
@@ -84,9 +87,23 @@ public enum QueueBandLayout {
         min(baseWidth * scale(fontSize: fontSize), screen.width)
     }
 
-    /// 全角 1 字の幅は文字の大きさとほぼ同じなので、本文が 40 字になる幅（と余裕）。帯が画面からはみ出さないよう、画面の幅で止める
+    /// 本文の全角 1 字の幅。本文と同じシステムの文字で「一」を 40 字並べて測り、40 で割る。
+    /// 文字の大きさと同じとは限らない（2026-10-31、そう仮定した最大で 1 行に 43 字入った）。AppKit の無い所では文字の大きさ
+    public static func fullWidthCharacterWidth(fontSize: CGFloat) -> CGFloat {
+        #if canImport(AppKit)
+        let text = NSAttributedString(
+            string: String(repeating: "一", count: Int(maxCharacters)),
+            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
+        )
+        return text.size().width / maxCharacters
+        #else
+        return fontSize
+        #endif
+    }
+
+    /// 本文が全角 40 字になる幅（と余裕）。帯が画面からはみ出さないよう、画面の幅で止める
     public static func maxWidth(fontSize: CGFloat, screen: CGRect) -> CGFloat {
-        let wanted = maxCharacters * fontSize + maxWidthSlack + chromeWidth(fontSize: fontSize)
+        let wanted = maxCharacters * fullWidthCharacterWidth(fontSize: fontSize) + maxWidthSlack + chromeWidth(fontSize: fontSize)
         return max(min(wanted, screen.width), minWidth(fontSize: fontSize, screen: screen))
     }
 

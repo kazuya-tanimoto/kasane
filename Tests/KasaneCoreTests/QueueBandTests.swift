@@ -3,6 +3,9 @@ import Foundation
 import CoreGraphics
 #endif
 import XCTest
+#if canImport(AppKit)
+import AppKit
+#endif
 @testable import KasaneCore
 
 final class QueueBandLayoutTests: XCTestCase {
@@ -63,8 +66,9 @@ final class QueueBandLayoutTests: XCTestCase {
             let max = QueueBandLayout.maxWidth(fontSize: size, screen: screen)
             let body = max - QueueBandLayout.chromeWidth(fontSize: size)
             // 40 字分に、丸めで 39 字目で折り返さないための余裕を足す。余裕は 1 字より小さく、41 字目は入らない
-            XCTAssertEqual(body, 40 * size + QueueBandLayout.maxWidthSlack, accuracy: 0.001)
-            XCTAssertLessThan(body, 41 * size)
+            let character = QueueBandLayout.fullWidthCharacterWidth(fontSize: size)
+            XCTAssertEqual(body, 40 * character + QueueBandLayout.maxWidthSlack, accuracy: 0.001)
+            XCTAssertLessThan(body, 41 * character)
         }
         // 文字を大きくすると最大も広がる
         XCTAssertGreaterThan(
@@ -72,6 +76,36 @@ final class QueueBandLayoutTests: XCTestCase {
             QueueBandLayout.maxWidth(fontSize: 13, screen: screen)
         )
     }
+
+    #if canImport(AppKit)
+    /// 実際の文字で並べて、一番広い帯の本文の 1 行目に全角 40 字が入り、41 字目は次の行に回る（2026-10-31、43 字入った不具合）
+    func testMaxWidthBreaksAfterFortyCharactersWithTheRealFont() {
+        for size: CGFloat in [13, 14.5, 16] {
+            let maxBody = QueueBandLayout.maxWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let minBody = QueueBandLayout.minWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let maxLine = firstLineLength(width: maxBody, fontSize: size)
+            let minLine = firstLineLength(width: minBody, fontSize: size)
+            print("QueueBand: \(size)pt 全角 1 字 \(QueueBandLayout.fullWidthCharacterWidth(fontSize: size))pt、最大の本文 \(maxBody)pt に \(maxLine) 字、最小の本文 \(minBody)pt に \(minLine) 字")
+            XCTAssertEqual(maxLine, 40)
+        }
+    }
+
+    private func firstLineLength(width: CGFloat, fontSize: CGFloat) -> Int {
+        let storage = NSTextStorage(
+            string: String(repeating: "一", count: 60),
+            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
+        )
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        var range = NSRange()
+        _ = layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: &range)
+        return range.length
+    }
+    #endif
 
     func testDraggingTheInnerEdge() {
         let start: CGFloat = 300

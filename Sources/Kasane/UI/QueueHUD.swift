@@ -427,23 +427,41 @@ final class QueueBandResizeHandle: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    /// つかんでいる間か。つかんだまま外へ出ても矢印のままにする
+    private var isDragging = false
+
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
-        // キーウインドウでなくてもカーソルを変える
+        // 帯はキーウインドウにならず、Kasane も前に出ないので、前に出ていなくても届く activeAlways にする。
+        // activeAlways と cursorUpdate を一緒に指定すると cursorUpdate(with:) は送られない（Apple の文書
+        // https://developer.apple.com/documentation/appkit/nstrackingarea/options-swift.struct/activealways ）ので、
+        // 入った・動いた・出たで自分でカーソルを変える
         addTrackingArea(NSTrackingArea(
             rect: .zero,
-            options: [.cursorUpdate, .activeAlways, .inVisibleRect],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect],
             owner: self
         ))
     }
 
-    override func cursorUpdate(with event: NSEvent) {
+    override func mouseEntered(with event: NSEvent) {
         NSCursor.columnResize.set()
     }
 
+    override func mouseMoved(with event: NSEvent) {
+        NSCursor.columnResize.set()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        if !isDragging {
+            NSCursor.arrow.set()
+        }
+    }
+
     override func mouseDown(with event: NSEvent) {
+        isDragging = true
         startX = NSEvent.mouseLocation.x
+        NSCursor.columnResize.set()
         onBegan?()
     }
 
@@ -453,6 +471,12 @@ final class QueueBandResizeHandle: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        isDragging = false
+        // 放した所がつかむ所の外なら、矢印を元に戻す
+        let point = convert(event.locationInWindow, from: nil)
+        if !bounds.contains(point) {
+            NSCursor.arrow.set()
+        }
         onEnded?()
     }
 }
