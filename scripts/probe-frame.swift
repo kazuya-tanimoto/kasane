@@ -13,7 +13,13 @@ let h = UnsafeMutableRawPointer(bitPattern: -2)
 let conn = unsafeBitCast(dlsym(h, "CGSMainConnectionID")!, to: ConnF.self)
 let setBlur = unsafeBitCast(dlsym(h, "CGSSetWindowBackgroundBlurRadius")!, to: BlurF.self)
 func blur(_ w: NSWindow, _ r: Int32) { print("PROBE blur \(r) status=\(setBlur(conn(), w.windowNumber, r))") }
-func wait(_ s: Double) { RunLoop.main.run(until: Date().addingTimeInterval(s)) }
+func wait(_ s: Double) {
+    let end = Date().addingTimeInterval(s)
+    while Date() < end {
+        if let e = app.nextEvent(matching: .any, until: Date().addingTimeInterval(0.01), inMode: .default, dequeue: true) { app.sendEvent(e) }
+    }
+}
+app.finishLaunching()
 
 final class Stripes: NSView {
     var clicks = 0
