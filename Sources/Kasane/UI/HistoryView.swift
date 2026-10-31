@@ -39,7 +39,7 @@ struct HistoryView: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）
-                    .padding(.bottom, actionBarClearance)
+                    .padding(.bottom, previewBottomClearance)
             }
             .padding(.horizontal, Self.contentHorizontalPadding)
             .padding(.bottom, Self.contentBottomPadding)
@@ -67,17 +67,24 @@ struct HistoryView: View {
 
     /// 一覧とプレビューの左右の余白
     private static let contentHorizontalPadding: CGFloat = 12
-    /// 一覧とプレビューの下の余白（ウインドウの下端から）
-    private static let contentBottomPadding: CGFloat = 12
-    /// 帯と、その上に来る行やプレビューの文字との間
+    /// 一覧とプレビューの下の余白（ウインドウの下端から）。一覧は帯の下まで続く（モック B の 6px、2026-10-31 画面のデザイン）
+    private static let contentBottomPadding: CGFloat = 6
+    /// 帯と、いちばん下までスクロールした一覧の行との間
     private static let actionBarGap: CGFloat = 6
+    /// 帯と、プレビューの地の下端との間（モック B: プレビューの下 56px − 帯の下 10px − 帯の高さ 30px）
+    private static let previewGap: CGFloat = 16
 
     /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
     /// 一覧は帯の下までスクロールでき（行が透けて見える）、いちばん下までスクロールすれば帯の上に出る。↓ で選んだ行も、帯に隠れない所まで送る。
-    /// プレビューは、この高さだけ上で地を終える
     private var actionBarClearance: CGFloat {
         guard actionBarHeight > 0 else { return 0 }
         return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.actionBarGap)
+    }
+
+    /// プレビューの地を終える高さ（ウインドウの下端から数えると、帯の下の間 + 帯の高さ + previewGap）
+    private var previewBottomClearance: CGFloat {
+        guard actionBarHeight > 0 else { return 0 }
+        return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.previewGap)
     }
 
     private var minSize: NSSize {
@@ -173,7 +180,15 @@ private struct ActionBar: View {
     static let margin: CGFloat = 10
 
     @ObservedObject var model: HistoryModel
+    @Environment(\.colorScheme) private var colorScheme
     @StateObject private var tooltips = TooltipState()
+
+    /// 帯のガラスに付ける色。モック B の帯の地（ダーク rgba(60,62,70,0.45)、ライト rgba(255,255,255,0.45)）
+    private static func barTint(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 60 / 255, green: 62 / 255, blue: 70 / 255).opacity(0.45)
+            : Color.white.opacity(0.45)
+    }
 
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
@@ -215,7 +230,20 @@ private struct ActionBar: View {
             .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
         .padding(4)
-        .glassEffect(.regular, in: Capsule())
+        // 地・縁・光の線・影は、Kazuya さんが OK したモック「Liquid Glass 3 案」の B の値に合わせる（2026-10-31）
+        .glassEffect(.regular.tint(Self.barTint(colorScheme)), in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.28 : 0.75), lineWidth: 1)
+        }
+        .overlay(alignment: .top) {
+            // 上の内側の光の線
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.35 : 0.9), lineWidth: 1)
+                .mask(alignment: .top) { Rectangle().frame(height: 2) }
+                .padding(1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 9, y: 6)
         .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
@@ -315,7 +343,7 @@ private struct TooltipLabel: View {
     let text: String
 
     var body: some View {
-        // ボタンの文字（`ActionStyle`）と同じ 12pt
+        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま（ボタンの文字は 11pt）
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
@@ -403,8 +431,11 @@ private struct ActionButtonBody: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
-            .padding(.horizontal, 10)
+            // 11pt（モック B の 10px を、一覧の題の文字との釣り合いで Mac の標準の段にした。2026-10-31 画面のデザイン）。
+            // ペーストの太字は 600（2026-10-18 の決まり）
+            .font(.system(size: 11, weight: isPrimary ? .semibold : .regular))
+            // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
+            .padding(.horizontal, isPrimary ? 9 : 8)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
