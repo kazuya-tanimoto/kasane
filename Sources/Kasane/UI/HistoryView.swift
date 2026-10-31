@@ -424,7 +424,8 @@ private struct ActionButtonBody: View {
 
     var body: some View {
         configuration.label
-            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
+            // 文字はモック B の値（10、ペーストは太字 700）
+            .font(.system(size: 10, weight: isPrimary ? .bold : .regular))
             // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
             .padding(.horizontal, isPrimary ? 9 : 8)
             .padding(.vertical, 5)
