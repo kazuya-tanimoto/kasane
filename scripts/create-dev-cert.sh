@@ -3,7 +3,7 @@
 # キーチェーンアクセスの画面を使わずに済ませるためのもの。
 #
 #   scripts/create-dev-cert.sh
-#   make run SIGN_IDENTITY="Kasane Dev"
+#   make run    # 「Kasane Dev」があれば自動でそれで署名する
 #
 # 最後に証明書を信頼する設定で、画面にパスワードの確認ダイアログが出る（ターミナルには入力しない）。
 # 途中で止めた場合は、もう一度実行すれば信頼の設定からやり直す。
@@ -27,7 +27,11 @@ finish() {
   echo
   security find-identity -p codesigning "$KEYCHAIN" | grep -F "\"$NAME\""
   echo "準備できました。次のコマンドで署名してビルドできます:"
-  echo "  make run SIGN_IDENTITY=\"$NAME\""
+  if [ "$NAME" = "Kasane Dev" ]; then
+    echo "  make run"
+  else
+    echo "  make run SIGN_IDENTITY=\"$NAME\""
+  fi
 }
 
 existing="$(security find-identity -p codesigning "$KEYCHAIN" | grep -F "\"$NAME\"" || true)"

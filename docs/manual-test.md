@@ -642,3 +642,34 @@ echo "https://www.rust-lang.org/?kasane="(date +%s) | pbcopy
 - [x] ⌥V で開き、その URL の行を選ぶ → ログに `skip 番号 (offline)` が出る
 
 終わったら、Wi-Fi をオンに戻してください。
+
+## 18. 開発中の署名と /Applications への置き換え（2026-10-31 追加）
+
+`make run` の署名と、置き換えたあとも許可が残るかだけです。
+証明書の探し方と、別のアプリを消さないことは、スクリプトで決まっているので項目にしていません。
+
+`make run` で、`/Applications` の Kasane が新しい方に置き換わります（履歴と設定は残ります）。
+
+準備（1〜3 の順に）:
+
+1. ターミナルで次を流し、`"Kasane Dev"` を含む行が出るかを見る
+   出なければ、証明書がありません。
+
+   ```
+   security find-identity -p codesigning | grep "Kasane Dev"
+   ```
+
+   何も出なければ、次を流して証明書を作る
+
+   ```
+   cd ~/src/kasane && make dev-cert
+   ```
+
+   最後に確認のダイアログが出るので、macOS のパスワードを入れる
+
+2. 依頼のコマンド（最後が `make run`）を流す
+3. 設定の「一般」の「ログイン時に起動」がオンなら、一度オフにしてオンに戻す
+   （ログイン項目が前の `build/Kasane.app` を指したまま残らないように）
+
+- [x] `make run` の出力で、`Built:` の行の終わりが `(signed with: Kasane Dev)` になっている（`(signed with: ad-hoc)` なら NG）
+- [x] メモで ⌥V を押し、行を選んで ⏎ を押す → メモに貼り付けられる（場所が変わっても許可が残っている）
