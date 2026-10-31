@@ -120,7 +120,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.remove(ids: result.prunedIDs)
         if let id = result.item.id {
             queue.didCapture(itemID: id)
+            fetchLinkForQueue(result.item)
         }
+    }
+
+    /// FIFO / LIFO 中にキューへ入った URL は、コピーした時点でページ情報を取りに行く（2026-10-30 決定。requirements.md §3.3）
+    private func fetchLinkForQueue(_ item: ClipItem) {
+        guard queue.mode != nil, item.kind == .url, let id = item.id else { return }
+        model.links.fetchNow(itemID: id)
     }
 
     // MARK: - ペースト
@@ -133,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
         if action == .copyOnly, queue.mode != nil {
             queue.didCapture(itemID: itemID)
+            fetchLinkForQueue(item)
             return
         }
 
@@ -210,6 +218,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                         .receive(on: RunLoop.main)
                         .eraseToAnyPublisher(),
                     queueHUDChanged: { [weak self] in self?.updateQueueHUD() },
+                    fetchesLinkPreviewsChanged: { [weak self] enabled in self?.model.links.setEnabled(enabled) },
                     resetHistoryWindowFrame: { [weak self] in self?.panel.resetFrame() },
                     isHistoryWindowStandard: { [weak self] in self?.panel.isFrameStandard ?? true }
                 ),

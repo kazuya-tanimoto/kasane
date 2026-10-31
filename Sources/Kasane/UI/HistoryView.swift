@@ -28,7 +28,7 @@ struct HistoryView: View {
             HStack(spacing: 12) {
                 ItemListView(model: model)
                     .frame(width: appearance.historyTextSize.scaled(350))
-                PreviewPane(content: model.preview, showsDetails: model.showsDetails)
+                PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -446,6 +446,11 @@ private struct ItemListView: View {
             shortcut: model.shortcutNumber(for: item.id)
         )
         .id(item.id)
+        // URL の行は、見えている間だけタイトルと画像を取りに行く候補にする。LazyVStack の onAppear は
+        // 画面の少し外の行にも呼ばれるので、半分以上見えているかで決める
+        .onScrollVisibilityChange(threshold: 0.5) { visible in
+            model.links.setVisible(item, visible)
+        }
         .contentShape(Rectangle())
         .onTapGesture(count: 2) {
             model.activate(id: item.id, action: .paste)
