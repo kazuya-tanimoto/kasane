@@ -36,27 +36,47 @@ struct ShortcutSettingsView: View {
                         row(slot)
                     }
                 }
-                SettingsCaption("欄をクリックして、新しいキーを押します。Esc で取り消します。")
+                // モック: 箱との間は 10、行の高さは 1.6 倍
+                SettingsCaption("欄をクリックして、新しいキーを押します。Esc で取り消します。", lineHeight: 1.6)
                     .padding(.horizontal, 4)
+                    .padding(.top, 10 - SettingsLayout.rowSpacing)
 
                 SettingsHeader("履歴ウインドウのキー（変更できません）")
+                // モック: 2 列に並べ、行の間に線は引かない。キーは灰色の札に、名前は灰色で
                 SettingsBox {
-                    ForEach(Array(Self.fixedKeys.enumerated()), id: \.offset) { index, entry in
-                        if index > 0 { SettingsDivider() }
-                        HStack(spacing: 16) {
-                            Text(entry.key)
-                                .font(.system(size: SettingsFont.small))
-                                .frame(width: 96, alignment: .leading)
-                            Text(entry.label)
-                            Spacer(minLength: 0)
+                    Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 0) {
+                        ForEach(Array(stride(from: 0, to: Self.fixedKeys.count, by: 2)), id: \.self) { index in
+                            GridRow {
+                                fixedKeyCell(Self.fixedKeys[index])
+                                if index + 1 < Self.fixedKeys.count {
+                                    fixedKeyCell(Self.fixedKeys[index + 1])
+                                }
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
                     }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
                 }
             }
         }
         .onDisappear { recorder.cancel() }
+    }
+
+    private func fixedKeyCell(_ entry: (key: String, label: String)) -> some View {
+        HStack(spacing: 10) {
+            Text(entry.key)
+                .font(.system(size: SettingsFont.small))
+                .lineLimit(1)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .frame(minWidth: 64)
+                .background(SettingsColor.chip, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+            Text(entry.label)
+                .foregroundStyle(SettingsColor.sub)
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func row(_ slot: ShortcutSlot) -> some View {
@@ -71,7 +91,7 @@ struct ShortcutSettingsView: View {
                 if let warning {
                     Text(warning)
                         .font(.system(size: SettingsFont.text))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(SettingsColor.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -91,10 +111,9 @@ struct ShortcutSettingsView: View {
                     .accessibilityLabel("標準のキー（\(standardName)）に戻す")
                 }
             }
-            .frame(width: 22)
+            .frame(width: 26, height: 26)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .settingsRowPadding()
     }
 
     private func recorderField(_ slot: ShortcutSlot, current: Shortcut) -> some View {
@@ -106,12 +125,14 @@ struct ShortcutSettingsView: View {
                 .font(.system(size: SettingsFont.item))
                 .foregroundStyle(recording ? .secondary : .primary)
                 // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように
+                // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように。
+                // モックの幅 160（余白込み）では収まらないので、この幅を残す。余白と角はモックの値（上下 5・左右 10、角 7）
                 .frame(minWidth: 156)
-                .padding(.vertical, 4)
-                .padding(.horizontal, 8)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
+                .padding(.vertical, 5)
+                .padding(.horizontal, 10)
+                .background(RoundedRectangle(cornerRadius: 7).fill(Color(nsColor: .controlBackgroundColor)))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 6)
+                    RoundedRectangle(cornerRadius: 7)
                         .strokeBorder(recording ? Color(nsColor: .controlAccentColor) : Color(nsColor: .separatorColor),
                                       lineWidth: recording ? 2 : 1)
                 )

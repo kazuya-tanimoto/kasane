@@ -4,11 +4,43 @@ import SwiftUI
 /// 設定画面の部品。Mac のシステム設定に近い見た目（角丸の箱の中に行を並べ、行の間に線）にする。
 /// Form の grouped は中でスクロールして高さを決めないので、タブごとにウインドウの高さを中身に合わせられるよう自前で並べる
 
-/// 幅（全タブ共通。settings-screen-2026-10-22.md §4）
+/// 幅と間（全タブ共通。幅は settings-screen-2026-10-22.md §4、余白と間はモック「設定画面 10/22 案」の値）
 enum SettingsLayout {
     static let width: CGFloat = 760
-    static let padding: CGFloat = 20
-    static let rowSpacing: CGFloat = 8
+    /// 中の余白（モック: 上 18・左右 22・下 22）
+    static let padding = EdgeInsets(top: 18, leading: 22, bottom: 22, trailing: 22)
+    /// 箱・見出し・説明の間（モック: 16）
+    static let rowSpacing: CGFloat = 16
+    /// 箱の角の丸み（モック: 12）
+    static let boxCornerRadius: CGFloat = 12
+}
+
+/// 設定画面の色（モック「設定画面 10/22 案」の KS_THEMES。ライト / ダーク）
+enum SettingsColor {
+    /// 箱の地（ライト 白、ダーク 白 5%）。ライトでは周りより明るい白い箱にする
+    static let box = dynamic(light: .white, dark: NSColor.white.withAlphaComponent(0.05))
+    /// 箱の縁と、行の間の線（ライト 黒 8%、ダーク 白 8%）
+    static let line = dynamic(light: NSColor.black.withAlphaComponent(0.08), dark: NSColor.white.withAlphaComponent(0.08))
+    /// 見出しと説明の灰色（ライト #61646B、ダーク #A7AAB2）
+    static let sub = dynamic(light: rgb(0x61, 0x64, 0x6B), dark: rgb(0xA7, 0xAA, 0xB2))
+    /// キーや検索の書き方の札の地（ライト 黒 6%、ダーク 白 10%）
+    static let chip = dynamic(light: NSColor.black.withAlphaComponent(0.06), dark: NSColor.white.withAlphaComponent(0.10))
+    /// 箱の中の、一段沈んだ地（検索の例。ライト 黒 3.5%、ダーク 白 4%）
+    static let inset = dynamic(light: NSColor.black.withAlphaComponent(0.035), dark: NSColor.white.withAlphaComponent(0.04))
+    /// 一覧の下の ＋ − の帯の地（ライト #F7F7F9、ダーク 白 3%）
+    static let footer = dynamic(light: rgb(0xF7, 0xF7, 0xF9), dark: NSColor.white.withAlphaComponent(0.03))
+    /// 赤い文（ライト #C62828、ダーク #FF6B6B）
+    static let danger = dynamic(light: rgb(0xC6, 0x28, 0x28), dark: rgb(0xFF, 0x6B, 0x6B))
+
+    static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    static func rgb(_ red: Int, _ green: Int, _ blue: Int) -> NSColor {
+        NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
+    }
 }
 
 /// 文字の大きさ（settings-screen-2026-10-22.md §3「文字の大きさ」）。
@@ -33,14 +65,24 @@ struct SettingsBox<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             content
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .quaternaryLabelColor).opacity(0.25)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+        .settingsBoxBackground()
     }
 }
 
+extension View {
+    /// 箱の地と縁（モック: 角 12、縁 1px）
+    func settingsBoxBackground() -> some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsLayout.boxCornerRadius, style: .continuous)
+        return background(shape.fill(SettingsColor.box))
+            .overlay(shape.strokeBorder(SettingsColor.line, lineWidth: 1))
+            .clipShape(shape)
+    }
+}
+
+/// 行の間の線。モックと同じく、箱の左右の端まで引く
 struct SettingsDivider: View {
     var body: some View {
-        Divider().padding(.leading, 12)
+        Rectangle().fill(SettingsColor.line).frame(height: 1)
     }
 }
 
@@ -50,13 +92,15 @@ struct SettingsHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: SettingsFont.text, weight: .semibold))
+        // モック: 14pt の太字（600）を灰色で。右に「標準に戻す」などを置くときも、行の高さは 24 から
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(.system(size: SettingsFont.text, weight: .semibold))
+                .foregroundStyle(SettingsColor.sub)
             Spacer(minLength: 8)
             trailing
         }
         .padding(.horizontal, 4)
-        .padding(.top, 10)
     }
 }
 
@@ -74,8 +118,8 @@ struct SettingsRow<Control: View>: View {
     @ViewBuilder var control: Control
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: SettingsFont.item))
                 if let description {
                     SettingsCaption(description)
@@ -84,23 +128,33 @@ struct SettingsRow<Control: View>: View {
             Spacer(minLength: 0)
             control
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .settingsRowPadding()
+    }
+}
+
+extension View {
+    /// 箱の中の 1 行の余白（モック: 上下 11・左右 14）
+    func settingsRowPadding() -> some View {
+        padding(.horizontal, 14).padding(.vertical, 11)
     }
 }
 
 /// 灰色の小さい説明の文
 struct SettingsCaption: View {
     var text: String
+    /// 行の高さ（文字の大きさの何倍か）。nil ならシステムの標準
+    var lineHeight: CGFloat?
 
-    init(_ text: String) {
+    init(_ text: String, lineHeight: CGFloat? = nil) {
         self.text = text
+        self.lineHeight = lineHeight
     }
 
     var body: some View {
         Text(text)
             .font(.system(size: SettingsFont.text))
-            .foregroundStyle(.secondary)
+            .lineSpacing(lineHeight.map { LineHeight.spacing(multiple: $0, fontSize: SettingsFont.text) } ?? 0)
+            .foregroundStyle(SettingsColor.sub)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -130,14 +184,22 @@ struct FittingScroll<Content: View>: View {
     }
 }
 
-/// 状態の印（許可の行）
+/// 状態の印（許可の行）。モック: 直径 20 の丸を緑（#2F9E44）か橙（#D97706）で塗り、白い ✓ か ! を太字で置く
 struct StatusMark: View {
     var ok: Bool
 
     var body: some View {
-        Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-            .foregroundStyle(ok ? Color.green : Color.orange)
-            .font(.system(size: 15))
+        Text(ok ? "✓" : "!")
+            .font(.system(size: SettingsFont.small, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 20, height: 20)
+            .background(Circle().fill(Color(nsColor: ok ? SettingsColor.rgb(0x2F, 0x9E, 0x44) : SettingsColor.rgb(0xD9, 0x77, 0x06))))
             .accessibilityHidden(true)
     }
+}
+
+/// 許可の状態の文の色（モック: 許可は緑 ライト #2B8A3E・ダーク #69DB7C、それ以外は橙 #B45309）
+enum StatusTextColor {
+    static let ok = SettingsColor.dynamic(light: SettingsColor.rgb(0x2B, 0x8A, 0x3E), dark: SettingsColor.rgb(0x69, 0xDB, 0x7C))
+    static let attention = Color(nsColor: SettingsColor.rgb(0xB4, 0x53, 0x09))
 }
