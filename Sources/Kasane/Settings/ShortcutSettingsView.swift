@@ -131,7 +131,7 @@ struct ShortcutSettingsView: View {
                 .font(.system(size: SettingsFont.item))
                 .foregroundStyle(recording ? SettingsColor.sub : SettingsColor.text)
                 // 15pt の「キーを押してください」（約 150pt）が収まる幅。押したときに欄の左端が動かないように。
-                // モックの幅 160（余白込み）では収まらないので、この幅を残す。余白と角はモックの値（上下 5・左右 10、角 7）
+                // 外の幅は 176（中身 156＋左右 10）。2026-10-31 画面のデザインがモックを 160 から 176 に直した。余白と角はモックの値（上下 5・左右 10、角 7）
                 .frame(minWidth: 156)
                 .padding(.vertical, 5)
                 .padding(.horizontal, 10)

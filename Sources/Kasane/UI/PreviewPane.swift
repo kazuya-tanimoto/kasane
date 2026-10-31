@@ -38,8 +38,7 @@ struct PreviewPane: View {
         switch content.item.kind {
         case .richText:
             if let richText = content.richText {
-                // 書式付きのテキストは、コピー元の大きさのまま、プレビューの本文と同じ割合で拡大する
-                RichTextView(text: richText, scale: size.font(14) / 14)
+                RichTextView(text: richText, bodySize: size.font(14), padding: size.scaled(18))
             } else {
                 TextPreview(text: content.item.text ?? "")
             }
@@ -86,11 +85,16 @@ private struct TextPreview: View {
     }
 }
 
-/// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く
+/// リッチテキストを書式付きで表示する。長い文章でも重くならないよう NSTextView で描く。
+/// 本文がプレビューの文字（14pt）と同じ大きさになるよう全体を同じ割合で拡大・縮小し、見出しなどとの大きさの比は保つ。
+/// 行の高さは 1.7 倍、中の余白は 18（モック「C案 改訂版」。2026-10-31 画面のデザインの決定、
+/// reviews/design-fix-2026-10-31/pr-13-pending-3-2026-10-31.md）。太字・斜体・下線・リンク・文字の色と書体はそのまま
 private struct RichTextView: NSViewRepresentable {
     let text: NSAttributedString
-    /// 文字の大きさに掛ける割合（文字の大きさの段階。標準は 1）
-    let scale: CGFloat
+    /// 本文の文字の大きさ（文字の大きさの段階を掛けた 14pt）
+    let bodySize: CGFloat
+    /// 中の余白（文字の大きさの段階を掛けた 18pt）
+    let padding: CGFloat
 
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSTextView.scrollableTextView()
@@ -101,8 +105,11 @@ private struct RichTextView: NSViewRepresentable {
             textView.isEditable = false
             textView.isSelectable = true
             textView.drawsBackground = false
-            textView.textContainerInset = NSSize(width: 13 * scale, height: 18 * scale)
-            textView.textStorage?.setAttributedString(Self.scaled(text, by: scale))
+            let extra = LineHeight.extra(multiple: 1.7, fontSize: bodySize)
+            // 左右は、行の端の既定の余白（lineFragmentPadding）の分を引く。上下は CSS と同じく行の高さの差の半分を足す
+            let lineFragmentPadding = textView.textContainer?.lineFragmentPadding ?? 0
+            textView.textContainerInset = NSSize(width: max(0, padding - lineFragmentPadding), height: padding + extra / 2)
+            textView.textStorage?.setAttributedString(Self.fitted(text, bodySize: bodySize, lineSpacing: extra))
         }
         return scrollView
     }
@@ -110,15 +117,27 @@ private struct RichTextView: NSViewRepresentable {
     // 項目や文字の大きさが変わるとプレビュー全体を作り直すので、ここでは何もしない
     func updateNSView(_ view: NSScrollView, context: Context) {}
 
-    /// 各文字の大きさに割合を掛ける。見出しと本文の差など、コピー元の書式はそのまま残る
-    private static func scaled(_ text: NSAttributedString, by scale: CGFloat) -> NSAttributedString {
-        guard scale != 1 else { return text }
+    /// いちばん多くの文字に使われている大きさを本文とみなし、それが `bodySize` になる割合を全部の文字に掛ける。
+    /// 行の間も足す（段落ごとの揃えなど、元の段落の書式は残す）
+    private static func fitted(_ text: NSAttributedString, bodySize: CGFloat, lineSpacing: CGFloat) -> NSAttributedString {
         let result = NSMutableAttributedString(attributedString: text)
         let whole = NSRange(location: 0, length: result.length)
+        // 大きさの指定がない部分は、NSTextView の既定（12pt）で表示される
+        var counts: [CGFloat: Int] = [:]
         result.enumerateAttribute(.font, in: whole) { value, range, _ in
-            // 大きさの指定がない部分は、NSTextView の既定（12pt）で表示される
+            let pointSize = (value as? NSFont)?.pointSize ?? 12
+            counts[pointSize, default: 0] += range.length
+        }
+        let base = counts.max { $0.value < $1.value }?.key ?? 12
+        let scale = base > 0 ? bodySize / base : 1
+        result.enumerateAttribute(.font, in: whole) { value, range, _ in
             let font = (value as? NSFont) ?? NSFont.systemFont(ofSize: 12)
             result.addAttribute(.font, value: font.withSize(font.pointSize * scale), range: range)
+        }
+        result.enumerateAttribute(.paragraphStyle, in: whole) { value, range, _ in
+            let style = ((value as? NSParagraphStyle)?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+            style.lineSpacing = lineSpacing
+            result.addAttribute(.paragraphStyle, value: style, range: range)
         }
         return result
     }
@@ -245,8 +264,10 @@ private struct FilePreview: View {
         if urls.count == 1, let url = urls.first {
             if url.pathExtension.lowercased() == "pdf" {
                 PDFPreview(source: .url(url))
-            } else {
+            } else if Self.quickLookCanShow(url) {
                 QuickLookPreview(url: url)
+            } else {
+                SingleFileCard(url: url)
             }
         } else {
             ScrollView {
@@ -274,6 +295,55 @@ private struct FilePreview: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+    }
+}
+
+extension FilePreview {
+    /// Quick Look で中身を出せそうか。ファイルが無いとき、フォルダやアプリのとき、文書でない種類（圧縮ファイルなど）は出せないとみなす
+    static func quickLookCanShow(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { return false }
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return type.conforms(to: .content)
+    }
+}
+
+/// Quick Look で出せない 1 件のファイル（2026-10-31 画面のデザインの決定、reviews/design-fix-2026-10-31/pr-13-pending-3-2026-10-31.md）。
+/// モック「C案 改訂版」の形: 真ん中にファイルの印（84 × 102）、名前 15pt 太字、詳しい情報（場所・種類・大きさ）12pt 灰色。間 12
+private struct SingleFileCard: View {
+    let url: URL
+    @Environment(\.textSize) private var size
+
+    var body: some View {
+        VStack(spacing: size.scaled(12)) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: size.scaled(84), height: size.scaled(102))
+            Text(url.lastPathComponent)
+                .font(.system(size: size.font(15), weight: .semibold))
+                .multilineTextAlignment(.center)
+            Text(details)
+                .font(.system(size: size.font(12)))
+                .foregroundStyle(Color.historySub)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .truncationMode(.middle)
+        }
+        .padding(size.scaled(18))
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// 「~/Documents/見積書.pdf · PDF 書類 · 240 KB」の形（モックと同じ並び）
+    private var details: String {
+        var parts = [(url.path as NSString).abbreviatingWithTildeInPath]
+        if let type = UTType(filenameExtension: url.pathExtension)?.localizedDescription {
+            parts.append(type)
+        }
+        if let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize {
+            parts.append(Formatters.bytes.string(fromByteCount: Int64(bytes)))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
