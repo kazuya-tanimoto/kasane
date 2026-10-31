@@ -1,0 +1,13 @@
+# 一時的: ビルドの error と warning を、読める注記として出す（ログが読めないため。確かめたらブランチごと消す）
+name: diag
+on: push
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - shell: bash
+        run: |
+          swift build --product Kasane > build.txt 2>&1 || true
+          grep -E "error:|warning:" build.txt | sort -u | head -40 | while IFS= read -r l; do echo "::warning::$l"; done
+          tail -3 build.txt | while IFS= read -r l; do echo "::notice::$l"; done
