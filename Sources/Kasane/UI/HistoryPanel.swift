@@ -43,13 +43,19 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     nonisolated static let defaultSize = NSSize(width: 880, height: 560)
     nonisolated static let minSize = NSSize(width: 720, height: 420)
 
-    /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）
+    /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）。
+    /// 見える大きさを変えないよう、角丸の外の余白（`HistoryFrameLayout.resizeMargin`）の分をウインドウに足す
     nonisolated static func defaultSize(for level: TextSizeLevel) -> NSSize {
-        WindowPlacement.size(defaultSize, scaledTo: level)
+        withMargins(WindowPlacement.size(defaultSize, scaledTo: level))
     }
 
     nonisolated static func minSize(for level: TextSizeLevel) -> NSSize {
-        WindowPlacement.size(minSize, scaledTo: level)
+        withMargins(WindowPlacement.size(minSize, scaledTo: level))
+    }
+
+    private nonisolated static func withMargins(_ size: NSSize) -> NSSize {
+        let margins = HistoryFrameLayout.resizeMargin * 2
+        return NSSize(width: size.width + margins, height: size.height + margins)
     }
 
     private var panel: HistoryPanel
