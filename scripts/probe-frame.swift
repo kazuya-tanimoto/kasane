@@ -77,36 +77,79 @@ func makeContent() -> NSView {
 }
 
 /// 影だけのウインドウ。角丸の外にだけ影を落とし、クリックは後ろに通す
-final class ShadowPanel: NSPanel {
+final class ShadowView: NSView {
     let caster = CALayer()
     let holder = CALayer()
-    let pad: CGFloat = 120
-    init() {
-        super.init(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-        isOpaque = false; backgroundColor = .clear; hasShadow = false; ignoresMouseEvents = true
-        let v = NSView(); v.wantsLayer = true
+    let mask = CAShapeLayer()
+    var inset: CGFloat = 120
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
         caster.shadowColor = NSColor.black.cgColor
         caster.shadowOpacity = 0.35
         caster.shadowRadius = 40
         caster.shadowOffset = CGSize(width: 0, height: -30)
         holder.addSublayer(caster)
-        v.layer?.addSublayer(holder)
-        contentView = v
+        mask.fillRule = .evenOdd
+        holder.mask = mask
+        layer?.addSublayer(holder)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        holder.frame = bounds
+        caster.frame = bounds
+        mask.frame = bounds
+        let shape = bounds.insetBy(dx: inset, dy: inset)
+        caster.shadowPath = CGPath(roundedRect: shape, cornerWidth: 20, cornerHeight: 20, transform: nil)
+        let p = CGMutablePath(); p.addRect(bounds); p.addRoundedRect(in: shape, cornerWidth: 20, cornerHeight: 20)
+        mask.path = p
+        CATransaction.commit()
+        print("PROBE shadow layout bounds=\(bounds) layer=\(layer?.bounds ?? .zero) flipped=\(layer?.isGeometryFlipped ?? false)")
+    }
+}
+final class ShadowPanel: NSPanel {
+    let pad: CGFloat = 120
+    init() {
+        super.init(contentRect: NSRect(x: 0, y: 0, width: 10, height: 10), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        isOpaque = false; backgroundColor = .clear; hasShadow = false; ignoresMouseEvents = true
+        contentView = ShadowView(frame: .zero)
     }
     override var canBecomeKey: Bool { false }
-    func follow(_ w: NSWindow) {
-        setFrame(w.frame.insetBy(dx: -pad, dy: -pad), display: false)
-        CATransaction.begin(); CATransaction.setDisableActions(true)
-        let bounds = CGRect(origin: .zero, size: frame.size)
-        holder.frame = bounds
-        let shape = CGRect(x: pad, y: pad, width: w.frame.width, height: w.frame.height)
-        caster.frame = bounds
-        caster.shadowPath = CGPath(roundedRect: shape, cornerWidth: 20, cornerHeight: 20, transform: nil)
-        let mask = CAShapeLayer()
-        let p = CGMutablePath(); p.addRect(bounds); p.addRoundedRect(in: shape, cornerWidth: 20, cornerHeight: 20)
-        mask.path = p; mask.fillRule = .evenOdd
-        holder.mask = mask
-        CATransaction.commit()
+    func follow(_ w: NSWindow, margin: CGFloat = 0) {
+        (contentView as? ShadowView)?.inset = pad + margin
+        setFrame(w.frame.insetBy(dx: -pad, dy: -pad), display: true)
+        contentView?.needsLayout = true
+    }
+}
+
+/// 周りに、ほとんど透明な余白を付けた中身（端と角で大きさを変えられるようにするため）
+final class MarginView: NSView {
+    let margin: CGFloat = 5
+    let body = NSView()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        body.wantsLayer = true
+        body.layer?.backgroundColor = NSColor(white: 1, alpha: 0.25).cgColor
+        body.layer?.cornerRadius = 20
+        body.layer?.cornerCurve = .continuous
+        body.layer?.masksToBounds = true
+        body.layer?.borderWidth = 1
+        body.layer?.borderColor = NSColor(white: 0, alpha: 0.8).cgColor
+        addSubview(body)
+        let drag = DragArea(frame: NSRect(x: 0, y: 0, width: 10, height: 28))
+        drag.autoresizingMask = [.width, .minYMargin]
+        body.addSubview(drag)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func layout() { super.layout(); body.frame = bounds.insetBy(dx: margin, dy: margin); body.subviews.first?.frame = NSRect(x: 0, y: body.bounds.height - 28, width: body.bounds.width, height: 28) }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(white: 0, alpha: 1.0 / 255).setFill()
+        let p = NSBezierPath(rect: bounds)
+        p.append(NSBezierPath(roundedRect: bounds.insetBy(dx: margin, dy: margin), xRadius: 20, yRadius: 20))
+        p.windingRule = .evenOdd
+        p.fill()
     }
 }
 
@@ -119,11 +162,11 @@ a.orderFrontRegardless(); blur(a, 0); wait(0.5); blur(a, 20)
 // B: 縁なし、ぼかし 20、影のウインドウ付き（子ウインドウ）
 let b = Panel(contentRect: .zero, styleMask: [.borderless, .resizable, .nonactivatingPanel], backing: .buffered, defer: false)
 b.isOpaque = false; b.backgroundColor = .clear; b.level = .floating; b.hasShadow = false
-b.contentView = makeContent()
-b.setFrame(NSRect(x: 520, y: 380, width: 300, height: 220), display: true)
+b.contentView = MarginView(frame: .zero)
+b.setFrame(NSRect(x: 520, y: 380, width: 310, height: 230), display: true)
 let shadow = ShadowPanel(); shadow.level = .floating
 b.orderFrontRegardless(); blur(b, 20)
-shadow.follow(b)
+shadow.follow(b, margin: 5)
 b.addChildWindow(shadow, ordered: .below)
 wait(1.5)
 func capture(_ file: String) {
@@ -158,7 +201,7 @@ func drag(from: NSPoint, by dx: CGFloat, _ dy: CGFloat) {
     wait(0.2); post(.leftMouseUp, NSPoint(x: from.x + dx, y: from.y + dy)); wait(0.6)
 }
 for (name, w) in [("titled", t as NSWindow), ("A", a), ("B", b)] {
-    for inset: CGFloat in [-3, 0, 2, 5] {
+    for inset: CGFloat in (name == "B" ? [0, 3, 6, 8, 10] : [-3, 0, 2, 5]) {
         let before = onMain { w.frame }
         drag(from: NSPoint(x: before.maxX - inset, y: before.midY - 40), by: 40, 0)
         print("PROBE resize-right \(name) inset=\(inset) before=\(before.size) after=\(onMain { w.frame.size })")
@@ -166,7 +209,7 @@ for (name, w) in [("titled", t as NSWindow), ("A", a), ("B", b)] {
     }
     do {
         let before = onMain { w.frame }
-        drag(from: NSPoint(x: before.minX + 1, y: before.minY + 1), by: -30, -30)
+        drag(from: NSPoint(x: before.minX + (name == "B" ? 3 : 1), y: before.minY + (name == "B" ? 3 : 1)), by: -30, -30)
         print("PROBE resize-bottomleft \(name) before=\(before) after=\(onMain { w.frame })")
         onMain { if w.frame != before { w.setFrame(before, display: true) } }
     }
@@ -179,13 +222,13 @@ for (name, w) in [("titled", t as NSWindow), ("A", a), ("B", b)] {
 }
 print("PROBE seen \(onMain { seen })")
 // ドラッグで動かす（上の帯の DragArea）
-for (name, w) in [("A", a), ("B", b)] {
+for (name, w) in [("titled", t as NSWindow), ("A", a), ("B", b)] {
     let before = onMain { w.frame }
-    drag(from: NSPoint(x: before.midX, y: before.maxY - 14), by: 50, -40)
+    drag(from: NSPoint(x: before.midX, y: before.maxY - (name == "B" ? 19 : 14)), by: 50, -40)
     print("PROBE move \(name) before=\(before.origin) after=\(onMain { w.frame.origin }) shadowFollows=\(onMain { shadow.frame.origin })")
 }
 // 大きさを変えたら影も合わせる（コードで）
-onMain { b.setFrame(NSRect(x: b.frame.minX, y: b.frame.minY, width: 380, height: 260), display: true); shadow.follow(b) }
+onMain { b.setFrame(NSRect(x: b.frame.minX, y: b.frame.minY, width: 390, height: 270), display: true); shadow.follow(b, margin: 5) }
 wait(0.8)
 capture("2-moved-resized.png")
 // 影の所をクリックすると後ろに届くか（B の下の影の所）
@@ -194,7 +237,7 @@ let shadowPoint = onMain { NSPoint(x: b.frame.midX, y: b.frame.minY - 30) }
 post(.mouseMoved, shadowPoint); wait(0.3); post(.leftMouseDown, shadowPoint); wait(0.1); post(.leftMouseUp, shadowPoint); wait(0.5)
 print("PROBE click-through-shadow at=\(shadowPoint) bgClicks \(clicksBefore)->\(onMain { bgView.clicks })")
 // 角の外（ウインドウの四角の中で、角丸の外）をクリックするとどこに届くか
-let cornerPoint = onMain { NSPoint(x: b.frame.minX + 2, y: b.frame.maxY - 2) }
+let cornerPoint = onMain { NSPoint(x: b.frame.minX + 7, y: b.frame.maxY - 7) }
 let c0 = onMain { bgView.clicks }
 post(.mouseMoved, cornerPoint); wait(0.3); post(.leftMouseDown, cornerPoint); wait(0.1); post(.leftMouseUp, cornerPoint); wait(0.5)
 print("PROBE click-corner-outside bgClicks \(c0)->\(onMain { bgView.clicks })")
