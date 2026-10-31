@@ -777,7 +777,7 @@ cd ~/src/kasane && pkill -x Kasane; defaults delete io.github.kazuya-tanimoto.ka
 準備:
 
 1. Ghostty のウインドウの右端をつかみ、画面の右端まで広げる
-2. デスクトップをクリックし、メニューバーの左の名前を「Finder」にする
+2. Dock の Finder を押し、Finder のウインドウが開いたら ⌘W で閉じる → メニューバーの左の名前が「Finder」になる
 
 - [ ] ⌥⌘F で FIFO モードにする → 画面の右端から帯が滑り出す
 - [ ] 出た帯を見る → メニューバーのすぐ下から画面の下まで、すき間なく出ている
