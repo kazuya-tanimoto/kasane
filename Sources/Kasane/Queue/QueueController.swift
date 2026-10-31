@@ -70,15 +70,41 @@ final class QueueController {
               let item = try? store.item(id: itemID),
               let representations = try? store.representations(itemID: itemID)
         else { return }
-        queue?.push(QueuedClip(
+        let clip = QueuedClip(
             itemID: itemID,
             kind: item.kind,
             title: item.title,
             text: item.text,
             thumbnail: item.thumbnail,
             representations: representations
-        ))
+        )
+        queue?.push(clip)
+        if item.thumbnail == nil {
+            makeLateImageFileThumbnail(item, clipID: clip.id, itemID: itemID)
+        }
         onChange?()
+    }
+
+    /// 前から履歴にあって縮小の無い画像のファイル（縮小を作るようにする前にコピーしたもの）を ⌘⏎ で足したときは、
+    /// その時に 1 つ目のファイルから裏で作って保存し、積んだカードに足す（requirements.md §3.6）。
+    /// ファイルが無いなどで作れなければ何もしない（カードは名前だけ）。並びを変えないよう、先に積んでから足す
+    private func makeLateImageFileThumbnail(_ item: ClipItem, clipID: UUID, itemID: Int64) {
+        guard item.kind == .file, item.isImageFile,
+              let first = item.text?.split(separator: "\n").first
+        else { return }
+        let url = URL(fileURLWithPath: String(first))
+        let store = self.store
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let thumbnail = CaptureBuilder.imageFileThumbnail(url) else { return }
+            try? store.setThumbnail(thumbnail, itemID: itemID)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.queue?.update(where: { $0.id == clipID }) { $0.thumbnail = thumbnail }
+                    self.onChange?()
+                }
+            }
+        }
     }
 
     // MARK: - Event tap
@@ -164,8 +190,8 @@ struct QueuedClip: Equatable {
     let kind: ClipKind
     let title: String
     let text: String?
-    /// 画像の縮小（PNG）。カードに出す
-    let thumbnail: Data?
+    /// 画像と画像のファイルの縮小（PNG）。カードに出す。前からある画像のファイルは積んだあとで足す
+    var thumbnail: Data?
     let representations: [Capture.Representation]
 
     static func == (lhs: QueuedClip, rhs: QueuedClip) -> Bool { lhs.id == rhs.id }

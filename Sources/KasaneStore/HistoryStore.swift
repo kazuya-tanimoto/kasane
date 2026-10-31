@@ -305,6 +305,13 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
+    /// 縮小を後から入れる。前から履歴にあって縮小の無い画像のファイルを、FIFO / LIFO のキューに足したときに使う
+    public func setThumbnail(_ thumbnail: Data, itemID: Int64) throws {
+        try dbQueue.write { db in
+            try db.execute(sql: "UPDATE item SET thumbnail = ? WHERE id = ?", arguments: [thumbnail, itemID])
+        }
+    }
+
     /// リスト表示と検索に使う全件。並び順は `sort` に従う（ピン留めの扱いは呼び出し側で決める）
     public func loadIndex(sort: HistorySortOrder) throws -> [(summary: ClipSummary, candidate: SearchCandidate)] {
         let order: String

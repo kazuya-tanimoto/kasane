@@ -3,6 +3,10 @@ import Foundation
 import CoreGraphics
 #endif
 import XCTest
+#if canImport(AppKit)
+import AppKit
+import SwiftUI
+#endif
 @testable import KasaneCore
 
 final class QueueBandLayoutTests: XCTestCase {
@@ -63,8 +67,9 @@ final class QueueBandLayoutTests: XCTestCase {
             let max = QueueBandLayout.maxWidth(fontSize: size, screen: screen)
             let body = max - QueueBandLayout.chromeWidth(fontSize: size)
             // 40 字分に、丸めで 39 字目で折り返さないための余裕を足す。余裕は 1 字より小さく、41 字目は入らない
-            XCTAssertEqual(body, 40 * size + QueueBandLayout.maxWidthSlack, accuracy: 0.001)
-            XCTAssertLessThan(body, 41 * size)
+            let character = QueueBandLayout.fullWidthCharacterWidth(fontSize: size)
+            XCTAssertEqual(body, 40 * character + QueueBandLayout.maxWidthSlack, accuracy: 0.001)
+            XCTAssertLessThan(body, 41 * character)
         }
         // 文字を大きくすると最大も広がる
         XCTAssertGreaterThan(
@@ -72,6 +77,66 @@ final class QueueBandLayoutTests: XCTestCase {
             QueueBandLayout.maxWidth(fontSize: 13, screen: screen)
         )
     }
+
+    #if canImport(AppKit)
+    /// 実際の文字で並べて、一番広い帯の本文の 1 行目に全角 40 字が入り、41 字目は次の行に回る（2026-10-31、43 字入った不具合）
+    func testMaxWidthBreaksAfterFortyCharactersWithTheRealFont() {
+        for size: CGFloat in [13, 14.5, 16] {
+            let maxBody = QueueBandLayout.maxWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let minBody = QueueBandLayout.minWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let maxLine = firstLineLength(width: maxBody, fontSize: size)
+            let minLine = firstLineLength(width: minBody, fontSize: size)
+            print("QueueBand: \(size)pt 全角 1 字 \(QueueBandLayout.fullWidthCharacterWidth(fontSize: size))pt、最大の本文 \(maxBody)pt に \(maxLine) 字、最小の本文 \(minBody)pt に \(minLine) 字")
+            XCTAssertEqual(maxLine, 40)
+        }
+    }
+
+    /// 帯の文字は SwiftUI の Text で描く。AppKit の並べ方と同じかを、SwiftUI で描いて 1 行に入る字数で確かめる
+    @MainActor
+    func testSwiftUITextBreaksAfterFortyCharactersAtMaxWidth() {
+        for size: CGFloat in [13, 14.5, 16] {
+            let maxBody = QueueBandLayout.maxWidth(fontSize: size, screen: screen) - QueueBandLayout.chromeWidth(fontSize: size)
+            let oneLine = renderedHeight(count: 1, width: maxBody, fontSize: size)
+            var fits = 0
+            for count in 30...50 where renderedHeight(count: count, width: maxBody, fontSize: size) <= oneLine {
+                fits = count
+            }
+            // 字の幅を文字の大きさとしていた前の最大（40 × 文字の大きさ + 1）でも数える（43 字入った不具合の原因を見るため）
+            let oldBody = 40 * size + 1
+            var oldFits = 0
+            for count in 30...50 where renderedHeight(count: count, width: oldBody, fontSize: size) <= oneLine {
+                oldFits = count
+            }
+            print("QueueBand SwiftUI: \(size)pt 最大の本文 \(maxBody)pt に \(fits) 字、前の最大 \(oldBody)pt に \(oldFits) 字")
+            XCTAssertEqual(fits, 40)
+        }
+    }
+
+    @MainActor
+    private func renderedHeight(count: Int, width: CGFloat, fontSize: CGFloat) -> CGFloat {
+        let view = Text(String(repeating: "一", count: count))
+            .font(.system(size: fontSize))
+            .frame(width: width, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+        return ImageRenderer(content: view).nsImage?.size.height ?? 0
+    }
+
+    private func firstLineLength(width: CGFloat, fontSize: CGFloat) -> Int {
+        let storage = NSTextStorage(
+            string: String(repeating: "一", count: 60),
+            attributes: [.font: NSFont.systemFont(ofSize: fontSize)]
+        )
+        let layout = NSLayoutManager()
+        let container = NSTextContainer(size: CGSize(width: width, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layout.addTextContainer(container)
+        storage.addLayoutManager(layout)
+        layout.ensureLayout(for: container)
+        var range = NSRange()
+        _ = layout.lineFragmentRect(forGlyphAt: 0, effectiveRange: &range)
+        return range.length
+    }
+    #endif
 
     func testDraggingTheInnerEdge() {
         let start: CGFloat = 300
@@ -115,6 +180,17 @@ final class QueueCardContentTests: XCTestCase {
     func testFileShowsTheNameNotThePath() {
         let card = QueueCardContent.make(kind: .file, title: "見積書_v2.pdf", text: "/Users/someone/Documents/見積書_v2.pdf", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
         XCTAssertEqual(card.body, "見積書_v2.pdf")
+    }
+
+    /// 画像のファイル（CleanShot などがファイルとしてコピーした絵）は、縮小と名前 1 行。縮小が無ければ名前だけ
+    func testImageFileShowsTheThumbnailAndOneLineName() {
+        let card = QueueCardContent.make(kind: .file, title: "CleanShot 2026-10-31 at 18.34.01.png", text: "/Users/someone/Desktop/CleanShot 2026-10-31 at 18.34.01.png", hasThumbnail: true, linkTitle: nil, hasLinkImage: false)
+        XCTAssertEqual(card.picture, .thumbnail)
+        XCTAssertEqual(card.body, "CleanShot 2026-10-31 at 18.34.01.png")
+        XCTAssertEqual(card.bodyLines, 1)
+        let plain = QueueCardContent.make(kind: .file, title: "見積書_v2.pdf", text: "/Users/someone/見積書_v2.pdf", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
+        XCTAssertEqual(plain.picture, .none)
+        XCTAssertEqual(plain.bodyLines, QueueCardContent.maxLines)
     }
 
     func testImageShowsTheThumbnailAndOneLineName() {
