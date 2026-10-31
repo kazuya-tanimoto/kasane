@@ -161,20 +161,53 @@ private struct LoginItemRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Toggle(isOn: $checked) {
-                Text("ログイン時に起動").font(.headline)
+            // チェックと題名の間をモックの 8pt にするため、題名は Toggle の外に置く。.checkbox はチェックの右端に題名の左端を
+            // そろえる作りで、間を決める指定がない（Apple の ToggleStyle.checkbox）。
+            // .checkbox と同じく題名を押しても切り替わるようにし、VoiceOver には Toggle の名前で読ませる
+            HStack(spacing: 8) {
+                Toggle("ログイン時に起動", isOn: $checked)
+                    .toggleStyle(.checkbox)
+                    .labelsHidden()
+                Text("ログイン時に起動")
+                    .font(OnboardingText.rowTitle)
+                    .onTapGesture { checked.toggle() }
+                    .accessibilityHidden(true)
             }
-            .toggleStyle(.checkbox)
             // 1 文目は設定画面の一般タブの「ログイン時に起動」の説明と同じ文
             Text("Mac にログインすると自動で起動し、コピーした内容を履歴に残します。設定の「一般」からいつでも変えられます。")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+                .lineSpacing(OnboardingText.descriptionLineSpacing)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.leading, 38)
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.08)))
+        .background(OnboardingRowBackground())
+    }
+}
+
+/// 案内の行の文字（モック「初回の案内」、design-fix の queue-band-scale-shadow-2026-10-31.md の 3）
+@MainActor
+private enum OnboardingText {
+    /// 行の題。モック 14px・600。.headline は Mac で 13pt Bold なので使わない（HIG Typography の macOS の表）
+    static let rowTitle = Font.system(size: 14, weight: .semibold)
+    /// 「許可されていません」など。モック 11px・600。.caption は Mac で 10pt なので使わない
+    static let status = Font.system(size: 11, weight: .semibold)
+    /// .lineSpacing は標準の行の高さに足す値なので、1.5 倍との差を足す（.callout は macOS で 12pt、1.5 倍で 18pt）
+    static let descriptionLineSpacing: CGFloat = {
+        let font = NSFont.preferredFont(forTextStyle: .callout)
+        return max(0, font.pointSize * 1.5 - NSLayoutManager().defaultLineHeight(for: font))
+    }()
+}
+
+/// 案内の行の地（モック「初回の案内」: 灰色 50% を、ライトで 8%、ダークで 12%）
+private struct OnboardingRowBackground: View {
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(white: 0.5).opacity(colorScheme == .dark ? 0.12 : 0.08))
     }
 }
 
@@ -192,14 +225,15 @@ private struct PermissionRow<Actions: View>: View {
                 .font(.system(size: 24))
                 .foregroundStyle(granted ? Color.green : Color.secondary)
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.headline)
+                Text(title).font(OnboardingText.rowTitle)
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                    .lineSpacing(OnboardingText.descriptionLineSpacing)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Text(status)
-                        .font(.caption.weight(.medium))
+                        .font(OnboardingText.status)
                         .foregroundStyle(granted ? Color.green : Color.orange)
                     Spacer()
                     if !granted { actions }
@@ -207,6 +241,6 @@ private struct PermissionRow<Actions: View>: View {
             }
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.08)))
+        .background(OnboardingRowBackground())
     }
 }
