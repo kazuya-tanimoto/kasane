@@ -315,9 +315,10 @@ private struct AppearanceSample: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
                         .background(appearance.accent.color, in: Capsule())
-                    ForEach(0..<3, id: \.self) { _ in
-                        Capsule().fill(Color.primary.opacity(0.12)).frame(width: 20, height: 5)
-                            .padding(.horizontal, 2)
+                    // ペースト以外の 5 つ（書式なし・コピー・ピン・削除・詳細）。実物と同じ 6 つにする
+                    ForEach(0..<5, id: \.self) { _ in
+                        Capsule().fill(Color.primary.opacity(0.12)).frame(width: 14, height: 5)
+                            .padding(.horizontal, 1.5)
                     }
                 }
                 .padding(2)
