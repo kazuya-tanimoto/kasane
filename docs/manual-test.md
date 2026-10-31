@@ -578,15 +578,22 @@ git push --tags
 
 1. 設定の「履歴」で、「URL のタイトルと画像を表示」がオンか見る。オフならオンにする
    - この版から初期値はオンです。前に切り替えたことがあれば、その設定のままです。
-2. Arc で、ふつうのページの URL を 5 つ以上コピーする
-   - 例: https://www.apple.com/jp/ 、https://github.com/ 、ニュースの記事
-3. ターミナル（fish）で、下の「押し出し用のコマンド」を流す
+2. ターミナル（fish）で、下の「5 つの URL をコピーするコマンド」を流す
+   - 設定の「履歴」の「履歴に残さないアプリ」にターミナルを入れているときは、この章の間だけ外してください。
+   - この章の URL は、どれも末尾に今の時刻を付けて、毎回新しい URL にしています。
+   - 一度取りに行った URL は 1 日たつまで取り直さないので、同じ URL ではテストにならないためです。
+3. 続けて、下の「押し出し用のコマンド」を流す
    - URL の行を、一覧の下の方（開いたときに見えない所）に押し出すためです。
    - 1 秒に 1 行ずつ、30 行をコピーします。30 秒ほどで終わります。
-   - 設定の「履歴」の「履歴に残さないアプリ」にターミナルを入れているときは、この章の間だけ外してください。
 4. 別のターミナルのウインドウで、下の「ログを見るコマンド」を流し、そのままにする
    - 取りに行った URL が、ここに出ます。止めるときは ⌃C です。
    - この章では、このウインドウを「ログのウインドウ」と呼びます。
+
+5 つの URL をコピーするコマンド:
+
+```
+for u in https://www.apple.com/jp/ https://github.com/ https://www.nhk.or.jp/ https://www.yahoo.co.jp/ https://www.youtube.com/; echo "$u?kasane="(date +%s) | pbcopy; sleep 1; end
+```
 
 押し出し用のコマンド:
 
@@ -611,6 +618,7 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 - `fetch 番号 ホスト名`: 取りに行った
 - `saved 番号`: 取れて保存した
 - `skip 番号 (offline)`: オフラインなので、取りに行かなかった
+- `skip 番号 (fetched recently)`: 1 日以内に取りに行った URL なので、取りに行かなかった
 - 番号は、履歴の項目の番号です。同じ番号の `fetch` と `saved` は、同じ行のものです。
 - ほかの行（`show`、`hide`、`visible`、`select`、`request`）は見なくてよいです。
 
@@ -631,7 +639,12 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 1. ログのウインドウで ⌃C を押す
 2. 「ログを消してから見るコマンド」を流す
-3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://www.python.org/ ）
+3. ターミナルで下のコマンドを流し、URL を 1 つコピーする
+
+   ```
+   echo "https://www.python.org/?kasane="(date +%s) | pbcopy
+   ```
+
 4. 押し出し用のコマンドを、もう一度流す
 5. ⌥V で開き、その URL の行が見える所までスクロールする
 6. 1 秒以内に Esc で閉じる
@@ -643,9 +656,12 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 1. ログのウインドウで ⌃C を押す
 2. 「ログを消してから見るコマンド」を流す
-3. この章でまだコピーしていないサイトの URL を 1 つコピーする（例: https://developer.mozilla.org/ja/ ）
-4. 続けて、メモで文字を 1 行コピーする
+3. ターミナルで下のコマンドを流し、URL を 1 つと、続けて文字を 1 行コピーする
    - URL の行を 2 行目にして、開いたときに選ばれないようにするためです。
+
+   ```
+   echo "https://developer.mozilla.org/ja/?kasane="(date +%s) | pbcopy; sleep 1; echo "2 行目にするための行" | pbcopy
+   ```
 
 - [ ] ⌥V で開き、スクロールせずに 2 秒待つ → ログに developer.mozilla.org の `fetch` と、同じ番号の `saved` が出る
 
@@ -657,7 +673,13 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 2. 「ログを消してから見るコマンド」を流す
 3. ⌥⌘F で FIFO モードにする
 
-- [ ] 履歴ウインドウは開かずに、Arc でこの章でまだコピーしていないサイトの URL をコピーする（例: https://www.rust-lang.org/ ）→ ログに www.rust-lang.org の `fetch` と、同じ番号の `saved` が出る
+FIFO で使うコマンド:
+
+```
+echo "https://www.rust-lang.org/?kasane="(date +%s) | pbcopy
+```
+
+- [ ] 履歴ウインドウは開かずに、ターミナルで「FIFO で使うコマンド」を流す → ログに www.rust-lang.org の `fetch` と、同じ番号の `saved` が出る
 
 終わったら、⌥⌘F で FIFO モードを終えてください。
 
@@ -667,7 +689,12 @@ clear; log stream --level info --predicate 'subsystem == "io.github.kazuya-tanim
 
 1. ログのウインドウで ⌃C を押す
 2. 「ログを消してから見るコマンド」を流す
-3. この章でまだコピーしていないサイトの URL を 1 つコピーする
+3. ターミナルで下のコマンドを流し、URL を 1 つコピーする
+
+   ```
+   echo "https://www.mozilla.org/ja/?kasane="(date +%s) | pbcopy
+   ```
+
 4. Wi-Fi をオフにする
 
 - [ ] ⌥V で開き、その URL の行を選ぶ → ログに `skip 番号 (offline)` が出る
