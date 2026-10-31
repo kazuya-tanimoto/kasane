@@ -260,7 +260,21 @@ private struct ActionBar: View {
                 .mask(alignment: .top) { Rectangle().frame(height: 2) }
                 .padding(1)
         }
-        .shadow(color: .black.opacity(0.28), radius: 9, y: 6)
+        // 影は帯の形を後ろに描いて付ける（モック B の 0 6px 18px 黒 28%）。.shadow では Kazuya さんの写真で影がほとんど見えなかった（2026-10-31）
+        .background {
+            Capsule()
+                .fill(Color.black.opacity(0.28))
+                .blur(radius: 9)
+                .offset(y: 6)
+                // CSS の box-shadow と同じく、帯の形の内側には描かない（ガラス越しに影の黒が透けて、帯が暗くならないように）
+                .mask {
+                    ZStack {
+                        Rectangle().padding(-40)
+                        Capsule().blendMode(.destinationOut)
+                    }
+                    .compositingGroup()
+                }
+        }
         .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
@@ -360,7 +374,7 @@ private struct TooltipLabel: View {
     let text: String
 
     var body: some View {
-        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま（ボタンの文字は 11pt）
+        // ボタンの文字（`ActionStyle`）と同じ 12pt（requirements.md §3.3 のツールチップ）
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
@@ -482,11 +496,12 @@ private struct ActionButtonBody: View {
 
     var body: some View {
         configuration.label
-            // 11pt（モック B の 10px を、一覧の題の文字との釣り合いで Mac の標準の段にした。2026-10-31 画面のデザイン）。
+            // 12pt。11pt では小さく、帯が一覧の上まで届かなかった（2026-10-31 Kazuya さん「フォントちっちゃくないですか？」）。
             // ペーストの太字は 600（2026-10-18 の決まり）
-            .font(.system(size: 11, weight: isPrimary ? .semibold : .regular))
-            // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
-            .padding(.horizontal, isPrimary ? 9 : 8)
+            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
+            // 左右の余白は 10。モック B は 8（ペースト 9）だが、帯を最小の幅でも一覧の上まで届かせるため（要件 §3.3「一覧の上に浮く」、
+            // design/glass-bar-photo-compare-2026-10-31.md）
+            .padding(.horizontal, 10)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
