@@ -235,6 +235,14 @@ final class QueueCardContentTests: XCTestCase {
         XCTAssertEqual(card.body, " ")
     }
 
+    func testLinkURLIsGrayOnlyUnderATitle() {
+        let withTitle = QueueCardContent.make(kind: .url, title: "https://a.example", text: "https://a.example", hasThumbnail: false, linkTitle: "A", hasLinkImage: true)
+        XCTAssertTrue(withTitle.bodyIsSecondary)
+        let imageOnly = QueueCardContent.make(kind: .url, title: "https://a.example", text: "https://a.example", hasThumbnail: false, linkTitle: nil, hasLinkImage: true)
+        XCTAssertEqual(imageOnly.picture, .linkImage)
+        XCTAssertFalse(imageOnly.bodyIsSecondary, "代表画像だけでタイトルの無いときは、URL を本文の色にする")
+    }
+
     // MARK: 改行を「 / 」でつなぐ（合意したモックの 1 枚目のカード）
 
     func testJoinedLinesMatchesTheMock() {

@@ -82,7 +82,9 @@ public struct QueueCardContent: Equatable, Sendable {
                     heading: heading,
                     body: nonEmpty(url),
                     bodyLines: 1,
-                    bodyIsSecondary: true
+                    // URL を灰色にするのはタイトルがあるときだけ（合意したモックの urlColor「c.og ? t.sub : t.text」。
+                    // 2026-10-31 画面のデザインの決め 4.2）。代表画像だけのときは本文の色
+                    bodyIsSecondary: heading != nil
                 )
             }
             return QueueCardContent(picture: .none, heading: nil, body: nonEmpty(url), bodyLines: maxLines, bodyIsSecondary: false)
