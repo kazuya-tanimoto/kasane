@@ -33,9 +33,9 @@ final class MatchHighlighterTests: XCTestCase {
         XCTAssertEqual(MatchHighlighter.ranges(query: "git", title: ""), [])
     }
 
-    /// 1 文字ずつ正規化する道でも、位置は元の文字に戻る
+    /// 1 文字ずつ正規化する道（ASCII だけではない題名）でも、位置は元の文字に戻る
     func testPerCharacterMapping() {
-        let text = NormalizedText("ＡbＣ", perCharacter: true)
+        let text = NormalizedText("ＡbＣ")
         XCTAssertEqual(text.units, Array("abc".utf16))
         XCTAssertEqual((0..<3).map(text.sourceRange(of:)), [0..<1, 1..<2, 2..<3])
     }
@@ -44,6 +44,22 @@ final class MatchHighlighterTests: XCTestCase {
     func testLengthChangingNormalization() throws {
         try XCTSkipIf(TextNormalizer.normalize("ß").utf16.count == 1, "この環境では ß の長さが変わらない")
         XCTAssertEqual(MatchHighlighter.ranges(query: "strasse", title: "Straße 1"), [0..<6])
+    }
+
+    /// 1 文字が伸びて（ß → ss）別の 1 文字が縮む（半角の「ｶﾞ」→「ガ」）題名は、全体の長さが同じでも、当たった文字に色が付く
+    func testStretchAndShrinkInOneTitle() throws {
+        try XCTSkipIf(TextNormalizer.normalize("ß").utf16.count == 1, "この環境では ß の長さが変わらない")
+        let title = "Straße ｶﾞイド"
+        XCTAssertEqual(TextNormalizer.normalize(title).utf16.count, title.utf16.count, "全体の長さは同じ")
+        XCTAssertEqual(MatchHighlighter.ranges(query: "ガイド", title: title), [7..<11])
+    }
+
+    /// Finder のファイル名のような NFD（「カ」＋濁点の 2 文字）の題名でも、濁点まで含めて色が付く
+    func testDecomposedTitle() {
+        let title = "\u{30AB}\u{3099}\u{30A4}\u{30C8}\u{3099}.pdf"  // カ゛イト゛.pdf（NFD の「ガイド.pdf」）
+        XCTAssertEqual(MatchHighlighter.ranges(query: "ガイド", title: title), [0..<5])
+        XCTAssertEqual(MatchHighlighter.ranges(query: "がいど", title: title), [0..<5])
+        XCTAssertEqual(MatchHighlighter.ranges(query: "ガ", title: title), [0..<2], "濁点だけを外さない")
     }
 
     func testPositionsAfterAnEmoji() {
@@ -109,6 +125,14 @@ final class MatchHighlighterRomajiTests: XCTestCase {
 
     func testRomajiAcrossWords() {
         XCTAssertEqual(ranges("kaigimemo", "会議のメモ"), [0..<2, 3..<5])
+    }
+
+    /// NFD の題名でも、ローマ字で当たった語の全体に色が付く
+    func testRomajiOnDecomposedTitle() {
+        let title = "明日の\u{30AB}\u{3099}\u{30A4}\u{30C8}\u{3099}"  // 明日のガイド（NFD）
+        let marked = ranges("gaido", title)
+        XCTAssertFalse(marked.isEmpty, "読み: \(Romanizer.reading(for: title)?.romaji ?? "nil")")
+        XCTAssertEqual(marked.last?.upperBound, title.utf16.count, "最後の濁点まで")
     }
 
     func testReadingMatchesTheStoredRomaji() {
