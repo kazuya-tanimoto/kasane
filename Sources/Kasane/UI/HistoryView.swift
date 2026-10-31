@@ -197,7 +197,8 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.togglePinSelection()
             } label: {
-                Text("ピン ⌘P")
+                Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
+                    .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle(isOn: isPinned))
             .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
@@ -206,7 +207,8 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.deleteSelection()
             } label: {
-                Text("削除 ⌘D")
+                Label("⌘D", systemImage: "trash")
+                    .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle())
             .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
@@ -214,7 +216,8 @@ private struct ActionBar: View {
                 tooltips.dismiss()
                 model.showsDetails.toggle()
             } label: {
-                Text("詳細 ⌘I")
+                Label("⌘I", systemImage: "info.circle")
+                    .labelStyle(.titleAndIcon)
             }
             .buttonStyle(ActionStyle(isOn: model.showsDetails))
             .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
@@ -422,7 +425,8 @@ private struct ActionButtonBody: View {
     var body: some View {
         configuration.label
             .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
-            .padding(.horizontal, 10)
+            // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
+            .padding(.horizontal, isPrimary ? 9 : 8)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
