@@ -500,17 +500,20 @@ Kazuya さんが操作しないと確かめられない項目だけです。検�
 
 準備（1〜3 の順に）:
 
-1. ターミナルで次を流し、`"Kasane Dev"` を含む行が出るかを見る（出なければ、証明書が無いので ad-hoc になる）
+1. ターミナルで次を流し、`"Kasane Dev"` を含む行が出るかを見る
+   出なければ、証明書がありません。
 
-```
-security find-identity -p codesigning | grep "Kasane Dev"
-```
+   ```
+   security find-identity -p codesigning | grep "Kasane Dev"
+   ```
 
-   何も出なければ、次を流して証明書を作る（最後に出る確認のダイアログで macOS のパスワードを入れる）
+   何も出なければ、次を流して証明書を作る
 
-```
-cd ~/src/kasane && make dev-cert
-```
+   ```
+   cd ~/src/kasane && make dev-cert
+   ```
+
+   最後に確認のダイアログが出るので、macOS のパスワードを入れる
 
 2. 依頼のコマンド（最後が `make run`）を流す
 3. 設定の「一般」の「ログイン時に起動」がオンなら、一度オフにしてオンに戻す
