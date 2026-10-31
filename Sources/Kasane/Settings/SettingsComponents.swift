@@ -123,7 +123,7 @@ struct FittingScroll<Content: View>: View {
                 .font(.system(size: SettingsFont.text))
                 .padding(SettingsLayout.padding)
                 .frame(width: SettingsLayout.width, alignment: .topLeading)
-                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0; if ProcessInfo.processInfo.environment["KASANE_PROBE"] != nil { print("PROBE content", AppSettings.settingsTab ?? "-", $0) } }
         }
         .scrollDisabled(height <= maxHeight)
         .frame(width: SettingsLayout.width, height: min(height, maxHeight))

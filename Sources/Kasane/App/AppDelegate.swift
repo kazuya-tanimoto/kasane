@@ -21,6 +21,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let processingQueue = DispatchQueue(label: "io.github.kazuya-tanimoto.kasane.capture", qos: .utility)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        if ProcessInfo.processInfo.environment["KASANE_PROBE"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.showSettings()
+                print("PROBE screen", NSScreen.main?.visibleFrame ?? .zero)
+                let tabs = ["general", "history", "search", "shortcuts", "appearance"]
+                for (n, tab) in tabs.enumerated() {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Double(n + 1) * 1.5) {
+                        guard let c = NSApp.windows.compactMap({ $0.contentViewController as? SettingsTabController }).first else { print("PROBE no tabs"); return }
+                        AppSettings.settingsTab = tab
+                        c.selectedTabViewItemIndex = n
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+                            let child = c.tabViewItems[n].viewController
+                            print("PROBE tab", tab, "preferred", child?.preferredContentSize ?? .zero, "window", c.view.window?.frame ?? .zero)
+                            fflush(stdout)
+                        }
+                    }
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) { fflush(stdout); exit(0) }
+            }
+        }
         do {
             store = try HistoryStore(directory: AppSettings.dataDirectory)
         } catch {
