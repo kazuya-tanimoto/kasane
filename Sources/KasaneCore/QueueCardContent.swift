@@ -3,7 +3,8 @@ import Foundation
 /// FIFO / LIFO の小さいウインドウ（帯）の 1 件のカードに出すもの（2026-10-30 決定。requirements.md §3.6）。
 ///
 /// - どのカードも最大 3 行。種類の文字は出さない
-/// - テキストは本文（改行のまま）。ファイルは名前（本文はフルパスなので出さない）
+/// - テキストは本文。改行は「 / 」でつなぐ（合意したモックの 1 枚目のカード。2026-10-31 画面のデザインの決め S1）。
+///   ファイルは名前（本文はフルパスなので出さない）
 /// - 画像は縮小と名前 1 行。画像のファイル（CleanShot などがファイルとしてコピーした絵）も、縮小があれば縮小と名前 1 行
 ///   （2026-10-31 Kazuya さんの決定。履歴ウインドウと同じく絵で出す）
 /// - リンクは、ページ情報が取れていれば代表画像とタイトル 1 行と URL 1 行、取れていなければ URL だけ
@@ -60,7 +61,7 @@ public struct QueueCardContent: Equatable, Sendable {
     ) -> QueueCardContent {
         switch kind {
         case .text, .richText:
-            let body = text.map(snippet) ?? title
+            let body = text.map { snippet(joinedLines($0)) } ?? title
             return QueueCardContent(picture: .none, heading: nil, body: nonEmpty(body), bodyLines: maxLines, bodyIsSecondary: false)
         case .file where hasThumbnail, .image:
             return QueueCardContent(
@@ -94,6 +95,17 @@ public struct QueueCardContent: Equatable, Sendable {
         let head = text.prefix(snippetLimit + 1)
         guard head.count > snippetLimit else { return text }
         return String(head.prefix(snippetLimit))
+    }
+
+    /// 改行で分けた行を「 / 」でつなぐ。行の前後の空白と、空の行は除く（つないだときに「 /  / 」や字下げの空白が並ばないように）
+    public static func joinedLines(_ text: String) -> String {
+        // 長い文でも全部を分けないよう、先に持つ分より少し長いところで切る
+        let head = text.prefix(snippetLimit * 2)
+        return head
+            .split(omittingEmptySubsequences: true, whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " / ")
     }
 
     /// 空の文字だとカードの高さが潰れるので、空白 1 つにする

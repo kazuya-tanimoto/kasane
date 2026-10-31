@@ -101,6 +101,18 @@ public enum QueueBandLayout {
         #endif
     }
 
+    /// カードの絵の長い辺のピクセル数の上限（CGImageSource の縮小に渡す）。
+    /// 横が `pixelWidth`（帯の最大の幅 × 画面の倍率）以上になるようにし、縦長の絵は横に合わせて長い辺を伸ばす。
+    /// 元の絵より大きくはせず、長い辺は `cardPictureLimit` で止める（2026-10-31 の照合。DB の 128px を帯の幅に広げるとぼやけるため）
+    public static let cardPictureLimit: CGFloat = 4096
+
+    public static func cardPictureMaxPixel(width: Int, height: Int, pixelWidth: CGFloat) -> Int {
+        guard width > 0, height > 0 else { return 0 }
+        let longSide = CGFloat(max(width, height))
+        let wanted = pixelWidth * max(1, CGFloat(height) / CGFloat(width))
+        return Int(min(wanted, longSide, cardPictureLimit).rounded(.up))
+    }
+
     /// 本文が全角 40 字になる幅（と余裕）。帯が画面からはみ出さないよう、画面の幅で止める
     public static func maxWidth(fontSize: CGFloat, screen: CGRect) -> CGFloat {
         let wanted = maxCharacters * fullWidthCharacterWidth(fontSize: fontSize) + maxWidthSlack + chromeWidth(fontSize: fontSize)

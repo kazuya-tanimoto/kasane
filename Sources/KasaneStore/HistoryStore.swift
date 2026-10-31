@@ -111,7 +111,31 @@ public final class HistoryStore: @unchecked Sendable {
                 t.column("succeeded", .boolean).notNull()
             }
         }
+        // 画像の大きさを、どの画面も「1920 × 1080 px」と書く（2026-10-31 画面のデザインの決め S3）。
+        // すでに保存している画像の題「画像 1920×1080」も 1 回だけ書き直し、同じ一覧に書き方が 2 つ並ばないようにする
+        migrator.registerMigration("v5-image-size-title") { db in
+            var titles: [(id: Int64, title: String)] = []
+            let rows = try Row.fetchCursor(db, sql: "SELECT id, title FROM item WHERE kind = 'image'")
+            while let row = try rows.next() {
+                let title: String = row["title"]
+                if let newTitle = HistoryStore.imageSizeTitle(rewriting: title) {
+                    titles.append((row["id"], newTitle))
+                }
+            }
+            for entry in titles {
+                try db.execute(sql: "UPDATE item SET title = ? WHERE id = ?", arguments: [entry.title, entry.id])
+            }
+        }
         return migrator
+    }
+
+    /// 前の書き方の画像の題「画像 1920×1080」を「画像 1920 × 1080 px」にする。前の書き方でなければ nil
+    static func imageSizeTitle(rewriting title: String) -> String? {
+        let prefix = "画像 "
+        guard title.hasPrefix(prefix) else { return nil }
+        let size = title.dropFirst(prefix.count).split(separator: "×", omittingEmptySubsequences: false)
+        guard size.count == 2, let width = Int(size[0]), let height = Int(size[1]) else { return nil }
+        return "画像 \(width) × \(height) px"
     }
 
     // MARK: - 保存

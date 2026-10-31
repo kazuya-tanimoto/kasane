@@ -256,6 +256,7 @@ struct AppearanceSettingsView: View {
 private struct AppearanceSample: View {
     @ObservedObject var model: SettingsModel
     @ObservedObject var appearance: AppearanceSettings
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -270,9 +271,19 @@ private struct AppearanceSample: View {
                 historyWindow
                     .padding(.top, 54)
                     .padding(.horizontal, 18)
-                // 帯は画面の端に、上から下までくっつける（§3.6）
-                queueWindow
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.hudSide == .left ? .leading : .trailing)
+                // 帯は画面の端に、上から下までくっつける（§3.6）。影は実物と同じく帯の内側へだけ落とす
+                HStack(spacing: 0) {
+                    if model.hudSide == .left {
+                        queueWindow
+                        bandShadow
+                        Spacer(minLength: 0)
+                    } else {
+                        Spacer(minLength: 0)
+                        bandShadow
+                        queueWindow
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(height: 330)
             // モック: 角 12、縁なし
@@ -394,23 +405,46 @@ private struct AppearanceSample: View {
             Spacer(minLength: 0)
         }
         .padding(5)
-        .frame(width: 84 * scale, alignment: .leading)
+        .frame(width: Self.sampleBandWidth * scale, alignment: .leading)
         .frame(maxHeight: .infinity, alignment: .top)
         .background(glass)
     }
 
-    /// 帯の 1 件のカード。次に貼る 1 件は、番号の丸をアクセントの色そのもので塗り、地を明るくする（実物と同じ）
+    /// 見本の帯の幅（実物の初期の幅 260pt にあたる）
+    private static let sampleBandWidth: CGFloat = 84
+
+    /// 帯の影。実物（QueueHUD.swift の QueueBandShadowPanel）と同じく、帯の形の影を帯の内側の隣にだけ描く。
+    /// ずらし・ぼかし・幅は、見本の縮尺（見本の帯 84 ÷ 実物の 260）で縮める。色の濃さは実物と同じ
+    private var bandShadow: some View {
+        let m = QueueBandLayout.Metrics.self
+        let ratio = Self.sampleBandWidth / 260
+        let bandWidth = Self.sampleBandWidth * model.hudTextSize.ratio
+        let toRight = model.hudSide == .left
+        return Rectangle()
+            .fill(Color.black)
+            .frame(width: bandWidth)
+            .shadow(color: .black.opacity(m.shadowOpacity), radius: m.shadowBlur / 2 * ratio,
+                    x: (toRight ? 1 : -1) * m.shadowOffset * ratio)
+            // 影を落とす形を、帯と同じ所（この欄の外）に置く。欄の中に入る影だけが見える
+            .offset(x: toRight ? -bandWidth : bandWidth)
+            .frame(width: m.shadowExtent * ratio, alignment: toRight ? .leading : .trailing)
+            .frame(maxHeight: .infinity)
+            .clipped()
+            .allowsHitTesting(false)
+    }
+
+    /// 帯の 1 件のカード。次に貼る 1 件は、番号の丸をアクセントの色そのもので塗り、地を明るくする（実物と同じ色）
     private func sampleCard(number: Int, title: String, isNext: Bool, scale: CGFloat) -> some View {
         HStack(alignment: .top, spacing: 3) {
             Text("\(number)")
                 .font(.system(size: 5.5 * scale, weight: .bold, design: .rounded))
                 .frame(width: 8 * scale, height: 8 * scale)
                 .foregroundStyle(isNext ? appearance.accent.foreground : Color.primary)
-                .background(Circle().fill(isNext ? appearance.accent.color : Color.primary.opacity(0.12)))
+                .background(Circle().fill(isNext ? appearance.accent.color : QueueCardView.numberFill(colorScheme)))
             Text(title).font(.system(size: 6.5 * scale)).lineLimit(1)
             Spacer(minLength: 0)
         }
         .padding(3)
-        .background(Color.primary.opacity(isNext ? 0.12 : 0.06), in: RoundedRectangle(cornerRadius: 3))
+        .background(QueueCardView.cardFill(colorScheme, isNext: isNext), in: RoundedRectangle(cornerRadius: 3))
     }
 }

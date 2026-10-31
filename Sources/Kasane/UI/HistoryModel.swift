@@ -172,6 +172,7 @@ final class HistoryModel: ObservableObject {
         let set = Set(ids)
         summaries.removeAll { set.contains($0.id) }
         ids.forEach { candidateByID[$0] = nil }
+        links.forget(ids)
         rebuild()
     }
 

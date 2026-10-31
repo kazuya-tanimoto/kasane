@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let representations = try? store.representations(itemID: itemID)
         else { return }
         // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加するだけ（クリップボードは変えない）。
-        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
+        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは画面の端の帯でわかる）
         if action == .copyOnly, queue.mode != nil {
             queue.didCapture(itemID: itemID)
             fetchLinkForQueue(item)

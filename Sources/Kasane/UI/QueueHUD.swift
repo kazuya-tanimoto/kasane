@@ -553,7 +553,7 @@ struct QueueHUDView: View {
 
     private func thumbnail(for clip: QueuedClip) -> NSImage? {
         guard clip.kind == .image || clip.kind == .file else { return nil }
-        return clip.thumbnail.flatMap(NSImage.init(data:))
+        return clip.picture ?? clip.thumbnail.flatMap(NSImage.init(data:))
     }
 
     private func linkImage(for clip: QueuedClip) -> NSImage? {
@@ -632,8 +632,11 @@ struct QueueCardView: View {
         }
     }
 
-    // 色はモック（QueueEdge の 3 つ目）の値
-    private var cardFill: Color {
+    private var cardFill: Color { Self.cardFill(colorScheme, isNext: isNext) }
+    private var numberFill: Color { Self.numberFill(colorScheme) }
+
+    // 色はモック（QueueEdge の 3 つ目）の値。設定の見本も同じ色を使う（settings-screen-2026-10-22.md §3 の見本）
+    static func cardFill(_ colorScheme: ColorScheme, isNext: Bool) -> Color {
         switch (colorScheme, isNext) {
         case (.dark, true): return Color.white.opacity(0.14)
         case (.dark, false): return Color.white.opacity(0.08)
@@ -642,7 +645,8 @@ struct QueueCardView: View {
         }
     }
 
-    private var numberFill: Color {
+    /// 次に貼る 1 件のほかの番号の丸
+    static func numberFill(_ colorScheme: ColorScheme) -> Color {
         colorScheme == .dark ? Color.white.opacity(0.16) : Color.black.opacity(0.08)
     }
 }
