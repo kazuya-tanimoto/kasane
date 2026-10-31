@@ -372,7 +372,7 @@ struct QueueHUDView: View {
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 6 * scale) {
+            VStack(alignment: .leading, spacing: QueueBandLayout.Metrics.itemSpacing * scale) {
                 header
                 if state.clips.isEmpty {
                     Text("コピーするとここに追加されます")
@@ -390,8 +390,7 @@ struct QueueHUDView: View {
                     )
                 }
             }
-            .padding(.horizontal, QueueBandLayout.Metrics.bandPadding * scale)
-            .padding(.vertical, 12 * scale)
+            .padding(QueueBandLayout.Metrics.bandPadding * scale)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .scrollIndicators(.automatic)
@@ -401,15 +400,16 @@ struct QueueHUDView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 8 * scale) {
+        let m = QueueBandLayout.Metrics.self
+        return HStack(spacing: m.headerSpacing * scale) {
             Text(state.mode == .lifo ? "LIFO" : "FIFO")
-                .font(.system(size: state.fontSize - 1, weight: .bold))
-                .padding(.horizontal, 8 * scale)
-                .padding(.vertical, 2 * scale)
+                .font(.system(size: state.fontSize * m.badgeFontRatio, weight: .bold))
+                .padding(.horizontal, m.badgePaddingHorizontal * scale)
+                .padding(.vertical, m.badgePaddingVertical * scale)
                 .foregroundStyle(appearance.accent.foreground)
                 .background(Capsule().fill(appearance.accent.color))
             Text("残り \(state.clips.count) 件")
-                .font(.system(size: state.fontSize))
+                .font(.system(size: state.fontSize * m.countFontRatio))
                 .foregroundStyle(.secondary)
         }
     }
@@ -459,7 +459,7 @@ struct QueueCardView: View {
         let m = QueueBandLayout.Metrics.self
         HStack(alignment: .top, spacing: m.numberGap * scale) {
             Text("\(number)")
-                .font(.system(size: fontSize * 0.75, weight: .bold, design: .rounded))
+                .font(.system(size: fontSize * m.numberFontRatio, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
@@ -467,35 +467,49 @@ struct QueueCardView: View {
                 .frame(minWidth: m.numberDiameter * scale, minHeight: m.numberDiameter * scale)
                 .foregroundStyle(isNext ? accent.foreground : Color.primary)
                 .background(Capsule().fill(isNext ? accent.color : numberFill))
-            VStack(alignment: .leading, spacing: 4 * scale) {
+                .padding(.top, m.numberTopOffset * scale)
+            VStack(alignment: .leading, spacing: m.contentSpacing * scale) {
                 picture
                 if let heading = content.heading {
                     Text(heading)
                         .font(.system(size: fontSize, weight: .semibold))
+                        .lineSpacing(lineSpacing)
                         .lineLimit(1)
                 }
                 Text(content.body)
                     .font(.system(size: fontSize))
                     .foregroundStyle(content.bodyIsSecondary ? Color.secondary : Color.primary)
+                    .lineSpacing(lineSpacing)
                     .lineLimit(content.bodyLines)
                     .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(m.cardPadding * scale)
+        .padding(.horizontal, m.cardPadding * scale)
+        .padding(.vertical, m.cardPaddingVertical * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8 * scale, style: .continuous).fill(cardFill))
+        .background(RoundedRectangle(cornerRadius: m.cardRadius * scale, style: .continuous).fill(cardFill))
+    }
+
+    /// 行の高さをモックの「文字の大きさの 1.45 倍」にするための、行の間に足す分。
+    /// システムの文字の標準の行の高さを引く（足りていれば 0）
+    private var lineSpacing: CGFloat {
+        let font = NSFont.systemFont(ofSize: fontSize)
+        let natural = NSLayoutManager().defaultLineHeight(for: font)
+        return max(0, fontSize * QueueBandLayout.Metrics.lineHeightRatio - natural)
     }
 
     @ViewBuilder
     private var picture: some View {
         if let image = content.picture == .thumbnail ? thumbnail : (content.picture == .linkImage ? linkImage : nil) {
-            // 横はカードの幅いっぱい、縦は横の 9/16 まで（はみ出す分は切る）
+            // 横はカードの幅いっぱい、縦はモックの高さ（はみ出す分は切る）
+            let m = QueueBandLayout.Metrics.self
             Color.clear
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+                .frame(height: m.pictureHeight * scale)
                 .overlay(Image(nsImage: image).resizable().scaledToFill())
-                .clipShape(RoundedRectangle(cornerRadius: 4 * scale, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: m.pictureRadius * scale, style: .continuous))
         }
     }
 

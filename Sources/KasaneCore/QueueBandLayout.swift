@@ -19,16 +19,45 @@ public enum QueueBandLayout {
     /// 全角 1 字（12pt 以上）より小さいので、41 字目は入らない
     public static let maxWidthSlack: CGFloat = 1
 
-    /// 余白など（12pt のときの値。倍率を掛けて使う）。カードの描画も同じ値を使う
+    /// 余白など（12pt のときの値。倍率を掛けて使う）。カードの描画も同じ値を使う。
+    /// 値は合意したモック（デザインモックの QueueEdge、カードの案）の px を、本文の文字の大きさに合わせて換算したもの。
+    /// モックの本文は 8.5px なので、12pt のときは px × 12 / 8.5
     public enum Metrics {
-        /// 帯の左右の余白
-        public static let bandPadding: CGFloat = 10
-        /// カードの中の左右の余白
-        public static let cardPadding: CGFloat = 10
-        /// 番号の丸の直径
-        public static let numberDiameter: CGFloat = 18
-        /// 番号の丸と中身の間
-        public static let numberGap: CGFloat = 8
+        /// モックの 1px が、12pt のときの何 pt か
+        public static let mockPixel: CGFloat = 12 / 8.5
+        /// 帯の上下左右の余白（モック 8px）
+        public static let bandPadding: CGFloat = 8 * mockPixel
+        /// 見出しとカード、カードとカードの間（モック 6px）
+        public static let itemSpacing: CGFloat = 6 * mockPixel
+        /// カードの中の左右の余白（モック 7px）
+        public static let cardPadding: CGFloat = 7 * mockPixel
+        /// カードの中の上下の余白（モック 6px）
+        public static let cardPaddingVertical: CGFloat = 6 * mockPixel
+        /// カードの角の丸み（モック 7px）
+        public static let cardRadius: CGFloat = 7 * mockPixel
+        /// 番号の丸の直径（モック 12px）
+        public static let numberDiameter: CGFloat = 12 * mockPixel
+        /// 番号の丸の上のずれ（モック 1px）
+        public static let numberTopOffset: CGFloat = 1 * mockPixel
+        /// 番号の丸と中身の間（モック 6px）
+        public static let numberGap: CGFloat = 6 * mockPixel
+        /// カードの中の、画像・タイトル・本文の間（モック 3px）
+        public static let contentSpacing: CGFloat = 3 * mockPixel
+        /// 画像の高さ（モック 40px。横はカードの幅いっぱい）
+        public static let pictureHeight: CGFloat = 40 * mockPixel
+        /// 画像の角の丸み（モック 4px）
+        public static let pictureRadius: CGFloat = 4 * mockPixel
+        /// 見出しの FIFO / LIFO の印と、残りの件数の間（モック 6px）
+        public static let headerSpacing: CGFloat = 6 * mockPixel
+        /// FIFO / LIFO の印の中の左右・上下の余白（モック 6px・1px）
+        public static let badgePaddingHorizontal: CGFloat = 6 * mockPixel
+        public static let badgePaddingVertical: CGFloat = 1 * mockPixel
+        /// 本文の文字の大きさに対する比（モックの px ÷ 8.5px）
+        public static let badgeFontRatio: CGFloat = 8 / 8.5
+        public static let countFontRatio: CGFloat = 9 / 8.5
+        public static let numberFontRatio: CGFloat = 7.5 / 8.5
+        /// 本文の行の高さ（文字の大きさの倍率。モック line-height 1.45）
+        public static let lineHeightRatio: CGFloat = 1.45
         /// 帯の内側の端の、ドラッグでつかめる幅（倍率は掛けない）
         public static let handleWidth: CGFloat = 6
     }
