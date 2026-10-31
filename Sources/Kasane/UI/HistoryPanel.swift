@@ -5,16 +5,16 @@ import SwiftUI
 
 /// 履歴ウインドウ。Spotlight や Raycast と同じく、Kasane 自身はアクティブにならないパネルにする。
 /// 元のアプリが前面のままなので、閉じた直後に ⌘V を送れば元のアプリに貼り付けられる。
-/// ドラッグで動かせて、端で大きさを変えられる。位置と大きさは次に開いたときも使う
+/// ドラッグで動かせて、端で大きさを変えられる。位置と大きさは次に開いたときも使う。
+/// 角・縁・影をデザインモックどおりに描くため、縁なしのウインドウにする（`HistoryWindowFrame`、2026-10-31 決定）
 final class HistoryPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.titled, .resizable, .nonactivatingPanel, .fullSizeContentView],
+            styleMask: [.borderless, .resizable, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        hideTitlebar()
         // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
@@ -24,7 +24,8 @@ final class HistoryPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // 影はシステムのものを使わず、モックの影を別のウインドウに描く（`HistoryShadowPanel`）
+        hasShadow = false
         hidesOnDeactivate = false
         animationBehavior = .none
         isReleasedWhenClosed = false
@@ -51,6 +52,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     }
 
     private var panel: HistoryPanel
+    private let shadow = HistoryShadowPanel()
     private let hosting: NSHostingView<HistoryView>
     private let model: HistoryModel
     private var keyMonitor: Any?
@@ -140,6 +142,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         let focused = ((old.firstResponder as? NSTextView)?.delegate as? NSView) ?? (old.firstResponder as? NSView)
         // 古いウインドウが閉じたことを、外をクリックしたとき（windowDidResignKey）と取り違えないよう先に外す
         old.delegate = nil
+        old.removeChildWindow(shadow)
         old.orderOut(nil)
         old.contentView = nil
         panel = HistoryPanel(contentRect: old.frame)
@@ -149,7 +152,10 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         blurState = WindowBlurState()
         // 起動したときと同じく、出す前に半径を付ける
         blurState.apply(radius, to: panel)
-        guard wasOpen else { return }
+        guard wasOpen else {
+            shadow.orderOut(nil)
+            return
+        }
         if wasKey {
             panel.makeKeyAndOrderFront(nil)
             if let focused {
@@ -158,6 +164,23 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         } else {
             panel.orderFront(nil)
         }
+        attachShadow()
+    }
+
+    /// 影のウインドウを履歴ウインドウの後ろに付ける。子ウインドウにして、ドラッグで動かしたときも一緒に動かす。
+    /// 隠れているウインドウに子ウインドウを付けると子だけが出ることがあるので、履歴ウインドウを出してから付ける
+    private func attachShadow() {
+        shadow.alphaValue = panel.alphaValue
+        shadow.follow(panel)
+        if shadow.parent !== panel {
+            panel.addChildWindow(shadow, ordered: .below)
+        }
+    }
+
+    /// 閉じたときに影のウインドウも外して隠す
+    private func detachShadow() {
+        panel.removeChildWindow(shadow)
+        shadow.orderOut(nil)
     }
 
     var isVisible: Bool { panel.isVisible && !isHiding }
@@ -203,11 +226,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         panel.makeKeyAndOrderFront(nil)
         applyBlur(AppearanceSettings.shared.blurRadius)
+        attachShadow()
         installKeyMonitor()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
+            shadow.animator().alphaValue = 1
         }
     }
 
@@ -244,11 +269,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
+            shadow.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 // フェード中に開き直していたら（show() が isHiding を戻している）、隠さない
                 guard self.isHiding else { return }
+                self.detachShadow()
                 self.panel.orderOut(nil)
                 self.isHiding = false
                 // 次に開いたときのために、検索欄にフォーカスを戻しておく
@@ -295,6 +322,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     func windowDidMove(_ notification: Notification) {
         saveFrame()
+    }
+
+    // 大きさを変えている間も、影をウインドウに合わせる
+    func windowDidResize(_ notification: Notification) {
+        if shadow.parent === panel {
+            shadow.follow(panel)
+        }
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {

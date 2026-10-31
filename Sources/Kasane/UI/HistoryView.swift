@@ -45,6 +45,7 @@ struct HistoryView: View {
             minHeight: minSize.height, maxHeight: .infinity
         )
         .background(PanelBackground(appearance: appearance))
+        .modifier(HistoryWindowFrame())
         .environment(\.kasaneAccent, appearance.accent)
         .environment(\.textSize, appearance.historyTextSize)
         .onAppear { searchFocused = true }
