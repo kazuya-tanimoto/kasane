@@ -660,13 +660,14 @@ echo "https://www.rust-lang.org/?kasane="(date +%s) | pbcopy
 4. メニューバーの Kasane のアイコンを開き、「設定…」を選ぶ
 5. 設定の「外観」のタブを開き、「履歴ウインドウ」の「文字の大きさ」を覚える
 6. 「文字の大きさ」を「標準」にする
-7. Ghostty で下のコマンドを流す（テストに使う 5 つの項目を、1 秒ずつあけてコピーする）
-8. Finder が開き、kasane-test.zip が選ばれているので、⌘C でコピーする
+7. Ghostty で下のコマンドを流す（3 つをコピーし、書式付きの文と zip を作る）
+8. テキストエディットが開き、「見出し」の文が出るので、⌘A、⌘C を押す
+9. Dock の Finder を押し、選ばれている kasane-test.zip を ⌘C でコピーする
 
 このコマンドは Mac で試していません。5 つが履歴に出なければ教えてください。
 
 ```
-cd /tmp; and printf '%s' 'これは一覧で 2 行になる長い題名の確かめです。来週の打ち合わせの議題と持っていく資料をまとめます' | pbcopy; sleep 1; printf '1 行目の文です\n2 行目の文です\n3 行目の文です\n4 行目の文です\n5 行目の文です' | pbcopy; sleep 1; echo '<h1>見出し</h1><p>本文の<b>太字</b>の文です</p>' | textutil -stdin -format html -convert rtf -stdout | pbcopy; sleep 1; printf 'https://github.com/kazuya-tanimoto/kasane?kasane=%s' (date +%s) | pbcopy; sleep 1; echo kasane > kasane-test.txt; and zip -q kasane-test.zip kasane-test.txt; and open -R /tmp/kasane-test.zip
+cd /tmp; and printf '%s' 'これは一覧で 2 行になる長い題名の確かめです。来週の打ち合わせの議題と持っていく資料をまとめます' | pbcopy; sleep 1; printf '1 行目の文です\n2 行目の文です\n3 行目の文です\n4 行目の文です\n5 行目の文です' | pbcopy; sleep 1; printf 'https://github.com/kazuya-tanimoto/kasane?kasane=%s' (date +%s) | pbcopy; echo '<h1>見出し</h1><p>本文の<b>太字</b>の文です</p>' > kasane-test.html; and textutil -inputencoding UTF-8 -convert rtf kasane-test.html -output kasane-test.rtf; and echo kasane > kasane-test.txt; and zip -q kasane-test.zip kasane-test.txt; and open -R /tmp/kasane-test.zip; and open -a TextEdit /tmp/kasane-test.rtf
 ```
 
 ### 設定画面
@@ -674,6 +675,7 @@ cd /tmp; and printf '%s' 'これは一覧で 2 行になる長い題名の確か
 - [ ] 設定の 5 つのタブを順に見る → どのタブも、白い箱の角が丸く、細い縁がある
 - [ ] 「履歴」のタブで、一覧の下の「＋」「−」を見る → 黒い文字の記号で、青い文字やボタンの縁は無い
 - [ ] 「ショートカット」のタブを見る → 下の箱のキーが 2 列に並び、どの札も 1 行に収まる
+
 準備: 「ショートカット」のタブで、「履歴ウインドウを開く / 閉じる」の右のキーの欄の左端を覚える。
 
 - [ ] そのキーの欄をクリックする → 「キーを押してください」と出て、欄の左端は動かない
@@ -686,10 +688,10 @@ cd /tmp; and printf '%s' 'これは一覧で 2 行になる長い題名の確か
 - [ ] 「これは一覧で 2 行に…」の行を見る → 題名の 2 行の間が、使いどころの板の一覧と同じくらい
 - [ ] 「1 行目の文です」の行を選ぶ → 右のプレビューの地が、周りより明るい白に見える
 - [ ] 同じ行で、プレビューの本文を見る → 行の間が、使いどころの板のプレビューと同じくらい空いている
-- [ ] 「見出し」の行を選ぶ → 「本文の太字の文です」が、前の項目の本文と同じ大きさ
+- [ ] 「見出し」の行を選ぶ → 本文が「1 行目の文です」のプレビューの本文と同じ大きさ
 - [ ] 同じ行で → 「本文の太字の文です」のうち「太字」の 2 文字だけが太い
 - [ ] 「github.com」の行を選び、5 秒待つ → プレビューの上から、画像・太字の題・灰色の URL の順に並ぶ
-- [ ] 「kasane-test.zip」の行を選ぶ → 真ん中にファイルの絵、その下に名前と、場所・種類・大きさ
+- [ ] 「kasane-test.zip」の行を選ぶ → 名前の下に、場所・種類・大きさを「·」で区切った 1 行がある
 
 準備:
 
