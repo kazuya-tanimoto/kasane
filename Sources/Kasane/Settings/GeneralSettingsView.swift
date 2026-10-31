@@ -15,7 +15,7 @@ struct GeneralSettingsView: View {
         FittingScroll {
             VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
                 SettingsBox {
-                    SettingsRow(title: "ログイン時に起動", description: "ログインしたときから、コピーした内容を履歴に残します") {
+                    SettingsRow(title: "ログイン時に起動", description: "Mac にログインすると自動で起動し、コピーした内容を履歴に残します") {
                         Toggle("ログイン時に起動", isOn: Binding(
                             get: { model.loginEnabled },
                             set: { model.setLoginEnabled($0) }
