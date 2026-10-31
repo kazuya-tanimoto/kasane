@@ -1,0 +1,27 @@
+PROBE before windows at launch: ["0:(511.0, 31.0, 560.0, 480.0)"]
+PROBE before windows after ⌥V: ["3:(72.0, 48.0, 880.0, 560.0) a=1.0", "0:(511.0, 31.0, 560.0, 480.0) a=1.0"]
+PROBE before resize-right d=4.0 width 880.0->-1.0 visible=false
+PROBE before (reopen)
+PROBE before resize-right d=3.0 width 880.0->864.0 visible=true
+PROBE before resize-right d=2.0 width 864.0->848.0 visible=true
+PROBE before resize-right d=1.0 width 848.0->832.0 visible=true
+PROBE before resize-right d=0.0 width 832.0->816.0 visible=true
+PROBE before resize-right d=-1.0 width 816.0->800.0 visible=true
+PROBE before resize-right d=-2.0 width 800.0->784.0 visible=true
+PROBE before resize-right d=-3.0 width 784.0->768.0 visible=true
+PROBE before resize-right d=-5.0 width 768.0->768.0 visible=true
+PROBE before resize-bottomright d=3.0 size (768.0, 560.0)->(768.0, 560.0) visible=true
+PROBE before resize-bottomright d=1.0 size (768.0, 560.0)->(752.0, 544.0) visible=true
+PROBE before resize-bottomright d=0.0 size (752.0, 544.0)->(736.0, 528.0) visible=true
+PROBE before resize-bottomright d=-2.0 size (736.0, 528.0)->(720.0, 512.0) visible=true
+PROBE before resize-bottomright d=-4.0 size (720.0, 512.0)->(720.0, 496.0) visible=true
+PROBE before resize-topleft d=3.0 frame (152.0, 80.0, 720.0, 496.0)->(152.0, 80.0, 720.0, 496.0) visible=true
+PROBE before resize-topleft d=1.0 frame (152.0, 80.0, 720.0, 496.0)->(152.0, 88.0, 720.0, 480.0) visible=true
+PROBE before resize-topleft d=0.0 frame (152.0, 88.0, 720.0, 480.0)->(152.0, 96.0, 720.0, 464.0) visible=true
+PROBE before resize-topleft d=-2.0 frame (152.0, 96.0, 720.0, 464.0)->(152.0, 104.0, 720.0, 448.0) visible=true
+PROBE before resize-topleft d=-4.0 frame (152.0, 104.0, 720.0, 448.0)->(152.0, 112.0, 720.0, 432.0) visible=true
+PROBE before move origin (152.0, 112.0)->(303.0, 31.0) visible=true
+PROBE before windows after move: ["3:(303.0, 31.0, 720.0, 674.0)", "0:(511.0, 31.0, 560.0, 480.0)"]
+PROBE before after clicking the shadow, history visible=false
+PROBE before dark mode osascript status=0
+PROBE before windows dark: ["3:(303.0, 31.0, 720.0, 674.0)", "0:(511.0, 31.0, 560.0, 480.0)"]

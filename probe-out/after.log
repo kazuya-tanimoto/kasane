@@ -1,0 +1,27 @@
+PROBE after windows at launch: ["0:(511.0, 31.0, 560.0, 480.0)"]
+PROBE after windows after ⌥V: ["3:(108.0, 34.0, 808.0, 588.0) a=1.0", "3:(-42.0, -116.0, 1108.0, 888.0) a=1.0", "0:(511.0, 31.0, 560.0, 480.0) a=1.0"]
+PROBE after resize-right d=4.0 width 808.0->-1.0 visible=false
+PROBE after (reopen)
+PROBE after resize-right d=3.0 width 808.0->800.0 visible=true
+PROBE after resize-right d=2.0 width 800.0->792.0 visible=true
+PROBE after resize-right d=1.0 width 792.0->784.0 visible=true
+PROBE after resize-right d=0.0 width 784.0->776.0 visible=true
+PROBE after resize-right d=-1.0 width 776.0->768.0 visible=true
+PROBE after resize-right d=-2.0 width 768.0->760.0 visible=true
+PROBE after resize-right d=-3.0 width 760.0->752.0 visible=true
+PROBE after resize-right d=-5.0 width 752.0->752.0 visible=true
+PROBE after resize-bottomright d=3.0 size (752.0, 588.0)->(744.0, 580.0) visible=true
+PROBE after resize-bottomright d=1.0 size (744.0, 580.0)->(736.0, 572.0) visible=true
+PROBE after resize-bottomright d=0.0 size (736.0, 572.0)->(728.0, 564.0) visible=true
+PROBE after resize-bottomright d=-2.0 size (728.0, 564.0)->(728.0, 556.0) visible=true
+PROBE after resize-bottomright d=-4.0 size (728.0, 556.0)->(728.0, 548.0) visible=true
+PROBE after resize-topleft d=3.0 frame (108.0, 34.0, 728.0, 548.0)->(108.0, 42.0, 728.0, 540.0) visible=true
+PROBE after resize-topleft d=1.0 frame (108.0, 42.0, 728.0, 540.0)->(108.0, 50.0, 728.0, 532.0) visible=true
+PROBE after resize-topleft d=0.0 frame (108.0, 50.0, 728.0, 532.0)->(108.0, 58.0, 728.0, 524.0) visible=true
+PROBE after resize-topleft d=-2.0 frame (108.0, 58.0, 728.0, 524.0)->(108.0, 66.0, 728.0, 516.0) visible=true
+PROBE after resize-topleft d=-4.0 frame (108.0, 66.0, 728.0, 516.0)->(108.0, 74.0, 728.0, 508.0) visible=true
+PROBE after move origin (108.0, 74.0)->(296.0, 114.0) visible=true
+PROBE after windows after move: ["3:(296.0, 114.0, 728.0, 508.0)", "3:(146.0, -36.0, 1028.0, 808.0)", "0:(511.0, 31.0, 560.0, 480.0)"]
+PROBE after after clicking the shadow, history visible=false
+PROBE after dark mode osascript status=0
+PROBE after windows dark: ["3:(1118.0, 59.0, 516.0, 320.0)", "3:(1012.0, -35.0, 728.0, 508.0)", "0:(1012.0, -198.0, 560.0, 480.0)"]
