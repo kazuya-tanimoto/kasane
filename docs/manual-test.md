@@ -618,7 +618,7 @@ log stream --level info --predicate 'subsystem == "io.github.kazuya-tanimoto.kas
 2. 50 字の行から書いた文の最後までを選ぶ
 3. ⌘C を押す
 4. ⌃⇧⌘4 で画面の一部を選ぶ（スクリーンショットがクリップボードに入る）
-5. Arc で、ふつうのページの URL を ⌘C（例: https://www.apple.com/jp/ ）
+5. Arc で、14 章で使っていないページの URL を ⌘C（例: https://nodejs.org/ja ）
 
 - [ ] 1 番目のカード → 3 行で切れて、最後が … になる
 - [ ] 1 番目のカード → 番号の丸が、アクセントの色で塗られている
