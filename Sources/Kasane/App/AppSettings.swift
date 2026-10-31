@@ -2,7 +2,7 @@ import AppKit
 import KasaneCore
 import KasaneStore
 
-/// UserDefaults に保存する設定。設定画面は v1 の仕上げで作るので、MVP ではメニューと `defaults` コマンドで変える
+/// UserDefaults に保存する設定。設定画面（メニューバーの「設定…」、履歴ウインドウで ⌘,）で変える
 enum AppSettings {
     private static var defaults: UserDefaults { .standard }
 
