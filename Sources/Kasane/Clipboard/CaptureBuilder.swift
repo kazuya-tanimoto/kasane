@@ -21,6 +21,10 @@ enum CaptureBuilder {
             )
             // すべてが画像のファイルなら「画像」の絞り込みにも入れる（行のアイコンと種類の文字は「ファイル」のまま）
             capture.isImageFile = FileKinds.areAllImages(paths: raw.fileURLs.map(\.path))
+            // 画像のファイル（CleanShot などがファイルとしてコピーした絵）は、FIFO / LIFO のカードに縮小を出す（2026-10-31 Kazuya さんの決定）
+            if capture.isImageFile, let first = raw.fileURLs.first {
+                capture.thumbnail = imageFileThumbnail(first)
+            }
         } else if let string = raw.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let kind: ClipKind
             if isWebURL(string) {
@@ -61,25 +65,34 @@ enum CaptureBuilder {
         LinkPreviewPolicy.webURL(text) != nil
     }
 
+    /// 画像のファイルの縮小。読めなければ nil
+    static func imageFileThumbnail(_ url: URL) -> Data? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return thumbnail(source)
+    }
+
     static func imageInfo(_ data: Data) -> (thumbnail: Data?, width: Int?, height: Int?) {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return (nil, nil, nil) }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let width = properties?[kCGImagePropertyPixelWidth] as? Int
         let height = properties?[kCGImagePropertyPixelHeight] as? Int
+        return (thumbnail(source), width, height)
+    }
+
+    /// 長い辺 128px の PNG
+    private static func thumbnail(_ source: CGImageSource) -> Data? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: 128,
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return (nil, width, height)
-        }
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             output as CFMutableData, UTType.png.identifier as CFString, 1, nil
-        ) else { return (nil, width, height) }
+        ) else { return nil }
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return (nil, width, height) }
-        return (output as Data, width, height)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 }

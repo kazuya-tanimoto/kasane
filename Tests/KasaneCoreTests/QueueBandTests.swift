@@ -117,6 +117,17 @@ final class QueueCardContentTests: XCTestCase {
         XCTAssertEqual(card.body, "見積書_v2.pdf")
     }
 
+    /// 画像のファイル（CleanShot などがファイルとしてコピーした絵）は、縮小と名前 1 行。縮小が無ければ名前だけ
+    func testImageFileShowsTheThumbnailAndOneLineName() {
+        let card = QueueCardContent.make(kind: .file, title: "CleanShot 2026-10-31 at 18.34.01.png", text: "/Users/someone/Desktop/CleanShot 2026-10-31 at 18.34.01.png", hasThumbnail: true, linkTitle: nil, hasLinkImage: false)
+        XCTAssertEqual(card.picture, .thumbnail)
+        XCTAssertEqual(card.body, "CleanShot 2026-10-31 at 18.34.01.png")
+        XCTAssertEqual(card.bodyLines, 1)
+        let plain = QueueCardContent.make(kind: .file, title: "見積書_v2.pdf", text: "/Users/someone/見積書_v2.pdf", hasThumbnail: false, linkTitle: nil, hasLinkImage: false)
+        XCTAssertEqual(plain.picture, .none)
+        XCTAssertEqual(plain.bodyLines, QueueCardContent.maxLines)
+    }
+
     func testImageShowsTheThumbnailAndOneLineName() {
         let card = QueueCardContent.make(kind: .image, title: "スクリーンショット", text: nil, hasThumbnail: true, linkTitle: nil, hasLinkImage: false)
         XCTAssertEqual(card.picture, .thumbnail)

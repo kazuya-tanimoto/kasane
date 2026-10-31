@@ -4,7 +4,8 @@ import Foundation
 ///
 /// - どのカードも最大 3 行。種類の文字は出さない
 /// - テキストは本文（改行のまま）。ファイルは名前（本文はフルパスなので出さない）
-/// - 画像は縮小と名前 1 行
+/// - 画像は縮小と名前 1 行。画像のファイル（CleanShot などがファイルとしてコピーした絵）も、縮小があれば縮小と名前 1 行
+///   （2026-10-31 Kazuya さんの決定。履歴ウインドウと同じく絵で出す）
 /// - リンクは、ページ情報が取れていれば代表画像とタイトル 1 行と URL 1 行、取れていなければ URL だけ
 public struct QueueCardContent: Equatable, Sendable {
     public enum Kind: Sendable {
@@ -46,7 +47,7 @@ public struct QueueCardContent: Equatable, Sendable {
     /// - Parameters:
     ///   - title: 一覧の題名（改行を空白にした 1 行）
     ///   - text: 本文。ファイルなら改行区切りのパス、画像なら nil
-    ///   - hasThumbnail: 画像の縮小を持っているか
+    ///   - hasThumbnail: 画像の縮小を持っているか（画像と、画像のファイル）
     ///   - linkTitle: 取れたページのタイトル（スイッチがオフ、まだ取れていないなら nil）
     ///   - hasLinkImage: 取れた代表画像があるか
     public static func make(
@@ -61,9 +62,7 @@ public struct QueueCardContent: Equatable, Sendable {
         case .text, .richText:
             let body = text.map(snippet) ?? title
             return QueueCardContent(picture: .none, heading: nil, body: nonEmpty(body), bodyLines: maxLines, bodyIsSecondary: false)
-        case .file:
-            return QueueCardContent(picture: .none, heading: nil, body: nonEmpty(title), bodyLines: maxLines, bodyIsSecondary: false)
-        case .image:
+        case .file where hasThumbnail, .image:
             return QueueCardContent(
                 picture: hasThumbnail ? .thumbnail : .none,
                 heading: nil,
@@ -71,6 +70,8 @@ public struct QueueCardContent: Equatable, Sendable {
                 bodyLines: hasThumbnail ? 1 : maxLines,
                 bodyIsSecondary: false
             )
+        case .file:
+            return QueueCardContent(picture: .none, heading: nil, body: nonEmpty(title), bodyLines: maxLines, bodyIsSecondary: false)
         case .url:
             let url = snippet(text ?? title)
             let heading = linkTitle.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
