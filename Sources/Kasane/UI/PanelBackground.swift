@@ -42,7 +42,7 @@ final class AppearanceSettings: ObservableObject {
 /// 履歴ウインドウと小さいウインドウの背景。
 ///
 /// ぼかしはウインドウ自体に半径を指定して作る（`WindowBlur`）。ここでは不透明度ぶんの色を重ねるだけ。
-/// 角丸と縁はシステムのウインドウが描く。
+/// 履歴ウインドウの角丸と縁は `HistoryWindowFrame` が描く。
 /// 半径を指定できないとき（`usesSystemMaterial`）は、ぼかしありのときだけシステムの素材を敷く
 struct PanelBackground: View {
     @ObservedObject var appearance: AppearanceSettings

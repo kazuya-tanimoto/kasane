@@ -5,16 +5,17 @@ import SwiftUI
 
 /// 履歴ウインドウ。Spotlight や Raycast と同じく、Kasane 自身はアクティブにならないパネルにする。
 /// 元のアプリが前面のままなので、閉じた直後に ⌘V を送れば元のアプリに貼り付けられる。
-/// ドラッグで動かせて、端で大きさを変えられる。位置と大きさは次に開いたときも使う
+/// ドラッグで動かせて、端で大きさを変えられる。位置と大きさは次に開いたときも使う。
+/// 角・縁・影をデザインモックどおりに描くため、縁なしのウインドウにする（`HistoryWindowFrame`、2026-10-31 決定）
 final class HistoryPanel: NSPanel {
     init(contentRect: NSRect) {
         super.init(
             contentRect: contentRect,
-            styleMask: [.titled, .resizable, .nonactivatingPanel, .fullSizeContentView],
+            // 端をつかんで大きさを変えるのは自分で作る（`HistoryContentView`）ので、.resizable は付けない
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        hideTitlebar()
         // 動かせるのは一番上の「Kasane」の帯、検索欄の周り、操作ボタンの横（`WindowDragArea`）だけ。
         // 背景全体をつかめるようにすると、プレビューの文字の選択とぶつかる
         isMovable = true
@@ -24,7 +25,8 @@ final class HistoryPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         isOpaque = false
         backgroundColor = .clear
-        hasShadow = true
+        // 影はシステムのものを使わず、モックの影を別のウインドウに描く（`HistoryShadowPanel`）
+        hasShadow = false
         hidesOnDeactivate = false
         animationBehavior = .none
         isReleasedWhenClosed = false
@@ -41,17 +43,29 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
     nonisolated static let defaultSize = NSSize(width: 880, height: 560)
     nonisolated static let minSize = NSSize(width: 720, height: 420)
 
-    /// 文字の大きさの段階に合わせた初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）
-    nonisolated static func defaultSize(for level: TextSizeLevel) -> NSSize {
+    /// 文字の大きさの段階に合わせた、角丸の本体の初めの大きさ（一覧とプレビューの部分だけを割合で大きくする）。
+    /// 位置と大きさは本体で決めて覚え、ウインドウは周りの余白（`HistoryFrameLayout.resizeMargin`）を足した大きさにする。
+    /// 余白の前に覚えた大きさも、そのまま見える大きさとして使える
+    nonisolated static func bodyDefaultSize(for level: TextSizeLevel) -> NSSize {
         WindowPlacement.size(defaultSize, scaledTo: level)
     }
 
-    nonisolated static func minSize(for level: TextSizeLevel) -> NSSize {
+    /// 角丸の本体の最小の大きさ
+    nonisolated static func bodyMinSize(for level: TextSizeLevel) -> NSSize {
         WindowPlacement.size(minSize, scaledTo: level)
     }
 
+    /// ウインドウの最小の大きさ（本体の最小に余白を足す）
+    nonisolated static func minSize(for level: TextSizeLevel) -> NSSize {
+        let window = HistoryFrameLayout.window(aroundBody: CGRect(origin: .zero, size: bodyMinSize(for: level)))
+        return window.size
+    }
+
     private var panel: HistoryPanel
+    private let shadow = HistoryShadowPanel()
     private let hosting: NSHostingView<HistoryView>
+    /// ウインドウの中身。SwiftUI の画面と、端をつかんで大きさを変える所
+    private let content: HistoryContentView
     private let model: HistoryModel
     private var keyMonitor: Any?
     private var isHiding = false
@@ -72,12 +86,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         self.model = model
         panel = HistoryPanel(contentRect: NSRect(origin: .zero, size: HistoryPanelController.defaultSize))
         hosting = NSHostingView(rootView: HistoryView(model: model, appearance: .shared))
+        content = HistoryContentView(content: hosting)
         super.init()
         hosting.sizingOptions = [.minSize]
         // タイトルバーは隠しているので、その分の余白を空けない
         hosting.safeAreaRegions = []
         hosting.frame = NSRect(origin: .zero, size: HistoryPanelController.defaultSize)
-        panel.contentView = hosting
+        content.frame = hosting.frame
+        content.onResizeEnd = { [weak self] in self?.saveFrame() }
+        panel.contentView = content
         panel.delegate = self
         blurObserver = AppearanceSettings.shared.$blurRadius.sink { [weak self] radius in
             self?.applyBlur(radius)
@@ -100,30 +117,34 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.hosting.layoutSubtreeIfNeeded()
-            self.resizeForTextSize(from: old, to: level, minSize: minSize)
+            self.resizeForTextSize(from: old, to: level)
         }
     }
 
-    private func resizeForTextSize(from old: TextSizeLevel, to level: TextSizeLevel, minSize: NSSize) {
+    private func resizeForTextSize(from old: TextSizeLevel, to level: TextSizeLevel) {
+        let minSize = Self.bodyMinSize(for: level)
         if isVisible, let screen = panel.screen?.visibleFrame {
-            let frame = WindowPlacement.frame(panel.frame, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            let area = HistoryFrameLayout.bodyArea(in: screen)
+            let body = HistoryFrameLayout.body(in: panel.frame)
+            let frame = WindowPlacement.frame(body, in: area, changingTextSizeFrom: old, to: level, minSize: minSize)
             isPositioning = true
-            panel.setFrame(frame, display: true)
+            panel.setFrame(HistoryFrameLayout.window(aroundBody: frame), display: true)
             isPositioning = false
             // 位置は画面の中心からのずれで覚えているので、広げたあとの位置で覚え直す
             saveFrame()
         } else if AppSettings.historyWindowSize != nil, let screen = (NSScreen.main ?? NSScreen.screens.first)?.visibleFrame {
             // 閉じている間に変えたときは、覚えている位置と大きさを同じように変える
+            let area = HistoryFrameLayout.bodyArea(in: screen)
             let current = WindowPlacement.frame(
-                in: screen,
+                in: area,
                 savedSize: AppSettings.historyWindowSize,
                 savedOffset: AppSettings.historyWindowOffset,
-                defaultSize: Self.defaultSize(for: old),
-                minSize: Self.minSize(for: old)
+                defaultSize: Self.bodyDefaultSize(for: old),
+                minSize: Self.bodyMinSize(for: old)
             )
-            let frame = WindowPlacement.frame(current, in: screen, changingTextSizeFrom: old, to: level, minSize: minSize)
+            let frame = WindowPlacement.frame(current, in: area, changingTextSizeFrom: old, to: level, minSize: minSize)
             AppSettings.historyWindowSize = frame.size
-            AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
+            AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: area)
         }
     }
 
@@ -140,16 +161,20 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         let focused = ((old.firstResponder as? NSTextView)?.delegate as? NSView) ?? (old.firstResponder as? NSView)
         // 古いウインドウが閉じたことを、外をクリックしたとき（windowDidResignKey）と取り違えないよう先に外す
         old.delegate = nil
+        old.removeChildWindow(shadow)
         old.orderOut(nil)
         old.contentView = nil
         panel = HistoryPanel(contentRect: old.frame)
         panel.setFrame(old.frame, display: false)
-        panel.contentView = hosting
+        panel.contentView = content
         panel.delegate = self
         blurState = WindowBlurState()
         // 起動したときと同じく、出す前に半径を付ける
         blurState.apply(radius, to: panel)
-        guard wasOpen else { return }
+        guard wasOpen else {
+            shadow.orderOut(nil)
+            return
+        }
         if wasKey {
             panel.makeKeyAndOrderFront(nil)
             if let focused {
@@ -158,6 +183,23 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         } else {
             panel.orderFront(nil)
         }
+        attachShadow()
+    }
+
+    /// 影のウインドウを履歴ウインドウの後ろに付ける。子ウインドウにして、ドラッグで動かしたときも一緒に動かす。
+    /// 隠れているウインドウに子ウインドウを付けると子だけが出ることがあるので、履歴ウインドウを出してから付ける
+    private func attachShadow() {
+        shadow.alphaValue = panel.alphaValue
+        shadow.follow(panel)
+        if shadow.parent !== panel {
+            panel.addChildWindow(shadow, ordered: .below)
+        }
+    }
+
+    /// 閉じたときに影のウインドウも外して隠す
+    private func detachShadow() {
+        panel.removeChildWindow(shadow)
+        shadow.orderOut(nil)
     }
 
     var isVisible: Bool { panel.isVisible && !isHiding }
@@ -173,9 +215,9 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         return WindowPlacement.isStandard(
             savedSize: AppSettings.historyWindowSize,
             savedOffset: AppSettings.historyWindowOffset,
-            defaultSize: Self.defaultSize(for: textSize),
-            minSize: Self.minSize(for: textSize),
-            in: screen
+            defaultSize: Self.bodyDefaultSize(for: textSize),
+            minSize: Self.bodyMinSize(for: textSize),
+            in: HistoryFrameLayout.bodyArea(in: screen)
         )
     }
 
@@ -203,11 +245,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         panel.makeKeyAndOrderFront(nil)
         applyBlur(AppearanceSettings.shared.blurRadius)
+        attachShadow()
         installKeyMonitor()
         NSAnimationContext.runAnimationGroup { context in
             context.duration = 0.12
             context.timingFunction = CAMediaTimingFunction(name: .easeOut)
             panel.animator().alphaValue = 1
+            shadow.animator().alphaValue = 1
         }
     }
 
@@ -244,11 +288,13 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
             context.duration = 0.1
             context.timingFunction = CAMediaTimingFunction(name: .easeIn)
             panel.animator().alphaValue = 0
+            shadow.animator().alphaValue = 0
         }, completionHandler: { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 // フェード中に開き直していたら（show() が isHiding を戻している）、隠さない
                 guard self.isHiding else { return }
+                self.detachShadow()
                 self.panel.orderOut(nil)
                 self.isHiding = false
                 // 次に開いたときのために、検索欄にフォーカスを戻しておく
@@ -265,15 +311,15 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         guard let visible = screen?.visibleFrame else { return }
-        let frame = WindowPlacement.frame(
-            in: visible,
+        let body = WindowPlacement.frame(
+            in: HistoryFrameLayout.bodyArea(in: visible),
             savedSize: AppSettings.historyWindowSize,
             savedOffset: AppSettings.historyWindowOffset,
-            defaultSize: Self.defaultSize(for: textSize),
-            minSize: Self.minSize(for: textSize)
+            defaultSize: Self.bodyDefaultSize(for: textSize),
+            minSize: Self.bodyMinSize(for: textSize)
         )
         isPositioning = true
-        panel.setFrame(frame, display: false)
+        panel.setFrame(HistoryFrameLayout.window(aroundBody: body), display: false)
         isPositioning = false
     }
 
@@ -288,13 +334,21 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
 
     private func saveFrame() {
         guard !isPositioning, panel.isVisible, !isHiding, let screen = panel.screen?.visibleFrame else { return }
-        let frame = panel.frame
-        AppSettings.historyWindowSize = frame.size
-        AppSettings.historyWindowOffset = WindowPlacement.offset(of: frame, in: screen)
+        // 覚えるのは角丸の本体の大きさ（余白を付ける前に覚えた大きさと同じ意味のまま）
+        let body = HistoryFrameLayout.body(in: panel.frame)
+        AppSettings.historyWindowSize = body.size
+        AppSettings.historyWindowOffset = WindowPlacement.offset(of: body, in: HistoryFrameLayout.bodyArea(in: screen))
     }
 
     func windowDidMove(_ notification: Notification) {
         saveFrame()
+    }
+
+    // 大きさを変えている間も、影をウインドウに合わせる
+    func windowDidResize(_ notification: Notification) {
+        if shadow.parent === panel {
+            shadow.follow(panel)
+        }
     }
 
     func windowDidEndLiveResize(_ notification: Notification) {
