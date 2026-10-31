@@ -9,7 +9,7 @@ import SwiftUI
 /// - 1行目: 検索欄
 /// - 2行目: 種類の絞り込み
 /// - 本体: 左に履歴のリスト、右に大きなプレビュー（⌘I で詳細）
-/// - 一番下: 選んだ項目への操作ボタン
+/// - 右下: 選んだ項目への操作ボタン。一覧とプレビューの上に浮く Liquid Glass の帯
 ///
 /// FIFO / LIFO 中も同じ履歴を出す。キューは画面の隅の小さいウインドウ（`QueueHUDController`）で見る
 struct HistoryView: View {
@@ -17,6 +17,8 @@ struct HistoryView: View {
     @ObservedObject var appearance: AppearanceSettings
     @FocusState private var searchFocused: Bool
     @Environment(\.colorScheme) private var colorScheme
+    /// 右下に浮く操作ボタンの帯の高さ。一覧とプレビューの下端を、この分だけ帯に隠れない所まで送れるようにする
+    @State private var actionBarHeight: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,6 +29,7 @@ struct HistoryView: View {
                 .padding(.bottom, 12)
             HStack(spacing: 12) {
                 ItemListView(model: model)
+                    .safeAreaPadding(.bottom, actionBarClearance)
                     .frame(width: appearance.historyTextSize.scaled(350))
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -35,10 +38,19 @@ struct HistoryView: View {
                             .fill(Color.primary.opacity(0.06))
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）
+                    .padding(.bottom, previewBottomClearance)
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.horizontal, Self.contentHorizontalPadding)
+            .padding(.bottom, Self.contentBottomPadding)
+        }
+        // 帯は一覧とプレビューの上に浮かせ、下の行はガラス越しに透けて見える（requirements.md §3.3、2026-10-30 決定）
+        .overlay(alignment: .bottomTrailing) {
             ActionBar(model: model)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionBarHeight = $0 }
+                // 右端はプレビューの地の右端にそろえる（モック「Liquid Glass 3 案」の B では、どちらも 10px でそろっている）
+                .padding(.trailing, Self.contentHorizontalPadding)
+                .padding(.bottom, ActionBar.margin)
         }
         .frame(
             minWidth: minSize.width, maxWidth: .infinity,
@@ -51,6 +63,28 @@ struct HistoryView: View {
         .onChange(of: model.focusToken) {
             searchFocused = true
         }
+    }
+
+    /// 一覧とプレビューの左右の余白
+    private static let contentHorizontalPadding: CGFloat = 12
+    /// 一覧とプレビューの下の余白（ウインドウの下端から）。一覧は帯の下まで続く（モック B の 6px、2026-10-31 画面のデザイン）
+    private static let contentBottomPadding: CGFloat = 6
+    /// 帯と、いちばん下までスクロールした一覧の行との間
+    private static let actionBarGap: CGFloat = 6
+    /// 帯と、プレビューの地の下端との間（モック B: プレビューの下 56px − 帯の下 10px − 帯の高さ 30px）
+    private static let previewGap: CGFloat = 16
+
+    /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
+    /// 一覧は帯の下までスクロールでき（行が透けて見える）、いちばん下までスクロールすれば帯の上に出る。↓ で選んだ行も、帯に隠れない所まで送る。
+    private var actionBarClearance: CGFloat {
+        guard actionBarHeight > 0 else { return 0 }
+        return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.actionBarGap)
+    }
+
+    /// プレビューの地を終える高さ（ウインドウの下端から数えると、帯の下の間 + 帯の高さ + previewGap）
+    private var previewBottomClearance: CGFloat {
+        guard actionBarHeight > 0 else { return 0 }
+        return max(0, ActionBar.margin + actionBarHeight - Self.contentBottomPadding + Self.previewGap)
     }
 
     private var minSize: NSSize {
@@ -133,21 +167,32 @@ private struct Toolbar: View {
     }
 }
 
-// MARK: - 操作ボタン（一番下の帯）
+// MARK: - 操作ボタン（右下に浮く帯）
 
 /// 選んだ項目への操作ボタン。上の段（探す）と場所を分け、絞り込みのボタンと取り違えにくくする。
 /// ピン留めと削除の入口もここに置く（右クリックのメニューは作らない。2026-10-18 決定）
+///
+/// 6 つを 1 本の両端が丸い Liquid Glass の帯にまとめ、ウインドウの右下に浮かせる（requirements.md §3.3、2026-10-30 決定）。
+/// ガラスの見え方は Mac のシステム設定（外観の Liquid Glass、透明度を下げる）に従い、Kasane の不透明度とぼかしは効かない。
+/// ペーストだけはガラスにせず、アクセントの色で塗る（ガラスに色を付けると、透けて設定の色からずれるため）
 private struct ActionBar: View {
+    /// ウインドウの下からの間
+    static let margin: CGFloat = 10
+
     @ObservedObject var model: HistoryModel
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var tooltips = TooltipState()
 
+    /// 帯のガラスに付ける色。モック B の帯の地（ダーク rgba(60,62,70,0.45)、ライト rgba(255,255,255,0.45)）
+    private static func barTint(_ scheme: ColorScheme) -> Color {
+        scheme == .dark
+            ? Color(red: 60 / 255, green: 62 / 255, blue: 70 / 255).opacity(0.45)
+            : Color.white.opacity(0.45)
+    }
+
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
-        HStack(spacing: 6) {
-            // 空いている所をつかんでもウインドウを動かせる
-            WindowDragArea()
-                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 26, maxHeight: 26)
+        HStack(spacing: 4) {
             Button("ペースト ⏎") { model.activateSelection(.paste) }
                 .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
@@ -184,15 +229,22 @@ private struct ActionBar: View {
             .buttonStyle(ActionStyle(isOn: model.showsDetails))
             .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
         }
-        .padding(.vertical, 9)
-        .padding(.horizontal, 16)
-        // 上端の線は背景に置く（手前に置くと、ボタンの上に出す説明を横切る）
-        .background(alignment: .top) {
-            Rectangle()
-                .fill(colorScheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.08))
-                .frame(height: 1)
+        .padding(4)
+        // 地・縁・光の線・影は、Kazuya さんが OK したモック「Liquid Glass 3 案」の B の値に合わせる（2026-10-31）
+        .glassEffect(.regular.tint(Self.barTint(colorScheme)), in: Capsule())
+        .overlay {
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.28 : 0.75), lineWidth: 1)
         }
-        .background(WindowDragArea())
+        .overlay(alignment: .top) {
+            // 上の内側の光の線
+            Capsule()
+                .strokeBorder(Color.white.opacity(colorScheme == .dark ? 0.35 : 0.9), lineWidth: 1)
+                .mask(alignment: .top) { Rectangle().frame(height: 2) }
+                .padding(1)
+        }
+        .shadow(color: .black.opacity(0.28), radius: 9, y: 6)
+        .environment(\.actionHoverReset, model.focusToken)
         // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに消す
         .onChange(of: model.focusToken) { tooltips.dismiss() }
     }
@@ -291,7 +343,7 @@ private struct TooltipLabel: View {
     let text: String
 
     var body: some View {
-        // ボタンの文字（`ActionStyle`）と同じ 12pt
+        // 12pt。モック B に説明の絵は無いので、帯の前の大きさのまま（ボタンの文字は 11pt）
         Text(text)
             .font(.system(size: 12))
             .foregroundStyle(.primary)
@@ -357,40 +409,61 @@ private extension Color {
 
 /// ペーストなどの操作ボタン。
 /// ペーストだけをアクセントで塗り、太字も残す。塗られたボタンが 1 つだけなら、Mac の「⏎ で押されるボタン」と同じに見える
-/// （2026-10-22 決定。accent-usage-2026-10-22.md §4。色の見分けにくい人にも太字で主な操作と分かるように）
+/// （2026-10-22 決定。accent-usage-2026-10-22.md §4。色の見分けにくい人にも太字で主な操作と分かるように）。
+/// ほかのボタンは帯のガラスの上に文字だけを置き、マウスを載せた間だけ薄く塗る。形は帯に合わせて両端を丸くする
 private struct ActionStyle: ButtonStyle {
     var isPrimary = false
     /// ピン留め中や ⌘I の詳細がオンのとき、絞り込みの選択中と同じく白く浮かせる
     var isOn = false
-    @Environment(\.kasaneAccent) private var accent
 
     func makeBody(configuration: Configuration) -> some View {
+        ActionButtonBody(configuration: configuration, isPrimary: isPrimary, isOn: isOn)
+    }
+}
+
+private struct ActionButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let isPrimary: Bool
+    let isOn: Bool
+    @State private var isHovered = false
+    @Environment(\.kasaneAccent) private var accent
+    @Environment(\.actionHoverReset) private var hoverReset
+
+    var body: some View {
         configuration.label
-            .font(.system(size: 12, weight: isPrimary ? .semibold : .regular))
-            .padding(.horizontal, 10)
+            // 11pt（モック B の 10px を、一覧の題の文字との釣り合いで Mac の標準の段にした。2026-10-31 画面のデザイン）。
+            // ペーストの太字は 600（2026-10-18 の決まり）
+            .font(.system(size: 11, weight: isPrimary ? .semibold : .regular))
+            // 余白はモック「Liquid Glass 3 案」の B の値（ペースト 9、ほか 8。縦 5）
+            .padding(.horizontal, isPrimary ? 9 : 8)
             .padding(.vertical, 5)
             .foregroundStyle(isPrimary ? accent.foreground : (isOn ? Color.raisedText : .primary))
             .background {
-                let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
                 if isPrimary {
-                    shape.fill(accent.color)
+                    Capsule().fill(accent.color)
                 } else if isOn {
-                    RaisedFill(shape: shape)
-                } else {
-                    ActionFill(shape: shape)
+                    RaisedFill(shape: Capsule())
+                } else if isHovered {
+                    Capsule().fill(Color.primary.opacity(0.08))
                 }
             }
+            .contentShape(Capsule())
+            .onHover { isHovered = $0 }
+            // 閉じたときにマウスが載ったままだと、離れたことが伝わらない。開き直したときに塗りを消す
+            .onChange(of: hoverReset) { isHovered = false }
             .opacity(configuration.isPressed ? 0.7 : 1)
     }
 }
 
-/// 操作ボタンのふだんの背景（ライトは黒 7%、ダークは白 12%）
-private struct ActionFill<S: Shape>: View {
-    let shape: S
-    @Environment(\.colorScheme) private var colorScheme
+/// 履歴ウインドウを開き直すたびに変わる値（`HistoryModel.focusToken`）。操作ボタンのマウスの塗りを消すのに使う
+private struct ActionHoverResetKey: EnvironmentKey {
+    static let defaultValue = 0
+}
 
-    var body: some View {
-        shape.fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.07))
+private extension EnvironmentValues {
+    var actionHoverReset: Int {
+        get { self[ActionHoverResetKey.self] }
+        set { self[ActionHoverResetKey.self] = newValue }
     }
 }
 
