@@ -19,8 +19,8 @@ public enum HistoryFrameLayout {
     /// その 3 倍とずらした分で見えなくなる
     public static let shadowExtent: CGFloat = shadowOffsetY + shadowBlur * 1.5
 
-    /// 角丸の外に残す、ほとんど透明な余白。端をつかんで大きさを変える所の、見える縁の外側の分
-    public static let resizeMargin: CGFloat = 3
+    /// 角丸の外に残す、ほとんど透明な余白。端をつかんで大きさを変える所の、見える縁の外側の分（外 3pt の所がウインドウの中に入るよう 4）
+    public static let resizeMargin: CGFloat = 4
     /// 端をつかめる所の幅（ウインドウの端から内へ）。見える縁の外 3pt から内 3pt まで。
     /// 縁なしのウインドウは、Mac に任せるとウインドウの端の内側 3pt ほどでしかつかめず、角の透明な所では斜めに大きさを変えられない。
     /// 前のシステムのウインドウは見える縁の外 3pt から内 3pt でつかめた（2026-10-31、CI の Mac で 1pt ずつ測った）ので、自分でつかむ所を作って合わせる
@@ -66,10 +66,10 @@ public enum HistoryFrameLayout {
             result.insert(nearBottom ? .bottom : .top)
             return result
         }
-        if point.x < resizeEdge { result.insert(.left) }
-        if point.x > size.width - resizeEdge { result.insert(.right) }
-        if point.y < resizeEdge { result.insert(.bottom) }
-        if point.y > size.height - resizeEdge { result.insert(.top) }
+        if point.x <= resizeEdge { result.insert(.left) }
+        if point.x >= size.width - resizeEdge { result.insert(.right) }
+        if point.y <= resizeEdge { result.insert(.bottom) }
+        if point.y >= size.height - resizeEdge { result.insert(.top) }
         return result
     }
 
