@@ -170,7 +170,9 @@ struct AppearanceSettingsView: View {
                     .frame(width: 52)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("\(title)（数値）")
+                // 単位はモック（10/24 に Kazuya さんが選んだ版）のとおり、外側の 15 を受け継ぐ灰の文字（2026-10-31 画面のデザインの決め V9）
                 Text(unit)
+                    .font(.system(size: SettingsFont.item))
                     .frame(width: 18, alignment: .leading)
                     .foregroundStyle(SettingsColor.sub)
             }
