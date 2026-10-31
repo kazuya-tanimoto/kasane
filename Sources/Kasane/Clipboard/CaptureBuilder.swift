@@ -19,6 +19,8 @@ enum CaptureBuilder {
                 kind: .file, title: names, text: paths,
                 primaryData: Data(paths.utf8), representations: raw.representations
             )
+            // すべてが画像のファイルなら「画像」の絞り込みにも入れる（行のアイコンと種類の文字は「ファイル」のまま）
+            capture.isImageFile = FileKinds.areAllImages(paths: raw.fileURLs.map(\.path))
         } else if let string = raw.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let kind: ClipKind
             if isWebURL(string) {
@@ -55,12 +57,8 @@ enum CaptureBuilder {
     }
 
     static func isWebURL(_ text: String) -> Bool {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.contains(where: \.isWhitespace),
-              let url = URL(string: trimmed),
-              let scheme = url.scheme?.lowercased()
-        else { return false }
-        return ["http", "https"].contains(scheme) && url.host != nil
+        // URL のタイトルを取りに行くかの判定と同じものを使う
+        LinkPreviewPolicy.webURL(text) != nil
     }
 
     static func imageInfo(_ data: Data) -> (thumbnail: Data?, width: Int?, height: Int?) {

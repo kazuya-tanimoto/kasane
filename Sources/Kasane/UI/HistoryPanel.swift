@@ -235,6 +235,7 @@ final class HistoryPanelController: NSObject, NSWindowDelegate {
         }
         isHiding = true
         removeKeyMonitor()
+        model.didHide()
         // 検索欄にフォーカスがあるままフェードすると、2 回に 1 回ほど、隠す処理（orderOut）が
         // 約 0.5 秒止まり、薄れかけたウインドウが残って見える（2026-10-17、Mac で計測）。
         // フォーカスを外してからフェードすると起きなかったので、外してから閉じる（隠したあとで戻す）

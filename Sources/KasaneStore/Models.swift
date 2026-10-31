@@ -37,6 +37,8 @@ public struct ClipItem: Codable, Sendable, Hashable, Identifiable, FetchableReco
     public var lastPastedAt: Date?
     public var isPinned: Bool
     public var pinnedAt: Date?
+    /// ファイルの行で、すべてのファイルが画像か（「画像」の絞り込みに入れる。2026-10-23）
+    public var isImageFile: Bool = false
 
     public mutating func didInsert(_ inserted: InsertionSuccess) {
         id = inserted.rowID
@@ -72,6 +74,8 @@ public struct ClipSummary: Sendable, Hashable, Identifiable {
     public var pasteCount: Int
     public var isPinned: Bool
     public var pinnedAt: Date?
+    /// ファイルの行で、すべてのファイルが画像か
+    public var isImageFile: Bool
 
     public init(_ item: ClipItem) {
         id = item.id ?? -1
@@ -83,6 +87,7 @@ public struct ClipSummary: Sendable, Hashable, Identifiable {
         pasteCount = item.pasteCount
         isPinned = item.isPinned
         pinnedAt = item.pinnedAt
+        isImageFile = item.isImageFile
     }
 }
 
@@ -112,6 +117,8 @@ public struct Capture: Sendable {
     public var thumbnail: Data?
     public var pixelWidth: Int?
     public var pixelHeight: Int?
+    /// ファイルで、すべてのファイルが画像か（FileKinds.areAllImages）
+    public var isImageFile = false
 
     public init(
         kind: ClipKind,
@@ -187,4 +194,46 @@ enum ContentHash {
         }
         return String(format: "%016llx%016llx-%llx", h1, h2, UInt64(data.count))
     }
+}
+
+/// URL のページのタイトルと画像（保存したもの）
+public struct LinkPreview: Sendable, Equatable {
+    /// 保存する画像のファイル（縮小・書き出しは呼び出し側）
+    public struct ImageFile: Sendable, Equatable {
+        public var data: Data
+        /// "png" か "jpg"
+        public var fileExtension: String
+
+        public init(data: Data, fileExtension: String) {
+            self.data = data
+            self.fileExtension = fileExtension
+        }
+    }
+
+    public var title: String?
+    public var icon: Data?
+    public var image: Data?
+    /// 取りに行った日時（取れなかったときも）
+    public var attemptedAt: Date
+    public var succeeded: Bool
+
+    public init(title: String?, icon: Data?, image: Data?, attemptedAt: Date, succeeded: Bool) {
+        self.title = title
+        self.icon = icon
+        self.image = image
+        self.attemptedAt = attemptedAt
+        self.succeeded = succeeded
+    }
+}
+
+struct LinkPreviewRecord: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "linkPreview"
+
+    var itemID: Int64
+    var title: String?
+    /// blobs ディレクトリからの相対パス
+    var iconPath: String?
+    var imagePath: String?
+    var attemptedAt: Date
+    var succeeded: Bool
 }

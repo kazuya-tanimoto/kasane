@@ -1,7 +1,6 @@
 import AppKit
 import KasaneCore
 import KasaneStore
-import LinkPresentation
 import PDFKit
 import Quartz
 import SwiftUI
@@ -11,6 +10,7 @@ import UniformTypeIdentifiers
 struct PreviewPane: View {
     let content: PreviewContent?
     let showsDetails: Bool
+    let links: LinkPrefetcher
     @Environment(\.textSize) private var size
 
     var body: some View {
@@ -45,7 +45,7 @@ struct PreviewPane: View {
         case .text:
             TextPreview(text: content.item.text ?? "")
         case .url:
-            URLPreview(urlString: content.item.text ?? "")
+            URLPreview(itemID: content.item.id ?? -1, urlString: content.item.text ?? "", links: links)
         case .image:
             if let image = content.image {
                 Image(nsImage: image)
@@ -183,11 +183,18 @@ enum RichTextPreview {
 }
 
 private struct URLPreview: View {
+    let itemID: Int64
     let urlString: String
-    @State private var title: String?
-    @State private var icon: NSImage?
-    @State private var image: NSImage?
+    @ObservedObject var links: LinkPrefetcher
     @Environment(\.textSize) private var size
+
+    /// 保存してある（または今取れた）タイトルと画像。スイッチがオフなら、保存してあっても出さない
+    private var loaded: LinkPrefetcher.Loaded? {
+        links.isEnabled ? links.loaded[itemID] : nil
+    }
+    private var title: String? { loaded?.title }
+    private var icon: NSImage? { loaded?.icon }
+    private var image: NSImage? { loaded?.image }
 
     var body: some View {
         VStack(alignment: .leading, spacing: size.scaled(12)) {
@@ -223,47 +230,10 @@ private struct URLPreview: View {
         }
         .padding(size.scaled(16))
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: urlString) {
-            // ページタイトルは、設定でオンのときに、プレビューを開いたときだけ取得する（コピーしただけでは通信しない）
-            guard AppSettings.fetchesLinkPreviews, let url = URL(string: urlString) else { return }
-            let result = await LinkTitleCache.shared.metadata(for: url)
-            title = result.title
-            icon = result.icon
-            image = result.image
+        .task(id: "\(itemID)-\(links.isEnabled)") {
+            // 保存してある結果をすぐ出す。取りに行く・取り直すのは LinkPrefetcher（選んだまま少し止まったとき）
+            await links.loadSaved(itemID: itemID)
         }
-    }
-}
-
-/// URL のページタイトルとアイコンを取得してキャッシュする
-@MainActor
-final class LinkTitleCache {
-    static let shared = LinkTitleCache()
-    typealias Metadata = (title: String?, icon: NSImage?, image: NSImage?)
-    private var cache: [URL: Metadata] = [:]
-
-    func metadata(for url: URL) async -> Metadata {
-        if let cached = cache[url] { return cached }
-        let provider = LPMetadataProvider()
-        provider.timeout = 5
-        guard let metadata = try? await provider.startFetchingMetadata(for: url) else {
-            return (nil, nil, nil)
-        }
-        let title = metadata.title
-        let icon = await Self.loadImage(metadata.iconProvider)
-        let image = await Self.loadImage(metadata.imageProvider)
-        let result = (title, icon, image)
-        cache[url] = result
-        return result
-    }
-
-    private static func loadImage(_ provider: NSItemProvider?) async -> NSImage? {
-        guard let provider else { return nil }
-        let data: Data? = await withCheckedContinuation { continuation in
-            _ = provider.loadDataRepresentation(for: UTType.image) { data, _ in
-                continuation.resume(returning: data)
-            }
-        }
-        return data.flatMap { NSImage(data: $0) }
     }
 }
 

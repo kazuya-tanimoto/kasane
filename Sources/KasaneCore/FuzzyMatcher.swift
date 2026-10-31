@@ -169,10 +169,16 @@ public enum FuzzyMatcher {
     /// 2 文字目にいちばん近いものだけを試せばよい（範囲がいちばん短くなる）。
     /// こうして 2 文字目までは欄を 1 回なめるだけで進み、3 文字目からは幅の上限までを調べる
     static func fuzzyMatch(_ pattern: [UInt16], in text: [UInt16], maxSpan: Int) -> Int? {
+        fuzzyMatchRange(pattern, in: text, maxSpan: maxSpan)?.score
+    }
+
+    /// `fuzzyMatch` と同じ所を探し、一致した範囲（語の最初の文字から最後の文字の次まで）と点数を返す。
+    /// 一致した文字に色を付けるときは、この範囲の中で前から順に語の文字を拾う（calculateScore が数える文字と同じ）
+    static func fuzzyMatchRange(_ pattern: [UInt16], in text: [UInt16], maxSpan: Int) -> (range: Range<Int>, score: Int)? {
         let m = pattern.count
         guard m > 0, text.count >= m, maxSpan >= m else { return nil }
-        return text.withUnsafeBufferPointer { t -> Int? in
-            pattern.withUnsafeBufferPointer { p -> Int? in
+        return text.withUnsafeBufferPointer { t -> (range: Range<Int>, score: Int)? in
+            pattern.withUnsafeBufferPointer { p -> (range: Range<Int>, score: Int)? in
                 let n = t.count
                 // 先に 1 回だけなめて、文字が順番どおりに含まれていなければすぐに外す（当たらない項目の大半はここで済む）
                 var found = 0
@@ -183,7 +189,7 @@ public enum FuzzyMatcher {
                 guard found == m else { return nil }
                 guard m > 1 else {
                     let at = t.firstIndex(of: p[0])!
-                    return calculateScore(p, t, at, at + 1)
+                    return (at..<(at + 1), calculateScore(p, t, at, at + 1))
                 }
                 // 1 文字目と 2 文字目が同じ字なら、見つけた 2 文字目を次の 1 文字目の候補にもする
                 let sameFirstTwo = p[0] == p[1]
@@ -223,7 +229,7 @@ public enum FuzzyMatcher {
                                 }
                                 k -= 1
                             }
-                            return calculateScore(p, t, start, end)
+                            return (start..<end, calculateScore(p, t, start, end))
                         }
                         // 欄の終わりまで見てもそろわなければ、もっと後ろから始めてもそろわない
                         if limit == n { return nil }
@@ -236,9 +242,14 @@ public enum FuzzyMatcher {
     }
 
     static func exactMatch(_ pattern: [UInt16], in text: [UInt16]) -> Int? {
+        exactMatchRange(pattern, in: text)?.score
+    }
+
+    /// 点数がいちばん高い出現の範囲と点数（同じ点数なら前の方）
+    static func exactMatchRange(_ pattern: [UInt16], in text: [UInt16]) -> (range: Range<Int>, score: Int)? {
         let m = pattern.count
         guard m > 0, text.count >= m else { return nil }
-        var best: Int?
+        var best: (range: Range<Int>, score: Int)?
         for start in 0...(text.count - m) where text[start] == pattern[0] {
             var ok = true
             for k in 1..<m where text[start + k] != pattern[k] {
@@ -249,10 +260,22 @@ public enum FuzzyMatcher {
                 let s = text.withUnsafeBufferPointer { t in
                     pattern.withUnsafeBufferPointer { p in calculateScore(p, t, start, start + m) }
                 }
-                if s > (best ?? Int.min) { best = s }
+                if s > (best?.score ?? Int.min) { best = (start..<(start + m), s) }
             }
         }
         return best
+    }
+
+    /// 範囲の中で、語の文字を前から順に拾った位置
+    static func matchedPositions(_ pattern: [UInt16], in text: [UInt16], range: Range<Int>) -> [Int] {
+        var positions: [Int] = []
+        positions.reserveCapacity(pattern.count)
+        var pi = 0
+        for index in range where pi < pattern.count && text[index] == pattern[pi] {
+            positions.append(index)
+            pi += 1
+        }
+        return positions
     }
 
     enum CharClass { case white, delimiter, nonWord, number, letter }

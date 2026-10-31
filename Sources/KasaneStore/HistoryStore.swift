@@ -80,6 +80,37 @@ public final class HistoryStore: @unchecked Sendable {
                 try db.execute(sql: "UPDATE item SET title = ? WHERE id = ?", arguments: [entry.title, entry.id])
             }
         }
+        // 「画像」の絞り込みに、画像のファイルの行も入れる（2026-10-23）。すべてのファイルが画像かを列に持ち、
+        // すでに保存しているファイルの行も 1 回だけ判定する。判定は拡張子からで、ファイルは見に行かない
+        migrator.registerMigration("v3-image-file") { db in
+            try db.alter(table: "item") { t in
+                t.add(column: "isImageFile", .boolean).notNull().defaults(to: false)
+            }
+            var imageIDs: [Int64] = []
+            let rows = try Row.fetchCursor(db, sql: "SELECT id, text FROM item WHERE kind = 'file' AND text IS NOT NULL")
+            while let row = try rows.next() {
+                let text: String = row["text"]
+                let paths = text.split(separator: "\n").map(String.init)
+                if FileKinds.areAllImages(paths: paths) {
+                    imageIDs.append(row["id"])
+                }
+            }
+            for id in imageIDs {
+                try db.execute(sql: "UPDATE item SET isImageFile = 1 WHERE id = ?", arguments: [id])
+            }
+        }
+        // URL のタイトルと画像を保存して、再起動のあともすぐ出す（2026-10-23。design/link-prefetch-implementation-2026-10-23.md）。
+        // 同じ URL は 1 件の項目にまとまるので、項目ごとに持つ。項目を消すと一緒に消える
+        migrator.registerMigration("v4-link-preview") { db in
+            try db.create(table: "linkPreview") { t in
+                t.primaryKey("itemID", .integer).references("item", onDelete: .cascade)
+                t.column("title", .text)
+                t.column("iconPath", .text)
+                t.column("imagePath", .text)
+                t.column("attemptedAt", .datetime).notNull()
+                t.column("succeeded", .boolean).notNull()
+            }
+        }
         return migrator
     }
 
@@ -117,6 +148,7 @@ public final class HistoryStore: @unchecked Sendable {
                         existing.title = capture.title
                         existing.text = capture.text
                         existing.romaji = capture.romaji
+                        existing.isImageFile = capture.isImageFile
                         existing.thumbnail = capture.thumbnail ?? existing.thumbnail
                         existing.sourceBundleID = capture.sourceBundleID ?? existing.sourceBundleID
                         existing.sourceAppName = capture.sourceAppName ?? existing.sourceAppName
@@ -146,7 +178,8 @@ public final class HistoryStore: @unchecked Sendable {
                         pasteCount: 0,
                         lastPastedAt: nil,
                         isPinned: false,
-                        pinnedAt: nil
+                        pinnedAt: nil,
+                        isImageFile: capture.isImageFile
                     )
                     try item.insert(db)
                     isNew = true
@@ -192,7 +225,7 @@ public final class HistoryStore: @unchecked Sendable {
         guard !ids.isEmpty else { return ([], []) }
         var files: [String] = []
         for id in ids {
-            files += try deleteRepresentations(itemID: id, db: db)
+            files += try deleteItemFiles(itemID: id, db: db)
         }
         _ = try ClipItem.deleteAll(db, keys: ids)
         return (ids, files)
@@ -203,6 +236,17 @@ public final class HistoryStore: @unchecked Sendable {
             SELECT filePath FROM representation WHERE itemID = ? AND filePath IS NOT NULL
             """, arguments: [itemID])
         try db.execute(sql: "DELETE FROM representation WHERE itemID = ?", arguments: [itemID])
+        return files
+    }
+
+    /// 項目を消すときに一緒に消すファイル（型ごとのデータと、URL の画像）。表の行は項目と一緒に消える
+    private func deleteItemFiles(itemID: Int64, db: Database) throws -> [String] {
+        var files = try deleteRepresentations(itemID: itemID, db: db)
+        if let row = try Row.fetchOne(db, sql: "SELECT iconPath, imagePath FROM linkPreview WHERE itemID = ?", arguments: [itemID]) {
+            let icon: String? = row["iconPath"]
+            let image: String? = row["imagePath"]
+            files += [icon, image].compactMap { $0 }
+        }
         return files
     }
 
@@ -271,7 +315,7 @@ public final class HistoryStore: @unchecked Sendable {
         let rows = try dbQueue.read { db in
             try Row.fetchAll(db, sql: """
                 SELECT id, kind, title, substr(text, 1, \(SearchCandidate.maxFieldLength)) AS searchText,
-                       romaji, sourceBundleID, sourceAppName, copiedAt, pasteCount, isPinned, pinnedAt
+                       romaji, sourceBundleID, sourceAppName, copiedAt, pasteCount, isPinned, pinnedAt, isImageFile
                 FROM item ORDER BY \(order)
                 """)
         }
@@ -287,7 +331,8 @@ public final class HistoryStore: @unchecked Sendable {
                 copiedAt: row["copiedAt"],
                 pasteCount: row["pasteCount"],
                 isPinned: row["isPinned"],
-                pinnedAt: row["pinnedAt"]
+                pinnedAt: row["pinnedAt"],
+                isImageFile: row["isImageFile"]
             )
             let searchText: String? = row["searchText"]
             return (summary, SearchCandidate(id: id, text: searchText ?? title, romaji: row["romaji"]))
@@ -337,7 +382,7 @@ public final class HistoryStore: @unchecked Sendable {
 
     public func delete(itemID: Int64) throws {
         let files = try dbQueue.write { db -> [String] in
-            let files = try deleteRepresentations(itemID: itemID, db: db)
+            let files = try deleteItemFiles(itemID: itemID, db: db)
             _ = try ClipItem.deleteOne(db, key: itemID)
             return files
         }
@@ -353,7 +398,7 @@ public final class HistoryStore: @unchecked Sendable {
             )
             var files: [String] = []
             for id in ids {
-                files += try deleteRepresentations(itemID: id, db: db)
+                files += try deleteItemFiles(itemID: id, db: db)
             }
             _ = try ClipItem.deleteAll(db, keys: ids)
             return (ids, files)
@@ -371,10 +416,100 @@ public final class HistoryStore: @unchecked Sendable {
     }
 }
 
+// MARK: - URL のタイトルと画像
+
+extension HistoryStore {
+    /// 保存してある URL のタイトルと画像。画像はファイルから読む
+    public func linkPreview(itemID: Int64) throws -> LinkPreview? {
+        guard let record = try dbQueue.read({ db in try LinkPreviewRecord.fetchOne(db, key: itemID) }) else { return nil }
+        return LinkPreview(
+            title: record.title,
+            icon: record.iconPath.flatMap { try? Data(contentsOf: blobDirectory.appendingPathComponent($0)) },
+            image: record.imagePath.flatMap { try? Data(contentsOf: blobDirectory.appendingPathComponent($0)) },
+            attemptedAt: record.attemptedAt,
+            succeeded: record.succeeded
+        )
+    }
+
+    /// 取りに行った日時だけ（取りに行くかを決めるため。画像は読まない）
+    public func linkPreviewAttempt(itemID: Int64) throws -> Date? {
+        try dbQueue.read { db in
+            try Date.fetchOne(db, sql: "SELECT attemptedAt FROM linkPreview WHERE itemID = ?", arguments: [itemID])
+        }
+    }
+
+    /// 取れた結果を保存する。画像が変わるときは、新しいファイルを書く → 行を書き換える → 古いファイルを消す、の順にする
+    /// （途中で止まっても、行が指すファイルが必ずある）。取っている間に項目が消されていたら、書いたファイルも消して何もしない。
+    /// keepsIcon・keepsImage は、ページにはあったのに読めなかったとき。前に取れていたものを残す
+    public func saveLinkPreview(
+        itemID: Int64, title: String?, icon: LinkPreview.ImageFile?, image: LinkPreview.ImageFile?, at date: Date,
+        keepsIcon: Bool = false, keepsImage: Bool = false
+    ) throws {
+        let linkDirectory = blobDirectory.appendingPathComponent(Self.linkDirectoryName, isDirectory: true)
+        try fileManager.createDirectory(at: linkDirectory, withIntermediateDirectories: true)
+        var written: [String] = []
+        func write(_ file: LinkPreview.ImageFile?, _ kind: String) throws -> String? {
+            guard let file else { return nil }
+            let name = "\(Self.linkDirectoryName)/\(itemID)-\(kind)-\(UUID().uuidString).\(file.fileExtension)"
+            try file.data.write(to: blobDirectory.appendingPathComponent(name))
+            written.append(name)
+            return name
+        }
+        let old: [String]
+        do {
+            let iconPath = try write(icon, "icon")
+            let imagePath = try write(image, "image")
+            old = try dbQueue.write { db -> [String] in
+                guard try ClipItem.exists(db, key: itemID) else { throw LinkPreviewError.itemDeleted }
+                let previous = try LinkPreviewRecord.fetchOne(db, key: itemID)
+                let newIconPath = keepsIcon && iconPath == nil ? previous?.iconPath : iconPath
+                let newImagePath = keepsImage && imagePath == nil ? previous?.imagePath : imagePath
+                let record = LinkPreviewRecord(
+                    itemID: itemID, title: title, iconPath: newIconPath, imagePath: newImagePath,
+                    attemptedAt: date, succeeded: true
+                )
+                try record.save(db)
+                // 書き換えて使わなくなった古いファイルだけを消す
+                return [
+                    previous?.iconPath == newIconPath ? nil : previous?.iconPath,
+                    previous?.imagePath == newImagePath ? nil : previous?.imagePath,
+                ].compactMap { $0 }
+            }
+        } catch {
+            written.forEach(removeBlob)
+            if case LinkPreviewError.itemDeleted = error { return }
+            throw error
+        }
+        old.forEach(removeBlob)
+    }
+
+    /// 取れなかったことを記録する。前に取れていたタイトルと画像はそのまま残す（1 日たつまで取り直さないため）
+    public func markLinkPreviewFailed(itemID: Int64, at date: Date) throws {
+        try dbQueue.write { db in
+            guard try ClipItem.exists(db, key: itemID) else { return }
+            if var record = try LinkPreviewRecord.fetchOne(db, key: itemID) {
+                record.attemptedAt = date
+                record.succeeded = false
+                try record.update(db)
+            } else {
+                try LinkPreviewRecord(
+                    itemID: itemID, title: nil, iconPath: nil, imagePath: nil, attemptedAt: date, succeeded: false
+                ).insert(db)
+            }
+        }
+    }
+
+    static let linkDirectoryName = "links"
+}
+
+enum LinkPreviewError: Error {
+    case itemDeleted
+}
+
 extension ClipSummary {
     public init(
         id: Int64, kind: ClipKind, title: String, sourceBundleID: String?, sourceAppName: String?,
-        copiedAt: Date, pasteCount: Int, isPinned: Bool, pinnedAt: Date?
+        copiedAt: Date, pasteCount: Int, isPinned: Bool, pinnedAt: Date?, isImageFile: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -385,5 +520,6 @@ extension ClipSummary {
         self.pasteCount = pasteCount
         self.isPinned = isPinned
         self.pinnedAt = pinnedAt
+        self.isImageFile = isImageFile
     }
 }
