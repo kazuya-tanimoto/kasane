@@ -169,7 +169,7 @@ private struct LoginItemRow: View {
                     .toggleStyle(.checkbox)
                     .labelsHidden()
                 Text("ログイン時に起動")
-                    .font(.headline)
+                    .font(OnboardingText.rowTitle)
                     .onTapGesture { checked.toggle() }
                     .accessibilityHidden(true)
             }
@@ -187,9 +187,13 @@ private struct LoginItemRow: View {
     }
 }
 
-/// 案内の行の説明の文字（モック「初回の案内」: 行の高さを文字の 1.5 倍）
+/// 案内の行の文字（モック「初回の案内」、design-fix の queue-band-scale-shadow-2026-10-31.md の 3）
 @MainActor
 private enum OnboardingText {
+    /// 行の題。モック 14px・600。.headline は Mac で 13pt Bold なので使わない（HIG Typography の macOS の表）
+    static let rowTitle = Font.system(size: 14, weight: .semibold)
+    /// 「許可されていません」など。モック 11px・600。.caption は Mac で 10pt なので使わない
+    static let status = Font.system(size: 11, weight: .semibold)
     /// .lineSpacing は標準の行の高さに足す値なので、1.5 倍との差を足す（.callout は macOS で 12pt、1.5 倍で 18pt）
     static let descriptionLineSpacing: CGFloat = {
         let font = NSFont.preferredFont(forTextStyle: .callout)
@@ -221,7 +225,7 @@ private struct PermissionRow<Actions: View>: View {
                 .font(.system(size: 24))
                 .foregroundStyle(granted ? Color.green : Color.secondary)
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.headline)
+                Text(title).font(OnboardingText.rowTitle)
                 Text(detail)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -229,7 +233,7 @@ private struct PermissionRow<Actions: View>: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 8) {
                     Text(status)
-                        .font(.caption.weight(.medium))
+                        .font(OnboardingText.status)
                         .foregroundStyle(granted ? Color.green : Color.orange)
                     Spacer()
                     if !granted { actions }
