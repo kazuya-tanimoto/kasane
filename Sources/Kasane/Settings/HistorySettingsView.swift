@@ -58,21 +58,21 @@ struct HistorySettingsView: View {
                 }
 
                 SettingsHeader("履歴に残さないアプリ")
-                SettingsCaption("追加したアプリでコピーした内容は、履歴に残しません。パスワードなど、コピー元のアプリが残さないよう指定したものは、追加しなくても残しません。")
+                // モック: 見出しとの間は 8、行の高さは 1.6 倍
+                SettingsCaption("追加したアプリでコピーした内容は、履歴に残しません。パスワードなど、コピー元のアプリが残さないよう指定したものは、追加しなくても残しません。", lineHeight: 1.6)
                     .padding(.horizontal, 4)
+                    .padding(.top, 8 - SettingsLayout.rowSpacing)
                 excludedAppsList
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     // ピン留め以外が 0 件のときは押せなくする（押しても何も消えないため）
-                    Button {
+                    Button("履歴を削除…") {
                         model.actions.clearHistory()
-                    } label: {
-                        Text("履歴を削除…").foregroundStyle(model.hasUnpinnedHistory ? Color.red : Color.secondary)
                     }
+                    .buttonStyle(SettingsButtonStyle(tint: SettingsColor.danger))
                     .disabled(!model.hasUnpinnedHistory)
                     SettingsCaption("ピン留めした項目と、FIFO / LIFO のキューは削除されません")
                 }
-                .padding(.top, 14)
                 .padding(.horizontal, 4)
             }
         }
@@ -88,13 +88,18 @@ struct HistorySettingsView: View {
                 }
             }
             .frame(height: Self.appRowHeight * Self.visibleAppRows)
-            .overlay {
+            .overlay(alignment: .top) {
+                // モック: 上から 64 の所に、真ん中にそろえて出す
                 if model.excludedApps.isEmpty {
                     SettingsCaption("アプリはまだありません。＋ で追加できます")
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 64)
                 }
             }
-            Divider()
-            HStack(spacing: 0) {
+            SettingsDivider()
+            // モック: ＋ と − を間 2 で並べ、間に線は引かない。帯の地は箱より一段沈んだ色
+            HStack(spacing: 2) {
                 Menu {
                     let running = model.runningAppsToAdd()
                     if !running.isEmpty {
@@ -118,40 +123,43 @@ struct HistorySettingsView: View {
                         model.chooseAppToAdd()
                     }
                 } label: {
-                    Image(systemName: "plus")
-                        .frame(width: 24, height: 20)
+                    // モック: 16pt の「＋」「−」を本文の色で
+                    Text("＋")
+                        .font(.system(size: 16))
+                        .foregroundStyle(SettingsColor.text)
+                        .frame(width: 26, height: 22)
                 }
                 .menuStyle(.button)
                 .buttonStyle(.borderless)
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .accessibilityLabel("アプリを追加")
-                Divider().frame(height: 16)
                 Button {
                     guard let selectedApp else { return }
                     model.removeExcludedApp(bundleID: selectedApp)
                     self.selectedApp = nil
                 } label: {
-                    Image(systemName: "minus")
-                        .frame(width: 24, height: 20)
+                    Text("−")
+                        .font(.system(size: 16))
+                        .foregroundStyle(selectedApp == nil ? SettingsColor.sub : SettingsColor.text)
+                        .frame(width: 26, height: 22)
                 }
                 .buttonStyle(.borderless)
                 .disabled(selectedApp == nil)
                 .accessibilityLabel("選んだアプリを一覧から外す")
                 Spacer()
             }
-            .padding(.horizontal, 4)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(SettingsColor.footer)
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .quaternaryLabelColor).opacity(0.25)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .settingsBoxBackground()
     }
 
     /// 1 行（アイコンとアプリの名前）。バンドル ID は行に書かず、ポインタを重ねたときに出す
     private func appRow(_ app: SettingsModel.ExcludedApp) -> some View {
         let selected = selectedApp == app.bundleID
-        return HStack(spacing: 8) {
+        return HStack(spacing: 10) {
             Image(nsImage: Self.icon(for: app))
                 .resizable()
                 .frame(width: 20, height: 20)
@@ -160,7 +168,7 @@ struct HistorySettingsView: View {
                 .foregroundStyle(selected ? Color(nsColor: .alternateSelectedControlTextColor) : .primary)
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 14)
         .frame(height: Self.appRowHeight)
         .background(selected ? Color(nsColor: .selectedContentBackgroundColor) : .clear)
         .contentShape(Rectangle())

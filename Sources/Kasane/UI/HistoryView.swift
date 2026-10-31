@@ -30,12 +30,12 @@ struct HistoryView: View {
             HStack(spacing: 12) {
                 ItemListView(model: model)
                     .safeAreaPadding(.bottom, actionBarClearance)
-                    .frame(width: appearance.historyTextSize.scaled(350))
+                    .frame(width: appearance.historyTextSize.scaled(Self.listWidth))
                 PreviewPane(content: model.preview, showsDetails: model.showsDetails, links: model.links)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(Color.primary.opacity(0.06))
+                            .fill(Color.previewCard)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）
@@ -64,6 +64,9 @@ struct HistoryView: View {
             searchFocused = true
         }
     }
+
+    /// 一覧の幅（モック「C案 改訂版」の 320）
+    private static let listWidth: CGFloat = 320
 
     /// 一覧とプレビューの左右の余白
     private static let contentHorizontalPadding: CGFloat = 12
@@ -96,11 +99,12 @@ struct HistoryView: View {
     private var searchBar: some View {
         let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
         return HStack(spacing: 10) {
+            // 虫めがねと、打つ前の文は本文の色を薄めて置く（モック: 虫めがね 55%、打つ前の文 45%）
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .medium))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.primary.opacity(0.55))
                 .allowsHitTesting(false)
-            TextField("履歴を検索", text: $model.query)
+            TextField("履歴を検索", text: $model.query, prompt: Text("履歴を検索").foregroundStyle(Color.primary.opacity(0.45)))
                 .textFieldStyle(.plain)
                 .font(.system(size: 19))
                 .focused($searchFocused)
@@ -132,6 +136,14 @@ private struct TitleBar: View {
         .frame(height: 28)
         .frame(maxWidth: .infinity)
         .background(WindowDragArea())
+        // 帯の下の区切り線（1px。ライトは黒 8%、ダークは白 9%。10/18 の決定「下の区切り線…は変えない」とモック）
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.hairline)
+                .frame(height: 1)
+                .offset(y: 1)
+        }
+        .padding(.bottom, 1)
     }
 }
 
@@ -160,10 +172,11 @@ private struct Toolbar: View {
                 Button(filter.label) { model.kindFilter = filter }
                     .buttonStyle(ChipStyle(isOn: model.kindFilter == filter))
             }
-            // 空いている所をつかんでもウインドウを動かせる
+            // 空いている所をつかんでもウインドウを動かせる。高さは札に合わせる（モック: 帯の高さは札の高さ）
             WindowDragArea()
-                .frame(minWidth: 8, maxWidth: .infinity, minHeight: 28, maxHeight: 28)
+                .frame(minWidth: 8, maxWidth: .infinity, maxHeight: .infinity)
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -377,7 +390,8 @@ private struct ChipStyle: ButtonStyle {
                 if isOn {
                     RaisedFill(shape: Capsule())
                 } else {
-                    Capsule().fill(Color.primary.opacity(0.08))
+                    // 選んでいない地（モック: ライト 黒 6%、ダーク 白 9%）
+                    Capsule().fill(Color.chipOff)
                 }
             }
             .opacity(configuration.isPressed ? 0.7 : 1)
@@ -393,12 +407,45 @@ private struct RaisedFill<S: InsettableShape>: View {
         let isDark = colorScheme == .dark
         shape
             .fill(isDark ? Color.white.opacity(0.22) : Color.white)
-            .overlay(shape.strokeBorder(Color.black.opacity(isDark ? 0 : 0.08), lineWidth: 0.5))
+            .overlay(shape.strokeBorder(Color.black.opacity(isDark ? 0 : 0.06), lineWidth: 0.5))
             .shadow(color: .black.opacity(isDark ? 0.3 : 0.16), radius: 1.5, y: 1)
     }
 }
 
+extension Color {
+    /// 履歴ウインドウの区切りの線（モック: ライト 黒 8%、ダーク 白 9%）
+    static let hairline = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.09)
+            : NSColor.black.withAlphaComponent(0.08)
+    })
+    /// 灰の文字（モック t.sub: ライト #55585F、ダーク #A7AAB2）
+    static let historySub = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0xA7 / 255, green: 0xAA / 255, blue: 0xB2 / 255, alpha: 1)
+            : NSColor(srgbRed: 0x55 / 255, green: 0x58 / 255, blue: 0x5F / 255, alpha: 1)
+    })
+    /// もっと薄い灰の文字（モック t.faint: ライト #7C7F86、ダーク #868991）
+    static let historyFaint = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 0x86 / 255, green: 0x89 / 255, blue: 0x91 / 255, alpha: 1)
+            : NSColor(srgbRed: 0x7C / 255, green: 0x7F / 255, blue: 0x86 / 255, alpha: 1)
+    })
+    /// プレビューの地（モック: ライト 白 72% で周りより明るく、ダーク 白 7%）
+    static let previewCard = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.07)
+            : NSColor.white.withAlphaComponent(0.72)
+    })
+}
+
 private extension Color {
+    /// 絞り込みの選んでいない地（モック: ライト 黒 6%、ダーク 白 9%）
+    static let chipOff = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor.white.withAlphaComponent(0.09)
+            : NSColor.black.withAlphaComponent(0.06)
+    })
     /// 白く浮いた背景に載せる文字の色（ライトは #1D1D1F、ダークは白）
     static let raisedText = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
@@ -595,9 +642,11 @@ private struct EmptyState: View {
         Text(text)
             .font(.system(size: size.font(13)))
             .multilineTextAlignment(.center)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.historySub)
             .frame(maxWidth: .infinity)
+            // モック: 上下 60・左右 10
             .padding(.top, size.scaled(60))
+            .padding(.horizontal, size.scaled(10))
     }
 }
 
@@ -629,8 +678,10 @@ private struct ItemRow: View {
             ItemIcon(item: item, isSelected: isSelected)
                 .frame(width: size.scaled(44), height: size.scaled(44))
             VStack(alignment: .leading, spacing: size.scaled(3)) {
+                // 行の高さは文字の 1.35 倍（モック）
                 Text(title)
                     .font(.system(size: size.font(13)))
+                    .lineHeight(1.35, fontSize: size.font(13))
                     .lineLimit(2)
                     .truncationMode(.tail)
                 HStack(spacing: 6) {
@@ -638,16 +689,16 @@ private struct ItemRow: View {
                         .fontWeight(.semibold)
                         .foregroundStyle(Color.kindGray)
                     Text(subtitle)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.historySub)
                         .lineLimit(1)
                     Spacer(minLength: 4)
                     if item.isPinned {
                         Image(systemName: "pin.fill")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.historySub)
                     }
                     if let shortcut {
                         Text("⌘\(shortcut)")
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Color.historyFaint)
                     }
                 }
                 .font(.system(size: size.font(11)))

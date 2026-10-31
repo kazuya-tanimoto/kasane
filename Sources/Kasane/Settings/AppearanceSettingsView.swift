@@ -15,11 +15,15 @@ struct AppearanceSettingsView: View {
     }
 
     private static let sampleWidth: CGFloat = 250
+    private static let boxSpacing: CGFloat = 14
+    /// 見出しと、その下の箱の間（モック: 8）
+    private static let headerSpacing: CGFloat = 8
 
     var body: some View {
         FittingScroll {
-            HStack(alignment: .top, spacing: 20) {
-                VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+            // モック: 左の列と見本の間は 18、左の列の箱の間は 14
+            HStack(alignment: .top, spacing: 18) {
+                VStack(alignment: .leading, spacing: Self.boxSpacing) {
                     accentBox
                     background
                     historyWindow
@@ -40,7 +44,8 @@ struct AppearanceSettingsView: View {
 
     private var accentBox: some View {
         SettingsBox {
-            VStack(alignment: .leading, spacing: 6) {
+            // モック: 箱の中の上下 12・左右 14。説明との間 2、色の並びとの間 10
+            VStack(alignment: .leading, spacing: 2) {
                 Text("アクセントカラー").font(.system(size: SettingsFont.item))
                 SettingsCaption("ペーストボタン、選んだ行のアイコン、検索で一致した文字、FIFO / LIFO モード中の小さいウインドウの印と番号に使います")
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 4), spacing: 10) {
@@ -48,12 +53,12 @@ struct AppearanceSettingsView: View {
                         accentButton(accent)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.top, 8)
                 .accessibilityElement(children: .contain)
                 .accessibilityLabel("アクセントカラー")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
         }
     }
 
@@ -62,23 +67,24 @@ struct AppearanceSettingsView: View {
         return Button {
             appearance.accent = accent
         } label: {
+            // モック: 丸 22、名前との間 4。選んだ色は 2pt あけて 2pt の輪（本文の色）、ほかは内側に 1px の灰（35%）の輪
             VStack(spacing: 4) {
-                ZStack {
-                    Circle()
-                        .fill(accent == .system
-                              ? AnyShapeStyle(AngularGradient(colors: [.blue, .purple, .pink, .orange, .green, .blue], center: .center))
-                              : AnyShapeStyle(accent.color))
-                        .frame(width: 22, height: 22)
-                    if selected {
-                        Circle()
-                            .strokeBorder(Color.primary.opacity(0.75), lineWidth: 2)
-                            .frame(width: 28, height: 28)
+                Circle()
+                    .fill(accent == .system
+                          ? AnyShapeStyle(AngularGradient(colors: [.blue, .purple, .pink, .orange, .green, .blue], center: .center))
+                          : AnyShapeStyle(accent.color))
+                    .overlay(Circle().strokeBorder(Color.gray.opacity(selected ? 0 : 0.35), lineWidth: 1))
+                    .frame(width: 22, height: 22)
+                    .overlay {
+                        if selected {
+                            Circle()
+                                .strokeBorder(SettingsColor.text, lineWidth: 2)
+                                .frame(width: 30, height: 30)
+                        }
                     }
-                }
-                .frame(width: 30, height: 30)
                 Text(accent.displayName)
                     .font(.system(size: SettingsFont.colorName))
-                    .foregroundStyle(selected ? .primary : .secondary)
+                    .foregroundStyle(selected ? SettingsColor.text : SettingsColor.sub)
             }
             .contentShape(Rectangle())
         }
@@ -90,80 +96,93 @@ struct AppearanceSettingsView: View {
     // MARK: - 背景
 
     private var background: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader(title: "背景（履歴ウインドウと小さいウインドウ）") {
                 if !model.isBackgroundStandard {
                     Button("標準に戻す") { model.resetBackground() }
+                        .buttonStyle(.settings)
                 }
             }
+            .frame(minHeight: 24)
             // 帯のボタンは Liquid Glass で、この 2 つの設定が効かない。使う人が設定と見え方の違いに迷わないように書く
             // （requirements.md §3.3、2026-10-30 Kazuya さん「こういうのは一般人はわかんないんですよ。…明記しておいてくださいね。」）
             SettingsCaption("この 2 つの設定は、履歴ウインドウの右下の「コピー ⌘⏎」などのボタンには反映されません。ボタンの透け方は Mac のシステム設定に従います。")
                 .padding(.horizontal, 4)
+                // モック: 説明と箱の間は 10（見出しとの間 8 に 2 を足す）
+                .padding(.bottom, 2)
+            // モック: 2 つを 1 つの箱に、線を引かずに間 12 で並べる（箱の中の上下 12・左右 14）
             SettingsBox {
-                sliderRow(
-                    title: "不透明度",
-                    value: Binding(
-                        get: { (appearance.opacity * 100).rounded() },
-                        set: { appearance.opacity = min(max($0, 10), 100) / 100 }
-                    ),
-                    range: 10...100,
-                    unit: "%",
-                    caption: "低いほど後ろが透けて見えます。標準は 70%"
-                )
-                SettingsDivider()
-                if appearance.usesSystemMaterial {
-                    SettingsRow(title: "後ろをぼかす", description: "この Mac では強さを変えられないため、ぼかすかどうかだけを選べます") {
-                        Toggle("後ろをぼかす", isOn: Binding(
-                            get: { appearance.blurRadius > 0 },
-                            set: { appearance.blurRadius = $0 ? BlurPreset.defaultRadius : 0 }
-                        ))
-                        .toggleStyle(.switch)
-                        .labelsHidden()
-                    }
-                } else {
+                VStack(alignment: .leading, spacing: 12) {
                     sliderRow(
-                        title: "ぼかしの強さ",
+                        title: "不透明度",
                         value: Binding(
-                            get: { Double(appearance.blurRadius) },
-                            set: { appearance.blurRadius = Int(min(max($0, 0), Double(BlurPreset.maxRadius)).rounded()) }
+                            get: { (appearance.opacity * 100).rounded() },
+                            set: { appearance.opacity = min(max($0, 10), 100) / 100 }
                         ),
-                        range: 0...Double(BlurPreset.maxRadius),
-                        unit: "",
-                        caption: appearance.blurRadius == 0 ? "0 ではぼかしません" : "強いほど後ろがぼやけます。標準は \(BlurPreset.defaultRadius)"
+                        range: 10...100,
+                        unit: "%",
+                        caption: "低いほど後ろが透けて見えます。標準は 70%"
                     )
+                    if appearance.usesSystemMaterial {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("後ろをぼかす").font(.system(size: SettingsFont.item))
+                                SettingsCaption("この Mac では強さを変えられないため、ぼかすかどうかだけを選べます")
+                            }
+                            Spacer(minLength: 0)
+                            Toggle("後ろをぼかす", isOn: Binding(
+                                get: { appearance.blurRadius > 0 },
+                                set: { appearance.blurRadius = $0 ? BlurPreset.defaultRadius : 0 }
+                            ))
+                            .toggleStyle(.switch)
+                            .labelsHidden()
+                        }
+                    } else {
+                        sliderRow(
+                            title: "ぼかしの強さ",
+                            value: Binding(
+                                get: { Double(appearance.blurRadius) },
+                                set: { appearance.blurRadius = Int(min(max($0, 0), Double(BlurPreset.maxRadius)).rounded()) }
+                            ),
+                            range: 0...Double(BlurPreset.maxRadius),
+                            unit: "",
+                            caption: appearance.blurRadius == 0 ? "0 ではぼかしません" : "強いほど後ろがぼやけます。標準は \(BlurPreset.defaultRadius)"
+                        )
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
             }
         }
-        .padding(.top, 4)
     }
 
     private func sliderRow(title: String, value: Binding<Double>, range: ClosedRange<Double>, unit: String, caption: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        // モック: 名前との間 4、数値の欄 52、説明との間 2
+        VStack(alignment: .leading, spacing: 0) {
             Text(title).font(.system(size: SettingsFont.item))
-            HStack(spacing: 8) {
+                .padding(.bottom, 4)
+            HStack(spacing: 10) {
                 Slider(value: value, in: range, step: 1)
                     .labelsHidden()
                     .accessibilityLabel(title)
                 TextField(title, value: value, format: .number.precision(.fractionLength(0)))
                     .multilineTextAlignment(.trailing)
-                    .frame(width: 48)
+                    .frame(width: 52)
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel("\(title)（数値）")
                 Text(unit)
-                    .frame(width: 14, alignment: .leading)
-                    .foregroundStyle(.secondary)
+                    .frame(width: 18, alignment: .leading)
+                    .foregroundStyle(SettingsColor.sub)
             }
             SettingsCaption(caption)
+                .padding(.top, 2)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
     }
 
     // MARK: - 履歴ウインドウ
 
     private var historyWindow: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader("履歴ウインドウ")
             SettingsBox {
                 SettingsRow(title: "文字の大きさ", description: "一覧とプレビューに使います。履歴ウインドウでは ⌘+ / ⌘− でも変えられます") {
@@ -176,12 +195,13 @@ struct AppearanceSettingsView: View {
                 // 戻したあとにまた動かしたときは、案内を消す（ボタンが「標準に戻す」に戻るのに、案内だけ残らないように）
                 SettingsRow(title: "位置と大きさ", description: didResetWindow && model.isHistoryWindowStandard ? "次に開くときは、標準の位置と大きさで表示されます" : nil) {
                     if model.isHistoryWindowStandard {
-                        Text("標準のままです").foregroundStyle(.secondary)
+                        Text("標準のままです").foregroundStyle(SettingsColor.sub)
                     } else {
                         Button("標準に戻す") {
                             model.resetHistoryWindowFrame()
                             didResetWindow = true
                         }
+                        .buttonStyle(.settings)
                     }
                 }
             }
@@ -191,7 +211,7 @@ struct AppearanceSettingsView: View {
     // MARK: - 小さいウインドウ
 
     private var queueWindow: some View {
-        VStack(alignment: .leading, spacing: SettingsLayout.rowSpacing) {
+        VStack(alignment: .leading, spacing: Self.headerSpacing) {
             SettingsHeader("FIFO / LIFO の小さいウインドウ")
             SettingsBox {
                 SettingsRow(title: "位置") {
@@ -237,7 +257,12 @@ private struct AppearanceSample: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("見本").font(.system(size: SettingsFont.text, weight: .semibold))
+            // モック: 見出しと同じ灰色の太字。絵との間 6、左に 2
+            Text("見本")
+                .font(.system(size: SettingsFont.text, weight: .semibold))
+                .foregroundStyle(SettingsColor.sub)
+                .padding(.leading, 2)
+                .padding(.bottom, -2)
             ZStack(alignment: .top) {
                 backdrop
                 historyWindow
@@ -248,27 +273,27 @@ private struct AppearanceSample: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: model.hudSide == .left ? .leading : .trailing)
             }
             .frame(height: 330)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+            // モック: 角 12、縁なし
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .accessibilityHidden(true)
-            SettingsCaption("変更はすぐに、この見本と表示中の小さいウインドウに反映されます。")
+            SettingsCaption("変更はすぐに、この見本と表示中の小さいウインドウに反映されます。", lineHeight: 1.6)
+                .padding(.horizontal, 2)
         }
     }
 
-    /// 後ろの画面の代わり。透け具合とぼかしが分かるよう、色と線のある絵にする
+    /// 後ろの画面の代わり。透け具合とぼかしが分かるよう、モックと同じく、斜めのグラデーションに 3 つの色の四角を置く
+    /// （地 ライト #C9D6E3→#9FB0C4、ダーク #2A3445→#121821。四角は #E07A5F・#5B8BD0・#81B29A、角 8）
     private var backdrop: some View {
-        ZStack {
-            LinearGradient(colors: [Color(red: 0.36, green: 0.55, blue: 0.78), Color(red: 0.86, green: 0.62, blue: 0.45)],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
-            VStack(spacing: 12) {
-                ForEach(0..<12, id: \.self) { index in
-                    Capsule()
-                        .fill(Color.white.opacity(index.isMultiple(of: 2) ? 0.55 : 0.3))
-                        .frame(width: CGFloat(80 + (index * 37) % 120), height: 6)
-                        .frame(maxWidth: .infinity, alignment: index.isMultiple(of: 3) ? .leading : .trailing)
-                }
-            }
-            .padding(14)
+        ZStack(alignment: .topLeading) {
+            LinearGradient(colors: [SettingsColor.dynamic(light: SettingsColor.rgb(0xC9, 0xD6, 0xE3), dark: SettingsColor.rgb(0x2A, 0x34, 0x45)),
+                                    SettingsColor.dynamic(light: SettingsColor.rgb(0x9F, 0xB0, 0xC4), dark: SettingsColor.rgb(0x12, 0x18, 0x21))],
+                           startPoint: .top, endPoint: .bottomTrailing)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0xE0, 0x7A, 0x5F)))
+                .frame(width: 120, height: 100).offset(x: 14, y: 20)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0x5B, 0x8B, 0xD0)))
+                .frame(width: 120, height: 110).offset(x: 110, y: 130)
+            RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: SettingsColor.rgb(0x81, 0xB2, 0x9A)))
+                .frame(width: 100, height: 70).offset(x: 30, y: 210)
         }
     }
 
@@ -278,7 +303,7 @@ private struct AppearanceSample: View {
     private var glass: some View {
         ZStack {
             backdrop.blur(radius: sampleBlur)
-            Color(nsColor: .windowBackgroundColor).opacity(appearance.opacity)
+            Color.panelBase.opacity(appearance.opacity)
         }
     }
 
@@ -320,9 +345,13 @@ private struct AppearanceSample: View {
             .padding(.top, 2)
         }
         .padding(8)
-        .background(glass.clipShape(RoundedRectangle(cornerRadius: 8)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+        // モック: 角 12、縁 1px（ライト 白 70%、ダーク 白 12%）、影 0 12 30 黒 35%
+        .background(glass.clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous)))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Self.panelBorder, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 15, y: 12)
     }
+
+    private static let panelBorder = SettingsColor.dynamic(light: NSColor.white.withAlphaComponent(0.7), dark: NSColor.white.withAlphaComponent(0.12))
 
     private static let sampleRows = ["git push origin main", "git push --tags", "push 通知の設定"]
 

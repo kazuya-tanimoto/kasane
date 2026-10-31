@@ -53,21 +53,21 @@ struct GeneralSettingsView: View {
                     )
                 }
 
-                HStack(spacing: 14) {
+                // モック: 版の文は灰色、2 つは小さいボタン。上は箱との間 16 に 2 を足す
+                HStack(spacing: 8) {
                     Text("Kasane \(AppInfo.version) · MIT License")
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(SettingsColor.sub)
                     Spacer(minLength: 0)
                     Button("GitHub を開く") {
                         NSWorkspace.shared.open(AppInfo.repositoryURL)
                     }
-                    .buttonStyle(.link)
                     Button("履歴の保存場所を Finder に表示") {
                         NSWorkspace.shared.activateFileViewerSelecting([AppSettings.dataDirectory])
                     }
-                    .buttonStyle(.link)
                 }
+                .buttonStyle(.settings)
                 .font(.system(size: SettingsFont.small))
-                .padding(.top, 14)
+                .padding(.top, 2)
                 .padding(.horizontal, 4)
             }
         }
@@ -84,19 +84,20 @@ struct GeneralSettingsView: View {
     }
 
     private func permissionRow(name: String, use: String, ok: Bool, state: String, open: @escaping () -> Void) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             StatusMark(ok: ok)
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(name).font(.system(size: SettingsFont.item))
                 SettingsCaption(use)
             }
-            Spacer(minLength: 8)
+            Spacer(minLength: 0)
             Text(state)
-                .foregroundStyle(.secondary)
+                .font(.system(size: SettingsFont.text))
+                .foregroundStyle(ok ? StatusTextColor.ok : StatusTextColor.attention)
                 .fixedSize()
             Button("システム設定を開く", action: open)
+                .buttonStyle(.settings)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .settingsRowPadding()
     }
 }
