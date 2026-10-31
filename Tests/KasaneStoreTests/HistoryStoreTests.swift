@@ -202,4 +202,40 @@ final class HistoryStoreTests: XCTestCase {
         }
         XCTAssertEqual(titles, ["会議 10時から", "画像 10×10", "見出し 本文", "https://example.com"], "画像の見出しは変えない")
     }
+
+    #if canImport(UniformTypeIdentifiers)
+    /// 前からあるファイルの行も、すべてのファイルが画像なら「画像」の絞り込みに入る
+    func testMigrationMarksOldImageFiles() throws {
+        let db = try DatabaseQueue()
+        try HistoryStore.migrator.migrate(db, upTo: "v2-list-title")
+        try db.write { db in
+            let insert = """
+                INSERT INTO item (kind, title, text, contentHash, byteSize, createdAt, copiedAt, copyCount, pasteCount, isPinned)
+                VALUES (?, ?, ?, ?, 0, '2026-10-20 00:00:00', '2026-10-20 00:00:00', 1, 0, 0)
+                """
+            try db.execute(sql: insert, arguments: ["file", "a.png, b.JPG", "/tmp/a.png\n/tmp/b.JPG", "a"])
+            try db.execute(sql: insert, arguments: ["file", "a.png, notes.txt", "/tmp/a.png\n/tmp/notes.txt", "b"])
+            try db.execute(sql: insert, arguments: ["text", "a.png", "a.png", "c"])
+        }
+        try HistoryStore.migrator.migrate(db)
+        let flags = try db.read { db in
+            try Bool.fetchAll(db, sql: "SELECT isImageFile FROM item ORDER BY contentHash")
+        }
+        XCTAssertEqual(flags, [true, false, false])
+    }
+
+    func testNewImageFileRowIsMarked() throws {
+        let paths = "/tmp/shot.png"
+        var capture = Capture(
+            kind: .file, title: "shot.png", text: paths, primaryData: Data(paths.utf8),
+            representations: [.init(itemIndex: 0, type: "public.file-url", data: Data(paths.utf8))]
+        )
+        capture.isImageFile = true
+        let result = try store.save(capture, limit: 100)
+        XCTAssertTrue(result.item.isImageFile)
+        XCTAssertTrue(ClipSummary(result.item).isImageFile)
+        let loaded = try store.loadIndex(sort: .recent)
+        XCTAssertEqual(loaded.map(\.summary.isImageFile), [true])
+    }
+    #endif
 }

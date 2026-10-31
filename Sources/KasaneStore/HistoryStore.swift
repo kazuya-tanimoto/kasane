@@ -80,6 +80,25 @@ public final class HistoryStore: @unchecked Sendable {
                 try db.execute(sql: "UPDATE item SET title = ? WHERE id = ?", arguments: [entry.title, entry.id])
             }
         }
+        // 「画像」の絞り込みに、画像のファイルの行も入れる（2026-10-23）。すべてのファイルが画像かを列に持ち、
+        // すでに保存しているファイルの行も 1 回だけ判定する。判定は拡張子からで、ファイルは見に行かない
+        migrator.registerMigration("v3-image-file") { db in
+            try db.alter(table: "item") { t in
+                t.add(column: "isImageFile", .boolean).notNull().defaults(to: false)
+            }
+            var imageIDs: [Int64] = []
+            let rows = try Row.fetchCursor(db, sql: "SELECT id, text FROM item WHERE kind = 'file' AND text IS NOT NULL")
+            while let row = try rows.next() {
+                let text: String = row["text"]
+                let paths = text.split(separator: "\n").map(String.init)
+                if FileKinds.areAllImages(paths: paths) {
+                    imageIDs.append(row["id"])
+                }
+            }
+            for id in imageIDs {
+                try db.execute(sql: "UPDATE item SET isImageFile = 1 WHERE id = ?", arguments: [id])
+            }
+        }
         return migrator
     }
 
@@ -117,6 +136,7 @@ public final class HistoryStore: @unchecked Sendable {
                         existing.title = capture.title
                         existing.text = capture.text
                         existing.romaji = capture.romaji
+                        existing.isImageFile = capture.isImageFile
                         existing.thumbnail = capture.thumbnail ?? existing.thumbnail
                         existing.sourceBundleID = capture.sourceBundleID ?? existing.sourceBundleID
                         existing.sourceAppName = capture.sourceAppName ?? existing.sourceAppName
@@ -146,7 +166,8 @@ public final class HistoryStore: @unchecked Sendable {
                         pasteCount: 0,
                         lastPastedAt: nil,
                         isPinned: false,
-                        pinnedAt: nil
+                        pinnedAt: nil,
+                        isImageFile: capture.isImageFile
                     )
                     try item.insert(db)
                     isNew = true
@@ -271,7 +292,7 @@ public final class HistoryStore: @unchecked Sendable {
         let rows = try dbQueue.read { db in
             try Row.fetchAll(db, sql: """
                 SELECT id, kind, title, substr(text, 1, \(SearchCandidate.maxFieldLength)) AS searchText,
-                       romaji, sourceBundleID, sourceAppName, copiedAt, pasteCount, isPinned, pinnedAt
+                       romaji, sourceBundleID, sourceAppName, copiedAt, pasteCount, isPinned, pinnedAt, isImageFile
                 FROM item ORDER BY \(order)
                 """)
         }
@@ -287,7 +308,8 @@ public final class HistoryStore: @unchecked Sendable {
                 copiedAt: row["copiedAt"],
                 pasteCount: row["pasteCount"],
                 isPinned: row["isPinned"],
-                pinnedAt: row["pinnedAt"]
+                pinnedAt: row["pinnedAt"],
+                isImageFile: row["isImageFile"]
             )
             let searchText: String? = row["searchText"]
             return (summary, SearchCandidate(id: id, text: searchText ?? title, romaji: row["romaji"]))
@@ -374,7 +396,7 @@ public final class HistoryStore: @unchecked Sendable {
 extension ClipSummary {
     public init(
         id: Int64, kind: ClipKind, title: String, sourceBundleID: String?, sourceAppName: String?,
-        copiedAt: Date, pasteCount: Int, isPinned: Bool, pinnedAt: Date?
+        copiedAt: Date, pasteCount: Int, isPinned: Bool, pinnedAt: Date?, isImageFile: Bool = false
     ) {
         self.id = id
         self.kind = kind
@@ -385,5 +407,6 @@ extension ClipSummary {
         self.pasteCount = pasteCount
         self.isPinned = isPinned
         self.pinnedAt = pinnedAt
+        self.isImageFile = isImageFile
     }
 }
