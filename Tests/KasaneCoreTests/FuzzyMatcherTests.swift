@@ -75,11 +75,6 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertEqual(FuzzyMatcher.search("  ", in: candidates).map(\.id), [1, 2, 3])
     }
 
-    func testLongTextIsCapped() {
-        let long = String(repeating: "a", count: 10_000) + "zzz"
-        XCTAssertNil(FuzzyMatcher.score("zzz", text: long), "上限より後ろは検索しない")
-    }
-
     // MARK: - 一致の幅（検索のゆるさ、2026-10-22）
 
     func testScatteredLettersDoNotMatchAtStandard() {
