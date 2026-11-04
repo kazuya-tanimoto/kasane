@@ -15,6 +15,8 @@ public final class HistoryStore: @unchecked Sendable {
     let blobDirectory: URL
     let dbQueue: DatabaseQueue
     private let fileManager = FileManager.default
+    /// 保存先を開いた時刻。これより後に書いたファイルは、残ったファイルの掃除で消さない（書いている途中のものを消さないため）
+    let openedAt = Date()
 
     /// `directory` 配下に history.sqlite と blobs/ を作る。nil ならメモリ上の DB（テスト用）
     public init(directory: URL?) throws {
@@ -252,6 +254,54 @@ public final class HistoryStore: @unchecked Sendable {
 
     private func removeBlob(_ name: String) {
         try? fileManager.removeItem(at: blobDirectory.appendingPathComponent(name))
+    }
+
+    // MARK: - 残ったファイルの掃除
+
+    /// どの行からも使われていない blobs のファイルを消す。消したファイルの blobs からの相対パスを返す。
+    ///
+    /// ファイルは DB の行を消したあとに消すので、その間にアプリが落ちたり消すのに失敗したりすると、ファイルだけが残る。
+    /// それを起動のあとに裏で片付ける（2026-11-04）。起動を待たせないよう、アプリは履歴を読み込んだあとに
+    /// 低い優先度のスレッドから呼ぶ。DB は使われているパスを 1 回読むだけで、消している間は DB を止めない。
+    /// この保存先を開いたあとに書いたファイルは消さない（URL の画像は行を書く前にファイルを書くので、
+    /// 書いている途中や、行を書く直前のファイルを消さないため）。前の起動で書いたファイルの名前は新しい行から
+    /// 使われることがない（名前に毎回新しい UUID を入れる）ので、読んだあとに行が増えても消しすぎない
+    @discardableResult
+    public func removeUnreferencedFiles() -> [String] {
+        let candidates = filesWrittenBeforeOpening()
+        guard !candidates.isEmpty else { return [] }
+        guard let referenced = try? dbQueue.read({ db -> Set<String> in
+            var paths = Set(try String.fetchAll(db, sql: "SELECT filePath FROM representation WHERE filePath IS NOT NULL"))
+            let rows = try Row.fetchAll(db, sql: "SELECT iconPath, imagePath FROM linkPreview")
+            for row in rows {
+                if let icon: String = row["iconPath"] { paths.insert(icon) }
+                if let image: String = row["imagePath"] { paths.insert(image) }
+            }
+            return paths
+        }) else { return [] }
+        let removed = candidates.filter { !referenced.contains($0) }
+        removed.forEach(removeBlob)
+        return removed
+    }
+
+    /// blobs の中（links/ を含む）の、この保存先を開く前に書いたファイル。blobs からの相対パスで返す
+    private func filesWrittenBeforeOpening() -> [String] {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
+        let base = blobDirectory.standardizedFileURL.resolvingSymlinksInPath().path
+        guard let enumerator = fileManager.enumerator(
+            at: blobDirectory, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+        ) else { return [] }
+        var paths: [String] = []
+        for case let url as URL in enumerator {
+            guard let values = try? url.resourceValues(forKeys: Set(keys)),
+                  values.isRegularFile == true,
+                  let modified = values.contentModificationDate,
+                  modified < openedAt else { continue }
+            let path = url.standardizedFileURL.resolvingSymlinksInPath().path
+            guard path.hasPrefix(base + "/") else { continue }
+            paths.append(String(path.dropFirst(base.count + 1)))
+        }
+        return paths
     }
 
     // MARK: - 読み出し

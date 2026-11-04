@@ -140,6 +140,48 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNil(try store.item(id: id))
     }
 
+    private func bigCapture(_ byte: UInt8) -> Capture {
+        let big = Data(repeating: byte, count: HistoryStore.inlineDataLimit + 1)
+        return Capture(
+            kind: .image, title: "画像\(byte)", text: nil, primaryData: big,
+            representations: [.init(itemIndex: 0, type: "public.png", data: big)]
+        )
+    }
+
+    private func blobFiles() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: store.blobDirectory.path).filter { $0 != "links" }
+    }
+
+    /// 「履歴を削除…」で、消した行のファイルも消える。ピン留めを残すときは、その行のファイルは残る
+    func testDeleteAllRemovesFiles() throws {
+        let pinned = try store.save(bigCapture(1), limit: 100).item
+        _ = try store.save(bigCapture(2), limit: 100)
+        _ = try store.save(bigCapture(3), limit: 100)
+        try store.setPinned(true, itemID: pinned.id!)
+        XCTAssertEqual(try blobFiles().count, 3)
+
+        try store.deleteAll(keepPinned: true)
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertNotNil(try store.data(itemID: pinned.id!, types: ["public.png"]), "ピン留めのファイルは残る")
+
+        try store.deleteAll(keepPinned: false)
+        XCTAssertEqual(try blobFiles(), [])
+    }
+
+    /// 保存件数の上限を超えて消えた行のファイルも消える（コピーで超えたときと、上限を下げたとき）
+    func testPruneRemovesFiles() throws {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        _ = try store.save(bigCapture(1), limit: 2, now: t0)
+        _ = try store.save(bigCapture(2), limit: 2, now: t0.addingTimeInterval(1))
+        let third = try store.save(bigCapture(3), limit: 2, now: t0.addingTimeInterval(2))
+        XCTAssertEqual(third.prunedIDs.count, 1)
+        XCTAssertEqual(try blobFiles().count, 2)
+
+        try store.prune(limit: 1)
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertNotNil(try store.data(itemID: third.item.id!, types: ["public.png"]), "新しいほうのファイルは残る")
+    }
+
     func testSortByPasteCount() throws {
         let t0 = Date(timeIntervalSince1970: 1_000)
         let a = try store.save(textCapture("A"), limit: 100, now: t0)
