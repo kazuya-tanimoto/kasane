@@ -7,6 +7,11 @@ import XCTest
 /// 普段の `swift test` では飛ばし、CI の別の手順でリリースビルドのときだけ流す:
 /// `KASANE_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter SearchBenchmarkTests`
 final class SearchBenchmarkTests: XCTestCase {
+    /// 結果を標準エラーに出す。macOS 26 の CI では、テストの print（標準出力）がログに残らなかった（2026-11-04）
+    func report(_ line: String) {
+        FileHandle.standardError.write(Data((line + "\n").utf8))
+    }
+
     func testSearchSpeedPerLooseness() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
 
@@ -30,7 +35,7 @@ final class SearchBenchmarkTests: XCTestCase {
                     if ms > slowest { slowest = ms }
                     if prefix == query { hits = results.count }
                 }
-                print(String(format: "検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、一致 %d 件",
+                report(String(format: "検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、一致 %d 件",
                              query, looseness.displayName, looseness.spanRatio, slowest, hits))
             }
         }
@@ -55,10 +60,10 @@ final class SearchBenchmarkTests: XCTestCase {
         for word in ["make", "taqz", "kgsr", "agk", "agkr"] {
             let term = Array(word.utf16)
             let before = time({ Self.unlimitedMatch($0, in: $1) }, term)
-            print(String(format: "照合の比較「%@」前の版（幅の制限なし）: %.1f ms、%d 欄", word, before.ms, before.hits))
+            report(String(format: "照合の比較「%@」前の版（幅の制限なし）: %.1f ms、%d 欄", word, before.ms, before.hits))
             for ratio in [2, 3, 6] {
                 let now = time({ FuzzyMatcher.fuzzyMatch($0, in: $1, maxSpan: term.count * ratio) }, term)
-                print(String(format: "照合の比較「%@」%d 倍: %.1f ms、%d 欄", word, ratio, now.ms, now.hits))
+                report(String(format: "照合の比較「%@」%d 倍: %.1f ms、%d 欄", word, ratio, now.ms, now.hits))
             }
         }
     }
@@ -81,7 +86,7 @@ final class SearchBenchmarkTests: XCTestCase {
         let whole = time { _ = texts.map { SearchCandidate(id: 0, text: $0, romaji: nil) } }
         let prefixed = texts.map { String($0.prefix(SearchCandidate.maxFieldLength)) }
         let nfc = time { _ = prefixed.map { $0.precomposedStringWithCanonicalMapping } }
-        print(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
+        report(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
     }
 
     /// 一致した文字に色を付ける時間。日本語 200 文字の題名を 30 行、1 文字打つごとに照合し直す（2026-10-31。
@@ -98,7 +103,7 @@ final class SearchBenchmarkTests: XCTestCase {
                 }
                 slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
             }
-            print(String(format: "色を付ける時間「%@」日本語 200 文字 × 30 行: 1 文字ごとの最も遅い回 %.1f ms", query, slowest))
+            report(String(format: "色を付ける時間「%@」日本語 200 文字 × 30 行: 1 文字ごとの最も遅い回 %.1f ms", query, slowest))
         }
     }
 
@@ -110,7 +115,7 @@ final class SearchBenchmarkTests: XCTestCase {
         let sentence = "明日の会議の資料をガイドにまとめて、かいぎしつで共有します。高松の天気は晴れです。"
         let text = String(String(repeating: sentence, count: 2_000 / sentence.count + 1).prefix(Romanizer.maxLength))
         let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
-        print(String(format: "読みの長さ: 原文 %d 文字から %d 文字", text.count, romaji.utf16.count))
+        report(String(format: "読みの長さ: 原文 %d 文字から %d 文字", text.count, romaji.utf16.count))
         let candidates = (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }
         _ = FuzzyMatcher.search("kaigi", in: candidates)
         for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
@@ -122,7 +127,7 @@ final class SearchBenchmarkTests: XCTestCase {
                     _ = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
                     slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
                 }
-                print(String(format: "読みを切らない検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
+                report(String(format: "読みを切らない検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
                              query, looseness.displayName, looseness.spanRatio, slowest))
             }
         }
