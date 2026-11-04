@@ -5,6 +5,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   test:
     runs-on: macos-26
@@ -15,9 +18,13 @@ jobs:
       - name: probe
         run: |
           mkdir -p probe-out
+          sleep 2
           defaults delete Kasane 2>/dev/null || true; defaults delete io.github.kazuya-tanimoto.kasane 2>/dev/null || true
           perl -e 'alarm 300; exec @ARGV' swift scripts/probe-bar-drag.swift "$(pwd)/.build/debug/Kasane" probe-out 2>&1 | tee probe-out/probe.log || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: probe-out
-          path: probe-out
+      - name: save
+        run: |
+          git config user.name probe; git config user.email probe@example.com
+          git checkout --orphan probe-out-branch
+          git rm -rq --cached . ; git add -f probe-out
+          git commit -qm "probe output"
+          git push -f origin HEAD:probe/glass-bar-extend-out

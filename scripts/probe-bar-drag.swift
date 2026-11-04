@@ -42,7 +42,15 @@ func capture(_ name: String) {
 func open() { key(9, flags: .maskAlternate); Thread.sleep(forTimeInterval: 1.2) }
 func ensureOpen() -> CGRect? { if let w = history() { return w }; print("PROBE (reopen)"); open(); return history() }
 
-open()
+func all() -> [String] {
+    let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+    return info.compactMap { w in
+        guard (w[kCGWindowOwnerPID as String] as? Int32) == pid, let b = w[kCGWindowBounds as String] as? [String: CGFloat] else { return nil }
+        return "\(w[kCGWindowLayer as String] ?? -1):\(b)"
+    }
+}
+print("PROBE windows at launch: \(all())")
+for _ in 0..<3 where history() == nil { open(); Thread.sleep(forTimeInterval: 1.5); print("PROBE after ⌥V: \(all())") }
 guard var w = history() else { print("PROBE history window not found"); capture("notfound"); proc.terminate(); exit(0) }
 print("PROBE open frame \(w)")
 capture("1-default")
