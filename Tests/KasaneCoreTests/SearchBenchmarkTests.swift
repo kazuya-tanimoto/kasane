@@ -125,28 +125,22 @@ final class SearchBenchmarkTests: XCTestCase {
             ("前（読みを 2,000 で切る）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: cutRomaji) }),
             ("今（読みを切らない）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }),
         ]
-        for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
-            let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+        for query in ["kaigi shiryou", "taqz", "agkr"] {
             for looseness in SearchLooseness.allCases {
-                for (name, candidates) in sets {
-                    _ = FuzzyMatcher.search(query, in: candidates, spanRatio: looseness.spanRatio)
-                    var slowest = 0.0
-                    for prefix in prefixes {
-                        let start = DispatchTime.now().uptimeNanoseconds
-                        _ = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
-                        slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
-                    }
-                    report(String(format: "日本語 1 万件・%@「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
-                                  name, query, looseness.displayName, looseness.spanRatio, slowest))
+                let medians = Self.medianSlowest(query: query, sets: sets.map(\.1), spanRatio: looseness.spanRatio)
+                for (index, set) in sets.enumerated() {
+                    report(String(format: "日本語 1 万件・%@「%@」%@（%d 倍）: 1 文字ごとの最も遅い回の中央値 %.1f ms",
+                                  set.0, query, looseness.displayName, looseness.spanRatio, medians[index]))
                 }
             }
         }
     }
     #endif
 
-    /// 原文を最後まで探すようにしたときの速さ（2026-11-04。要件書 §5: 1 万件で、1 文字入力ごとに 50ms 以内）。
+    /// 原文を最後まで探すようにしたときの速さとメモリ（2026-11-04。要件書 §5: 1 万件で 1 文字入力ごとに 50ms 以内、待機中のメモリ 50MB 程度以内）。
     /// 同じ実行の中で、先頭 2,000 文字だけを探す前の作りと、最後まで探す今の作りを並べる。
-    /// 長い項目の数と長さを変えた組み合わせで、準備（読み込み時の正規化）の時間と、1 文字ごとの最も遅い回を出す
+    /// 長い項目の数と長さを変えた組み合わせで、準備（読み込み時の正規化）の時間、検索用に持つ分のメモリの増え方、
+    /// 1 文字ごとの最も遅い回（前と今を交互に \(Self.runs) 回流した中央値）を出す
     func testWholeTextSearch() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
         let base = Self.paragraphs(count: 10_000, length: Self.fieldLength)
@@ -157,32 +151,66 @@ final class SearchBenchmarkTests: XCTestCase {
             let long = Self.paragraphs(count: longCase.count, length: longCase.length)
             for i in 0..<longCase.count { texts[i * (10_000 / max(longCase.count, 1))] = long[i] }
             let label = longCase.count == 0 ? "全部 2,000 文字" : "うち \(longCase.count) 件が \(longCase.length) 文字"
-            var prepared: [String: [SearchCandidate]] = [:]
+            var sets: [(String, [SearchCandidate])] = []
             for (name, cut) in [("前（先頭 2,000 文字）", true), ("今（最後まで）", false)] {
+                let memoryBefore = Self.footprintMB()
                 let start = DispatchTime.now().uptimeNanoseconds
                 let candidates = texts.enumerated().map {
                     SearchCandidate(id: Int64($0.offset), text: cut ? String($0.element.prefix(Self.fieldLength)) : $0.element, romaji: nil)
                 }
                 let prepareMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                let memoryAfter = Self.footprintMB()
                 let units = candidates.reduce(0) { $0 + $1.fields.reduce(0) { $0 + $1.count } }
-                prepared[name] = candidates
-                report(String(format: "最後まで探す・%@・%@: 準備 %.0f ms、欄の合計 %d 単位", label, name, prepareMs, units))
+                sets.append((name, candidates))
+                report(String(format: "最後まで探す・%@・%@: 準備 %.0f ms、欄の合計 %d 単位（%.1f MB 分）、メモリの増え %.1f MB",
+                              label, name, prepareMs, units, Double(units * 2) / 1_048_576, memoryAfter - memoryBefore))
             }
             for query in ["make test", "taqz", "agkr"] {
-                let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
-                for name in ["前（先頭 2,000 文字）", "今（最後まで）"] {
-                    let candidates = prepared[name]!
-                    _ = FuzzyMatcher.search(query, in: candidates)
-                    var slowest = 0.0
-                    for prefix in prefixes {
-                        let start = DispatchTime.now().uptimeNanoseconds
-                        _ = FuzzyMatcher.search(prefix, in: candidates)
-                        slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
-                    }
-                    report(String(format: "最後まで探す・%@・%@「%@」標準: 1 文字ごとの最も遅い回 %.1f ms", label, name, query, slowest))
+                let medians = Self.medianSlowest(query: query, sets: sets.map(\.1), spanRatio: SearchLooseness.standard.spanRatio)
+                for (index, set) in sets.enumerated() {
+                    report(String(format: "最後まで探す・%@・%@「%@」標準: 1 文字ごとの最も遅い回の中央値 %.1f ms",
+                                  label, set.0, query, medians[index]))
                 }
             }
         }
+    }
+
+    /// 速さを比べるときに流す回数。CI のマシンは回ごとに速さが 2 倍ほど変わるので、中央値で比べる（2026-11-04）
+    static let runs = 7
+
+    /// 1 文字ずつ打ったときの最も遅い回を、`sets` の各組について交互に `runs` 回測り、組ごとの中央値を返す
+    static func medianSlowest(query: String, sets: [[SearchCandidate]], spanRatio: Int) -> [Double] {
+        let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+        var samples = Array(repeating: [Double](), count: sets.count)
+        for set in sets { _ = FuzzyMatcher.search(query, in: set, spanRatio: spanRatio) }
+        for _ in 0..<runs {
+            for (index, set) in sets.enumerated() {
+                var slowest = 0.0
+                for prefix in prefixes {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    _ = FuzzyMatcher.search(prefix, in: set, spanRatio: spanRatio)
+                    slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                }
+                samples[index].append(slowest)
+            }
+        }
+        return samples.map { $0.sorted()[$0.count / 2] }
+    }
+
+    /// このプロセスが使っているメモリ（アクティビティモニタの「メモリ」と同じ phys_footprint、MB）
+    static func footprintMB() -> Double {
+        #if canImport(Darwin)
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : 0
+        #else
+        return 0
+        #endif
     }
 
     /// 英字の語を並べた文を `count` 件。どれも `length` 文字（語は makeCandidates と同じ）
