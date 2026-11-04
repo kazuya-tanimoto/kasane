@@ -50,6 +50,10 @@ func all() -> [String] {
     }
 }
 print("PROBE windows at launch: \(all())")
+// 初期設定の画面の「はじめる」を押して閉じる（画面の写真で 995,469）
+mouse(.mouseMoved, CGPoint(x: 995, y: 469)); Thread.sleep(forTimeInterval: 0.3)
+mouse(.leftMouseDown, CGPoint(x: 995, y: 469)); Thread.sleep(forTimeInterval: 0.1); mouse(.leftMouseUp, CGPoint(x: 995, y: 469)); Thread.sleep(forTimeInterval: 1.5)
+print("PROBE after closing onboarding: \(all())")
 for _ in 0..<3 where history() == nil { open(); Thread.sleep(forTimeInterval: 1.5); print("PROBE after ⌥V: \(all())") }
 guard var w = history() else { print("PROBE history window not found"); capture("notfound"); proc.terminate(); exit(0) }
 print("PROBE open frame \(w)")
