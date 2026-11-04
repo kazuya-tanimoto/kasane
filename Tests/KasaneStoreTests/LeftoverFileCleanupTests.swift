@@ -90,39 +90,43 @@ final class LeftoverFileCleanupTests: XCTestCase {
     }
 }
 
-/// 起動にかかる時間（保存先を開いて履歴を読み込むまで）が、裏で掃除をしても変わらないかを測る。
-/// 速さはマシンで変わるので合否にはせず、結果を出力するだけにする。CI の「速さ」の手順でリリースビルドのときだけ流す
+/// 起動にかかる時間（保存先を開いて履歴を読み込むまで）と、起動直後のコピーの保存が、裏で掃除をしても変わらないかを測る。
+/// 掃除の時間と、掃除で増えたメモリの量も出す。履歴 1,000 件と 1 万件（どちらも全部の行がファイルを 1 つ使い、
+/// 残ったファイルが 3,000 個）で測る。速さはマシンで変わるので合否にはせず、結果を出力するだけにする。
+/// CI の「速さ」の手順でリリースビルドのときだけ流す
 final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
-    func testLaunchTimeWithCleanup() throws {
+    func testLaunchTimeWithCleanup1000() throws {
+        try measureLaunch(itemCount: 1_000, leftoverCount: 3_000)
+    }
+
+    func testLaunchTimeWithCleanup10000() throws {
+        try measureLaunch(itemCount: 10_000, leftoverCount: 3_000)
+    }
+
+    private func measureLaunch(itemCount: Int, leftoverCount: Int) throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
-        let itemCount = 1_000
-        let usedFileCount = 1_000
-        let leftoverCount = 3_000
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("kasane-bench-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: directory) }
 
-        // 1,000 件の履歴と、行が使うファイル 1,000 個を作る
+        // 履歴と、各行が使うファイル 1 個ずつを作る（作るのを速くするため、1 回の書き込みでまとめて入れる）
         do {
             let store = try HistoryStore(directory: directory)
             let t0 = Date(timeIntervalSince1970: 1_000)
-            var ids: [Int64] = []
-            for i in 0..<itemCount {
-                let text = "項目 \(i) のテキスト make test"
-                let data = Data(text.utf8)
-                let capture = Capture(
-                    kind: .text, title: text, text: text, primaryData: data,
-                    representations: [.init(itemIndex: 0, type: "public.utf8-plain-text", data: data)]
-                )
-                ids.append(try store.save(capture, limit: itemCount + 10, now: t0.addingTimeInterval(Double(i))).item.id!)
-            }
             try store.dbQueue.write { db in
-                for (n, id) in ids.prefix(usedFileCount).enumerated() {
-                    let name = "\(id)-used-\(n)"
-                    try Data(repeating: 1, count: 1_024).write(to: store.blobDirectory.appendingPathComponent(name))
-                    try db.execute(
-                        sql: "INSERT INTO representation (itemID, itemIndex, position, type, filePath) VALUES (?, 0, 1, 'public.png', ?)",
-                        arguments: [id, name]
+                for i in 0..<itemCount {
+                    let text = "項目 \(i) のテキスト make test"
+                    var item = ClipItem(
+                        id: nil, kind: .image, title: text, text: text, romaji: nil, contentHash: "bench-\(i)",
+                        sourceBundleID: nil, sourceAppName: nil, thumbnail: nil, pixelWidth: nil, pixelHeight: nil,
+                        byteSize: 1_024, createdAt: t0, copiedAt: t0.addingTimeInterval(Double(i)), copyCount: 1,
+                        pasteCount: 0, lastPastedAt: nil, isPinned: false, pinnedAt: nil, isImageFile: false
                     )
+                    try item.insert(db)
+                    let name = "\(item.id!)-\(UUID().uuidString)"
+                    try Data(repeating: 1, count: 1_024).write(to: store.blobDirectory.appendingPathComponent(name))
+                    try ClipRepresentation(
+                        itemID: item.id!, itemIndex: 0, position: 0, type: "public.png", data: nil, filePath: name
+                    ).insert(db)
                 }
             }
         }
@@ -130,19 +134,20 @@ final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
         func makeLeftovers() throws {
             let blobs = directory.appendingPathComponent("blobs")
             for n in 0..<leftoverCount {
-                try Data(repeating: 2, count: 1_024).write(to: blobs.appendingPathComponent("left-\(n)"))
+                try Data(repeating: 2, count: 1_024).write(to: blobs.appendingPathComponent("left-\(n)-\(UUID().uuidString)"))
             }
             Thread.sleep(forTimeInterval: 0.05)
         }
 
         func ms(_ start: UInt64) -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000 }
 
-        // 起動のときと同じ順: 保存先を開く → 履歴を読み込む → （読み込み後に）裏で掃除 → その間のコピーの保存
-        var withoutCleanup: [Double] = []
-        var withCleanup: [Double] = []
+        // 起動のときと同じ順: 保存先を開く → 履歴を読み込む → （読み込み後に）裏で掃除 → その間にコピーを保存
+        var launchWithout: [Double] = []
+        var launchWith: [Double] = []
         var saveWithout: [Double] = []
         var saveDuring: [Double] = []
         var cleanupTimes: [Double] = []
+        var memoryIncreases: [Double] = []
         for round in 0..<5 {
             try makeLeftovers()
             for cleans in [false, true] {
@@ -155,9 +160,11 @@ final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
                 let done = DispatchSemaphore(value: 0)
                 if cleans {
                     DispatchQueue.global(qos: .background).async {
+                        let sampler = MemorySampler()
                         let s = DispatchTime.now().uptimeNanoseconds
                         let removed = store.removeUnreferencedFiles()
                         cleanupTimes.append(ms(s))
+                        memoryIncreases.append(sampler.stop())
                         XCTAssertEqual(removed.count, leftoverCount)
                         done.signal()
                     }
@@ -173,20 +180,68 @@ final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
                 let saveMs = ms(saveStart)
                 if cleans {
                     done.wait()
-                    withCleanup.append(launch)
+                    launchWith.append(launch)
                     saveDuring.append(saveMs)
                 } else {
-                    withoutCleanup.append(launch)
+                    launchWithout.append(launch)
                     saveWithout.append(saveMs)
                 }
             }
         }
         func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
-        print(String(format: "起動（開いて %d 件を読み込む）: 掃除なし %.1f ms、掃除あり %.1f ms（5 回の中央値）",
-                     itemCount, median(withoutCleanup), median(withCleanup)))
-        print(String(format: "起動直後のコピーの保存: 掃除なし %.1f ms、掃除と同時 %.1f ms（5 回の中央値）",
-                     median(saveWithout), median(saveDuring)))
-        print(String(format: "裏の掃除（使うファイル %d 個、残ったファイル %d 個を消す）: %.1f ms（5 回の中央値）",
-                     usedFileCount, leftoverCount, median(cleanupTimes)))
+        print(String(format: "履歴 %d 件、ファイル %d 個、残ったファイル %d 個（5 回の中央値）", itemCount, itemCount, leftoverCount))
+        print(String(format: "  起動（開いて読み込む）: 掃除なし %.1f ms、掃除あり %.1f ms", median(launchWithout), median(launchWith)))
+        print(String(format: "  起動直後のコピーの保存: 掃除なし %.1f ms、掃除と同時 %.1f ms", median(saveWithout), median(saveDuring)))
+        print(String(format: "  裏の掃除: %.1f ms、増えたメモリの最大 %.1f MB", median(cleanupTimes), median(memoryIncreases)))
+    }
+}
+
+/// 掃除の間のメモリの使用量（Activity Monitor の「メモリ」と同じ phys_footprint）を 1ms ごとに見て、始めより増えた最大を MB で返す
+private final class MemorySampler: @unchecked Sendable {
+    private let base: UInt64
+    private var peak: UInt64
+    private var running = true
+    private let lock = NSLock()
+    private let finished = DispatchSemaphore(value: 0)
+
+    init() {
+        base = Self.footprint()
+        peak = base
+        Thread.detachNewThread { [self] in
+            while true {
+                let now = Self.footprint()
+                lock.lock()
+                peak = max(peak, now)
+                let keepGoing = running
+                lock.unlock()
+                if !keepGoing { break }
+                Thread.sleep(forTimeInterval: 0.001)
+            }
+            finished.signal()
+        }
+    }
+
+    func stop() -> Double {
+        lock.lock()
+        running = false
+        lock.unlock()
+        finished.wait()
+        let now = Self.footprint()
+        return Double(max(peak, now) - base) / 1_048_576
+    }
+
+    static func footprint() -> UInt64 {
+        #if canImport(Darwin)
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.phys_footprint : 0
+        #else
+        return 0
+        #endif
     }
 }
