@@ -19,6 +19,10 @@ struct HistoryView: View {
     @Environment(\.colorScheme) private var colorScheme
     /// 右下に浮く操作ボタンの帯の高さ。一覧とプレビューの下端を、この分だけ帯に隠れない所まで送れるようにする
     @State private var actionBarHeight: CGFloat = 0
+    /// 帯の中の、ボタン 6 つの並びの幅
+    @State private var actionButtonsWidth: CGFloat = 0
+    /// 履歴ウインドウの中身の幅
+    @State private var contentWidth: CGFloat = 0
 
     var body: some View {
         VStack(spacing: 0) {
@@ -50,9 +54,10 @@ struct HistoryView: View {
         }
         // 帯は一覧とプレビューの上に浮かせ、下の行はガラス越しに透けて見える（requirements.md §3.3、2026-10-30 決定）
         .overlay(alignment: .bottomTrailing) {
-            ActionBar(model: model)
+            ActionBar(model: model) { actionButtonsWidth = $0 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionBarHeight = $0 }
                 // 左端は一覧の右端から actionBarListOverlap だけ左に置き、どの幅でも一覧に重ねる（2026-11-04 Kazuya さんが OK、問い 2）。
+                // 狭い幅でボタンの左のつかめる所が actionBarMinDragWidth より狭くなるときは、さらに左へ延ばす
                 .padding(.leading, actionBarLeading)
                 // 右端はプレビューの地の右端にそろえる（モック「Liquid Glass 3 案」の B では、どちらも 10px でそろっている）
                 .padding(.trailing, Self.contentHorizontalPadding)
@@ -62,6 +67,7 @@ struct HistoryView: View {
             minWidth: minSize.width, maxWidth: .infinity,
             minHeight: minSize.height, maxHeight: .infinity
         )
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { contentWidth = $0 }
         .background(PanelBackground(appearance: appearance))
         .environment(\.kasaneAccent, appearance.accent)
         .environment(\.textSize, appearance.historyTextSize)
@@ -84,10 +90,20 @@ struct HistoryView: View {
     /// 10/30 のモック B から見積もった値。延ばすことは問い 2 で Kazuya さんが OK（2026-11-04）。160 という値はまだ OK をもらっていない（manual-test 17 章で見てもらう）
     private static let actionBarListOverlap: CGFloat = 160
 
-    /// ウインドウの左端から帯の左端まで
+    /// 帯の中で、ボタンの左に必ず残す、つかめる幅。一番狭い幅の FIFO / LIFO 中（「キューに追加 ⌘⏎」で並びが長くなる）でも
+    /// つかめる所が無くならないようにする（2026-11-04 PR #12 のレビュー。標準 720pt では、残さないと約 5pt になる）
+    private static let actionBarMinDragWidth: CGFloat = 40
+
+    /// ウインドウの左端から帯の左端まで。一覧の右端から actionBarListOverlap だけ左と、
+    /// ボタンの左に actionBarMinDragWidth を残せる所の、左の方
     private var actionBarLeading: CGFloat {
         let size = appearance.historyTextSize
-        return Self.contentHorizontalPadding + size.scaled(350) - size.scaled(Self.actionBarListOverlap)
+        let overlapLeading = Self.contentHorizontalPadding + size.scaled(350) - size.scaled(Self.actionBarListOverlap)
+        guard contentWidth > 0, actionButtonsWidth > 0 else { return overlapLeading }
+        // 帯の幅 = 中の余白 4 × 2 + つかめる所 + 間 4 + ボタンの並び
+        let barWidth = 4 * 2 + Self.actionBarMinDragWidth + 4 + actionButtonsWidth
+        let dragLeading = contentWidth - Self.contentHorizontalPadding - barWidth
+        return max(0, min(overlapLeading, dragLeading))
     }
 
     /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
@@ -196,6 +212,8 @@ private struct ActionBar: View {
     static let margin: CGFloat = 10
 
     @ObservedObject var model: HistoryModel
+    /// ボタン 6 つの並びの幅が変わったとき
+    var onButtonsWidthChange: (CGFloat) -> Void = { _ in }
     @Environment(\.colorScheme) private var colorScheme
     @StateObject private var tooltips = TooltipState()
 
@@ -213,41 +231,46 @@ private struct ActionBar: View {
             // 帯を一覧の上まで延ばしたので、この下の一覧の行はクリックできない（問い 2 で Kazuya さんが OK）
             WindowDragArea()
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
-            Button("ペースト ⏎") { model.activateSelection(.paste) }
-                .buttonStyle(ActionStyle(isPrimary: true))
-            Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
+            HStack(spacing: 4) {
+                Button("ペースト ⏎") { model.activateSelection(.paste) }
+                    .buttonStyle(ActionStyle(isPrimary: true))
+                Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
+                    .buttonStyle(ActionStyle())
+                // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
+                Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
+                    .buttonStyle(ActionStyle())
+                Button {
+                    tooltips.dismiss()
+                    model.togglePinSelection()
+                } label: {
+                    Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(ActionStyle(isOn: isPinned))
+                .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
+                // ⌘⌫ でも消せるが、ボタンには ⌘D だけ書く（1 つの方がすぐ読める）
+                Button {
+                    tooltips.dismiss()
+                    model.deleteSelection()
+                } label: {
+                    Label("⌘D", systemImage: "trash")
+                        .labelStyle(.titleAndIcon)
+                }
                 .buttonStyle(ActionStyle())
-            // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加する（⌘C でコピーしたときと同じ）
-            Button(model.queueMode == nil ? "コピー ⌘⏎" : "キューに追加 ⌘⏎") { model.activateSelection(.copyOnly) }
-                .buttonStyle(ActionStyle())
-            Button {
-                tooltips.dismiss()
-                model.togglePinSelection()
-            } label: {
-                Label("⌘P", systemImage: isPinned ? "pin.fill" : "pin")
-                    .labelStyle(.titleAndIcon)
+                .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
+                Button {
+                    tooltips.dismiss()
+                    model.showsDetails.toggle()
+                } label: {
+                    Label("⌘I", systemImage: "info.circle")
+                        .labelStyle(.titleAndIcon)
+                }
+                .buttonStyle(ActionStyle(isOn: model.showsDetails))
+                .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
             }
-            .buttonStyle(ActionStyle(isOn: isPinned))
-            .tooltip(isPinned ? "ピン留めを外す（⌘P）" : "ピン留め（⌘P）", id: "pin", state: tooltips)
-            // ⌘⌫ でも消せるが、ボタンには ⌘D だけ書く（1 つの方がすぐ読める）
-            Button {
-                tooltips.dismiss()
-                model.deleteSelection()
-            } label: {
-                Label("⌘D", systemImage: "trash")
-                    .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(ActionStyle())
-            .tooltip("削除（⌘D・⌘⌫）", id: "delete", state: tooltips)
-            Button {
-                tooltips.dismiss()
-                model.showsDetails.toggle()
-            } label: {
-                Label("⌘I", systemImage: "info.circle")
-                    .labelStyle(.titleAndIcon)
-            }
-            .buttonStyle(ActionStyle(isOn: model.showsDetails))
-            .tooltip("詳細を表示（⌘I）", id: "info", state: tooltips)
+            // ボタンは詰めずに全部出す。並びの長さ（FIFO / LIFO 中は「キューに追加」で長くなる）を帯の左端の計算に渡す
+            .fixedSize()
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { onButtonsWidthChange($0) }
         }
         .padding(4)
         // 地・縁・光の線・影は、Kazuya さんが OK したモック「Liquid Glass 3 案」の B の値に合わせる（2026-10-31）
