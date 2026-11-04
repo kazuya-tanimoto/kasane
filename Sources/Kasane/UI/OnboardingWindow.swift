@@ -101,7 +101,7 @@ private struct OnboardingView: View {
             PermissionRow(
                 number: 1,
                 title: "他のアプリからのペースト",
-                detail: "コピーした内容を履歴に保存するために必要です。「システム設定 > プライバシーとセキュリティ > 他のアプリからのペースト」で Kasane を「許可」にしてください。一覧に Kasane がないときは、先に「確認を表示」を押して、出てきたダイアログで許可してください。",
+                detail: "コピーした内容を履歴に残すために使います。「システム設定 > プライバシーとセキュリティ > 他のアプリからのペースト」で Kasane を「許可」にしてください。一覧に Kasane がないときは、先に「確認を表示」を押して、出てきたダイアログで許可してください。",
                 status: pasteboardStatus,
                 granted: state.pasteboard == .allowed
             ) {
@@ -111,13 +111,13 @@ private struct OnboardingView: View {
                         state.refresh()
                     }
                 }
-                Button("設定を開く") { Permissions.openPasteboardSettings() }
+                Button("システム設定を開く") { Permissions.openPasteboardSettings() }
             }
 
             PermissionRow(
                 number: 2,
                 title: "アクセシビリティ",
-                detail: "選んだ項目を元のアプリに自動で貼り付けるためと、FIFO / LIFO モードで ⌘V を検知するために必要です。",
+                detail: "元のアプリへの自動ペーストと、FIFO / LIFO 中の ⌘V の検知に使います。",
                 status: state.accessibility ? "許可されています" : "許可されていません",
                 granted: state.accessibility
             ) {
@@ -147,9 +147,9 @@ private struct OnboardingView: View {
     private var pasteboardStatus: String {
         switch state.pasteboard {
         case .allowed: return "許可されています"
-        case .ask: return "毎回確認する設定です（「許可」に変えてください）"
-        case .denied: return "拒否されています"
-        case .notDetermined: return "まだ設定されていません"
+        case .ask: return "コピーのたびに確認が出ます"
+        case .denied: return "許可されていません"
+        case .notDetermined: return "まだ選んでいません"
         }
     }
 }
