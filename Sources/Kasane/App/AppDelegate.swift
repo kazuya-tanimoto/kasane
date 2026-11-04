@@ -288,7 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             controller.onClose = { AppSettings.hasCompletedOnboarding = true }
             onboarding = controller
         }
-        onboarding?.show()
+        onboarding?.show(hasCompletedOnboarding: AppSettings.hasCompletedOnboarding)
     }
 
     /// 「履歴を削除…」の確認。削除そのものを選んだ操作なので、「削除」を既定のボタン（⏎）にし、赤くしない（Apple の Alerts。

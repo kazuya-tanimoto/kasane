@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import KasaneCore
 import KasaneStore
+import SwiftUI
 
 /// 種類での絞り込み
 enum KindFilter: String, CaseIterable, Identifiable {
@@ -55,11 +56,17 @@ final class HistoryModel: ObservableObject {
     @Published var query = "" {
         didSet {
             guard query != oldValue else { return }
+            // 削除などの動きを待つ間に検索語が変わったら、検索の結果は動かさない
+            pendingMotion = false
             runSearch()
         }
     }
     @Published var kindFilter: KindFilter = .all {
-        didSet { if kindFilter != oldValue { runSearch() } }
+        didSet {
+            guard kindFilter != oldValue else { return }
+            pendingMotion = false
+            runSearch()
+        }
     }
     @Published private(set) var pinned: [ClipSummary] = []
     @Published private(set) var others: [ClipSummary] = []
@@ -82,6 +89,11 @@ final class HistoryModel: ObservableObject {
     @Published private(set) var focusToken = 0
     /// 選んだ項目が変わらなくても、そこまでスクロールさせたいときに増やす
     @Published private(set) var scrollToken = 0
+    /// 次のスクロールを、行の動きと一緒に動かすときの動き（なければすぐ送る）
+    private(set) var scrollAnimation: Animation?
+    /// 「視差効果を減らす」がオンで並びを入れ替えたとき、変わった所の行（動いた行、消した行の場所に来た行）の番号を増やす。
+    /// その行だけを透明から戻して、入れ替わったことを見せる（ほかの行は動かさず、フェードもしない）
+    @Published private(set) var fadeTokens: [Int64: Int] = [:]
     @Published private(set) var isLoaded = false
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
@@ -99,6 +111,9 @@ final class HistoryModel: ObservableObject {
     private var lastAppliedQuery: String?
     /// 次に並びを入れ替えたあとで、選択中の項目までスクロールする（検索中は並びがあとから届くため）
     private var scrollsAfterApply = false
+    /// 次に並びを入れ替えるときに行を動かす（削除・ピン留め・解除・⌘⏎。requirements.md §3.5）。
+    /// 検索中は並びがあとから届くので、操作の所ではなく apply で動かす
+    private var pendingMotion = false
     private var previewTask: Task<Void, Never>?
     /// 一致した文字の位置の覚え書き（見えている行だけ、描くときに計算する）。描くたびに書き足すので @Published にしない
     private var highlightKey = ""
@@ -169,6 +184,8 @@ final class HistoryModel: ObservableObject {
     func didReuse(id: Int64, at date: Date) {
         guard let index = summaries.firstIndex(where: { $0.id == id }) else { return }
         summaries[index].copiedAt = date
+        // ピン留めと同じ並び替えなので、同じ動きにそろえる（今はこのあとすぐウインドウが閉じるので、見えない）
+        pendingMotion = true
         rebuild()
     }
 
@@ -243,11 +260,29 @@ final class HistoryModel: ObservableObject {
         let list = kindFilter == .all ? all : all.filter { kindFilter.matches($0) }
         let pinnedList = list.filter(\.isPinned)
         let otherList = list.filter { !$0.isPinned }
-        pinned = pinnedList
-        others = otherList
+        let motion = pendingMotion ? RowMotion.current : nil
+        pendingMotion = false
+        switch motion {
+        case .move(let animation):
+            withAnimation(animation) {
+                pinned = pinnedList
+                others = otherList
+            }
+        case .fade:
+            pinned = pinnedList
+            others = otherList
+        case nil:
+            pinned = pinnedList
+            others = otherList
+        }
         links.listChanged(Set(list.map(\.id)))
         if scrollsAfterApply {
             scrollsAfterApply = false
+            if case .move(let animation) = motion {
+                scrollAnimation = animation
+            } else {
+                scrollAnimation = nil
+            }
             scrollToken += 1
         }
         let key = query + "\u{0}" + kindFilter.rawValue
@@ -261,15 +296,37 @@ final class HistoryModel: ObservableObject {
         selectedID = pinnedList.first?.id ?? otherList.first?.id
     }
 
+    /// 「視差効果を減らす」がオンのとき、変わった所の行を透明から戻す。選択を決めたあとで呼ぶ
+    private func fadeChangedRow(_ id: Int64?) {
+        guard let id, NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        fadeTokens[id, default: 0] += 1
+    }
+
+    /// 削除・ピン留め・解除で並びが変わるときの見せ方（requirements.md §3.5、design/row-motion-login-implementation-2026-10-30.md §2）
+    private enum RowMotion {
+        /// 行を新しい位置まで約 0.2 秒で動かす
+        case move(Animation)
+        /// 「視差効果を減らす」がオン。行は動かさず、一覧も送るだけ（変わった所の行のフェードは fadeChangedRow）
+        case fade
+
+        /// 設定は操作のたびに読む（変えた直後から効くように）
+        @MainActor static var current: RowMotion {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .fade : .move(.easeOut(duration: 0.2))
+        }
+    }
+
     // MARK: - ウインドウからの操作
 
     /// ウインドウを開く直前に呼ぶ。検索語を消して先頭を選び、一覧を先頭まで戻す
     func prepareForShow() {
+        // 前に開いていたときの動きの印が残っていても、開いたときの並びは動かさない
+        pendingMotion = false
         if !query.isEmpty { query = "" }
         if kindFilter != .all { kindFilter = .all }
         selectedID = visible.first?.id
         // 選択が前から先頭のままだと selectedID の変化でスクロールしないので、毎回先頭まで戻す。
         // 一覧をスクロールしたまま閉じると、次に開いたときに途中から出ていた（2026-10-24、Kazuya さんの確認）
+        scrollAnimation = nil
         scrollToken += 1
         loadPreview()
         focusToken += 1
@@ -278,6 +335,8 @@ final class HistoryModel: ObservableObject {
 
     /// 履歴ウインドウを閉じたとき
     func didHide() {
+        // ⌘⏎ のあとすぐ閉じたときなど、閉じている間に届いた並びは動かさない
+        pendingMotion = false
         links.hide()
     }
 
@@ -319,31 +378,30 @@ final class HistoryModel: ObservableObject {
     func togglePinSelection() {
         guard let id = currentItemID, let summary = summaryByID[id] else { return }
         let pinned = !summary.isPinned
-        // ピン留めを外した項目は、コピーした日時の位置（ずっと下のこともある）に移る。選択まで一緒に移ると見失うので、
-        // 外す前にすぐ下にあった項目（なければすぐ上）を選ぶ。続けて ⌘P を押せば上から順に外していける（2026-10-19、Kazuya さん）
-        let list = visible
-        let next = list.firstIndex { $0.id == id }.flatMap { index in
-            index + 1 < list.count ? list[index + 1].id : (index > 0 ? list[index - 1].id : nil)
-        }
         try? store.setPinned(pinned, itemID: id)
         if let index = summaries.firstIndex(where: { $0.id == id }) {
             summaries[index].isPinned = pinned
             summaries[index].pinnedAt = pinned ? Date() : nil
         }
-        // ピン留めした項目はピン留めの段に移る。選択は同じ項目のままなので、並び替えたあとでスクロールして見える所に出す
-        selectedID = pinned ? id : (next ?? id)
-        scrollsAfterApply = pinned
+        // ピン留めしても外しても、選択はその行に付けたままにし、行が動いた先まで一覧を送る。
+        // 外した行はコピーした日時の位置（ずっと下のこともある）に移るが、動きで行き先が見える。
+        // 続けて ⌘P を押せば同じ行がピン留めに戻るだけで、別の行をピン留めしない（2026-10-30、Kazuya さん。10/19 の「すぐ下を選ぶ」を置き換え）
+        pendingMotion = true
+        scrollsAfterApply = true
         rebuild()
+        fadeChangedRow(id)
     }
 
     func deleteSelection() {
         guard let id = selectedID else { return }
         // 検索中は remove(ids:) のあと検索が非同期でやり直されるので、次に選ぶ項目は消す前に決めておく
-        let remaining = visible.filter { $0.id != id }
-        let index = visible.firstIndex { $0.id == id } ?? 0
+        let next = ListSelection.afterRemoving(id, from: visible.map(\.id))
         try? store.delete(itemID: id)
+        pendingMotion = true
         remove(ids: [id])
-        selectedID = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
+        selectedID = next
+        // 消した行の場所に来た行（次に選ぶ行）を透明から戻す
+        fadeChangedRow(next)
     }
 
     // MARK: - プレビュー
