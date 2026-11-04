@@ -119,19 +119,26 @@ final class SearchBenchmarkTests: XCTestCase {
         let text = String(String(repeating: sentence, count: 2_000 / sentence.count + 1).prefix(Romanizer.maxLength))
         let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
         report(String(format: "読みの長さ: 原文 %d 文字から %d 文字", text.count, romaji.utf16.count))
-        let candidates = (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }
-        _ = FuzzyMatcher.search("kaigi", in: candidates)
+        // 前の作り（読みの欄も先頭 2,000 単位で切る）と、同じ実行の中で並べる（CI のマシンは回ごとに速さが 2 倍ほど変わるため）
+        let cutRomaji = String(decoding: Array(romaji.utf16.prefix(Self.fieldLength)), as: UTF16.self)
+        let sets: [(String, [SearchCandidate])] = [
+            ("前（読みを 2,000 で切る）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: cutRomaji) }),
+            ("今（読みを切らない）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }),
+        ]
         for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
             let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
             for looseness in SearchLooseness.allCases {
-                var slowest = 0.0
-                for prefix in prefixes {
-                    let start = DispatchTime.now().uptimeNanoseconds
-                    _ = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
-                    slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                for (name, candidates) in sets {
+                    _ = FuzzyMatcher.search(query, in: candidates, spanRatio: looseness.spanRatio)
+                    var slowest = 0.0
+                    for prefix in prefixes {
+                        let start = DispatchTime.now().uptimeNanoseconds
+                        _ = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
+                        slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                    }
+                    report(String(format: "日本語 1 万件・%@「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
+                                  name, query, looseness.displayName, looseness.spanRatio, slowest))
                 }
-                report(String(format: "読みを切らない検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
-                             query, looseness.displayName, looseness.spanRatio, slowest))
             }
         }
     }
