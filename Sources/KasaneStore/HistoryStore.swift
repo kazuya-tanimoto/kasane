@@ -314,7 +314,7 @@ public final class HistoryStore: @unchecked Sendable {
         }
         let rows = try dbQueue.read { db in
             try Row.fetchAll(db, sql: """
-                SELECT id, kind, title, substr(text, 1, \(SearchCandidate.maxFieldLength)) AS searchText,
+                SELECT id, kind, title, text AS searchText,
                        romaji, sourceBundleID, sourceAppName, copiedAt, pasteCount, isPinned, pinnedAt, isImageFile
                 FROM item ORDER BY \(order)
                 """)

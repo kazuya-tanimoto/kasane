@@ -7,6 +7,14 @@ import XCTest
 /// 普段の `swift test` では飛ばし、CI の別の手順でリリースビルドのときだけ流す:
 /// `KASANE_BENCH=1 swift test -c release -Xswiftc -enable-testing --filter SearchBenchmarkTests`
 final class SearchBenchmarkTests: XCTestCase {
+    /// 結果を標準エラーに出す。macOS 26 の CI では、テストの print（標準出力）がログに残らなかった（2026-11-04）
+    func report(_ line: String) {
+        FileHandle.standardError.write(Data((line + "\n").utf8))
+    }
+
+    /// 速さを測る項目 1 件の長さ（2026-11-04 までの検索の上限だった 2,000 文字。前からの記録と比べるため、そのままにしている）
+    static let fieldLength = 2_000
+
     func testSearchSpeedPerLooseness() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
 
@@ -30,7 +38,7 @@ final class SearchBenchmarkTests: XCTestCase {
                     if ms > slowest { slowest = ms }
                     if prefix == query { hits = results.count }
                 }
-                print(String(format: "検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、一致 %d 件",
+                report(String(format: "検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms、一致 %d 件",
                              query, looseness.displayName, looseness.spanRatio, slowest, hits))
             }
         }
@@ -55,10 +63,10 @@ final class SearchBenchmarkTests: XCTestCase {
         for word in ["make", "taqz", "kgsr", "agk", "agkr"] {
             let term = Array(word.utf16)
             let before = time({ Self.unlimitedMatch($0, in: $1) }, term)
-            print(String(format: "照合の比較「%@」前の版（幅の制限なし）: %.1f ms、%d 欄", word, before.ms, before.hits))
+            report(String(format: "照合の比較「%@」前の版（幅の制限なし）: %.1f ms、%d 欄", word, before.ms, before.hits))
             for ratio in [2, 3, 6] {
                 let now = time({ FuzzyMatcher.fuzzyMatch($0, in: $1, maxSpan: term.count * ratio) }, term)
-                print(String(format: "照合の比較「%@」%d 倍: %.1f ms、%d 欄", word, ratio, now.ms, now.hits))
+                report(String(format: "照合の比較「%@」%d 倍: %.1f ms、%d 欄", word, ratio, now.ms, now.hits))
             }
         }
     }
@@ -79,9 +87,9 @@ final class SearchBenchmarkTests: XCTestCase {
             return best
         }
         let whole = time { _ = texts.map { SearchCandidate(id: 0, text: $0, romaji: nil) } }
-        let prefixed = texts.map { String($0.prefix(SearchCandidate.maxFieldLength)) }
+        let prefixed = texts.map { String($0.prefix(Self.fieldLength)) }
         let nfc = time { _ = prefixed.map { $0.precomposedStringWithCanonicalMapping } }
-        print(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
+        report(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
     }
 
     /// 一致した文字に色を付ける時間。日本語 200 文字の題名を 30 行、1 文字打つごとに照合し直す（2026-10-31。
@@ -98,7 +106,113 @@ final class SearchBenchmarkTests: XCTestCase {
                 }
                 slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
             }
-            print(String(format: "色を付ける時間「%@」日本語 200 文字 × 30 行: 1 文字ごとの最も遅い回 %.1f ms", query, slowest))
+            report(String(format: "色を付ける時間「%@」日本語 200 文字 × 30 行: 1 文字ごとの最も遅い回 %.1f ms", query, slowest))
+        }
+    }
+
+    #if canImport(Darwin)
+    /// 1 万件すべてが日本語 2,000 文字の項目で、読みを Romanizer で作った場合の速さ（2026-11-04。読みの欄を 2,000 文字で切るのをやめたとき）。
+    /// 読みは原文より長いので、上の 2,000 文字 × 2 欄より欄が長くなる。読みの長さも出す
+    func testSearchSpeedWithFullRomaji() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let sentence = "明日の会議の資料をガイドにまとめて、かいぎしつで共有します。高松の天気は晴れです。"
+        let text = String(String(repeating: sentence, count: 2_000 / sentence.count + 1).prefix(Romanizer.maxLength))
+        let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
+        report(String(format: "読みの長さ: 原文 %d 文字から %d 文字", text.count, romaji.utf16.count))
+        // 前の作り（読みの欄も先頭 2,000 単位で切る）と、同じ実行の中で並べる（CI のマシンは回ごとに速さが 2 倍ほど変わるため）
+        let cutRomaji = String(decoding: Array(romaji.utf16.prefix(Self.fieldLength)), as: UTF16.self)
+        let sets: [(String, [SearchCandidate])] = [
+            ("前（読みを 2,000 で切る）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: cutRomaji) }),
+            ("今（読みを切らない）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }),
+        ]
+        for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
+            for looseness in SearchLooseness.allCases {
+                let medians = Self.medianSlowest(query: query, sets: sets.map(\.1), spanRatio: looseness.spanRatio)
+                for (index, set) in sets.enumerated() {
+                    report(String(format: "日本語 1 万件・%@「%@」%@（%d 倍）: 1 文字ごとの最も遅い回の中央値 %.1f ms",
+                                  set.0, query, looseness.displayName, looseness.spanRatio, medians[index]))
+                }
+            }
+        }
+    }
+    #endif
+
+    /// 原文を最後まで探すようにしたときの速さとメモリ（2026-11-04。要件書 §5: 1 万件で 1 文字入力ごとに 50ms 以内、待機中のメモリ 50MB 程度以内）。
+    /// 同じ実行の中で、先頭 2,000 文字だけを探す前の作りと、最後まで探す今の作りを並べる。
+    /// 長い項目の数と長さを変えた組み合わせで、準備（読み込み時の正規化）の時間、検索用に持つ欄の大きさ（UTF-16 で 1 単位 2 バイト）、
+    /// 1 文字ごとの最も遅い回（前と今を交互に \(Self.runs) 回流した中央値）を出す
+    func testWholeTextSearch() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let base = Self.paragraphs(count: 10_000, length: Self.fieldLength)
+        // （長い項目の数, 1 件の文字数）。1 万件のうちその数だけを長い項目に置き換える
+        let cases: [(count: Int, length: Int)] = [(0, 0), (10, 100_000), (100, 100_000), (1, 1_000_000), (10, 1_000_000)]
+        for longCase in cases {
+            var texts = base
+            let long = Self.paragraphs(count: longCase.count, length: longCase.length)
+            for i in 0..<longCase.count { texts[i * (10_000 / max(longCase.count, 1))] = long[i] }
+            let label = longCase.count == 0 ? "全部 2,000 文字" : "うち \(longCase.count) 件が \(longCase.length) 文字"
+            var sets: [(String, [SearchCandidate])] = []
+            for (name, cut) in [("前（先頭 2,000 文字）", true), ("今（最後まで）", false)] {
+                let start = DispatchTime.now().uptimeNanoseconds
+                let candidates = texts.enumerated().map {
+                    SearchCandidate(id: Int64($0.offset), text: cut ? String($0.element.prefix(Self.fieldLength)) : $0.element, romaji: nil)
+                }
+                let prepareMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                let units = candidates.reduce(0) { $0 + $1.fields.reduce(0) { $0 + $1.count } }
+                sets.append((name, candidates))
+                // プロセスのメモリ（phys_footprint）の差は、前の組で解放した分が使い回されて 0 MB と出ることがあり、使えなかった（2026-11-04）。
+                // 検索用に持つのはこの欄だけなので、欄の大きさで見る
+                report(String(format: "最後まで探す・%@・%@: 準備 %.0f ms、欄の合計 %d 単位（%.1f MB）",
+                              label, name, prepareMs, units, Double(units * 2) / 1_048_576))
+            }
+            for query in ["make test", "taqz", "agkr"] {
+                let medians = Self.medianSlowest(query: query, sets: sets.map(\.1), spanRatio: SearchLooseness.standard.spanRatio)
+                for (index, set) in sets.enumerated() {
+                    report(String(format: "最後まで探す・%@・%@「%@」標準: 1 文字ごとの最も遅い回の中央値 %.1f ms",
+                                  label, set.0, query, medians[index]))
+                }
+            }
+        }
+    }
+
+    /// 速さを比べるときに流す回数。CI のマシンは回ごとに速さが 2 倍ほど変わるので、中央値で比べる（2026-11-04）
+    static let runs = 7
+
+    /// 1 文字ずつ打ったときの最も遅い回を、`sets` の各組について交互に `runs` 回測り、組ごとの中央値を返す
+    static func medianSlowest(query: String, sets: [[SearchCandidate]], spanRatio: Int) -> [Double] {
+        let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+        var samples = Array(repeating: [Double](), count: sets.count)
+        for set in sets { _ = FuzzyMatcher.search(query, in: set, spanRatio: spanRatio) }
+        for _ in 0..<runs {
+            for (index, set) in sets.enumerated() {
+                var slowest = 0.0
+                for prefix in prefixes {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    _ = FuzzyMatcher.search(prefix, in: set, spanRatio: spanRatio)
+                    slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                }
+                samples[index].append(slowest)
+            }
+        }
+        return samples.map { $0.sorted()[$0.count / 2] }
+    }
+
+    /// 英字の語を並べた文を `count` 件。どれも `length` 文字（語は makeCandidates と同じ）
+    static func paragraphs(count: Int, length: Int) -> [String] {
+        let words = [
+            "the", "make", "test", "build", "release", "settings", "window", "history", "search", "paste",
+            "clipboard", "kaigi", "shiryou", "ashita", "tokyo", "takamatsu", "meeting", "review", "commit", "merge",
+            "a", "is", "to", "of", "and", "in", "for", "with", "on", "at",
+        ]
+        var seed: UInt64 = 7
+        return (0..<count).map { _ in
+            var text = ""
+            text.reserveCapacity(length + 16)
+            while text.utf8.count < length {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                text += words[Int((seed >> 33) % UInt64(words.count))] + " "
+            }
+            return String(text.prefix(length))
         }
     }
 
@@ -116,10 +230,10 @@ final class SearchBenchmarkTests: XCTestCase {
         }
         func paragraph() -> String {
             var text = ""
-            while text.count < SearchCandidate.maxFieldLength {
+            while text.count < Self.fieldLength {
                 text += nextWord() + " "
             }
-            return String(text.prefix(SearchCandidate.maxFieldLength))
+            return String(text.prefix(Self.fieldLength))
         }
         return (0..<10_000).map { SearchCandidate(id: Int64($0), text: paragraph(), romaji: paragraph()) }
     }

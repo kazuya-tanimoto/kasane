@@ -75,11 +75,6 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertEqual(FuzzyMatcher.search("  ", in: candidates).map(\.id), [1, 2, 3])
     }
 
-    func testLongTextIsCapped() {
-        let long = String(repeating: "a", count: 10_000) + "zzz"
-        XCTAssertNil(FuzzyMatcher.score("zzz", text: long), "上限より後ろは検索しない")
-    }
-
     // MARK: - 一致の幅（検索のゆるさ、2026-10-22）
 
     func testScatteredLettersDoNotMatchAtStandard() {
@@ -177,6 +172,16 @@ final class FuzzyMatcherTests: XCTestCase {
 
     func testExactTermIgnoresSpanSetting() {
         XCTAssertNotNil(FuzzyMatcher.score("'push", text: "git push", spanRatio: 2))
+    }
+
+    /// 原文は最後まで探す。2,001 文字目より後ろの語も、2,000 文字目をまたぐ語も当たる（2026-11-04 Kazuya さんが決定）
+    func testWholeTextIsSearched() {
+        let filler = String(repeating: "x", count: 1_997)
+        let text = filler + "takamatsu " + String(repeating: "y", count: 5_000) + " kasane"
+        for query in ["takamatsu", "'takamatsu", "kasane", "'kasane", "takamatsu kasane"] {
+            XCTAssertNotNil(FuzzyMatcher.score(query, text: text), query)
+        }
+        XCTAssertNil(FuzzyMatcher.score("'tokyo", text: text))
     }
 
     func testLoosenessRatios() {
