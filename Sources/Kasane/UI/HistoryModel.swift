@@ -86,6 +86,8 @@ final class HistoryModel: ObservableObject {
 
     /// 項目が選ばれたとき（ペーストやコピー）。AppDelegate が処理する
     var onActivate: ((Int64, PasteAction) -> Void)?
+    /// 履歴を初めて読み込み終えたとき（1 回だけ呼ぶ）
+    var onFirstLoad: (() -> Void)?
 
     let store: HistoryStore
     /// URL のタイトルと画像を、見えている行から先に取りに行く
@@ -133,7 +135,12 @@ final class HistoryModel: ObservableObject {
             self.summaries = index.map(\.summary)
             self.candidateByID = Dictionary(index.map { ($0.summary.id, $0.candidate) }, uniquingKeysWith: { a, _ in a })
             self.rebuild()
+            let isFirstLoad = !self.isLoaded
             self.isLoaded = true
+            if isFirstLoad {
+                self.onFirstLoad?()
+                self.onFirstLoad = nil
+            }
         }
     }
 
