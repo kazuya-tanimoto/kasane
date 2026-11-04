@@ -40,9 +40,42 @@ public enum Romanizer {
     }
 
     /// 読みと、語ごとの位置。保存するときの読み（romaji(for:)）と、色を付けるときの読みを同じ作り方にするため、1 つにまとめている
+    ///
+    /// 読みは NFC にそろえた文から作り、語の位置は元の文に戻す。Finder のファイル名などの「カ」＋濁点の 2 文字（NFD）でも、
+    /// 「ガ」と同じ読みにするため（2026-10-30 決定）
     public static func reading(for text: String) -> RomajiReading? {
         guard TextNormalizer.containsJapanese(text) else { return nil }
-        let source = String(text.prefix(maxLength)) as CFString
+        let prefix = String(text.prefix(maxLength))
+        let composed = prefix.precomposedStringWithCanonicalMapping
+        // Swift の == は NFC と NFD を同じとみなすので、UTF-16 で比べる
+        guard !composed.utf16.elementsEqual(prefix.utf16) else { return transcribe(prefix) }
+        // 1 文字ずつ NFC にして、NFC の文の位置から元の文の位置への対応を作る（濁点は前の文字と同じ 1 文字に入る）
+        var nfc = ""
+        var starts: [Int] = []
+        var ends: [Int] = []
+        var offset = 0
+        for character in prefix {
+            let length = String(character).utf16.count
+            let piece = String(character).precomposedStringWithCanonicalMapping
+            nfc += piece
+            starts += Array(repeating: offset, count: piece.utf16.count)
+            ends += Array(repeating: offset + length, count: piece.utf16.count)
+            offset += length
+        }
+        guard var reading = transcribe(nfc) else { return nil }
+        reading.words = reading.words.compactMap { word in
+            guard !word.source.isEmpty, word.source.upperBound <= starts.count else { return nil }
+            return RomajiReading.Word(
+                romaji: word.romaji,
+                source: starts[word.source.lowerBound]..<ends[word.source.upperBound - 1]
+            )
+        }
+        return reading
+    }
+
+    /// CFStringTokenizer で読みを作る。語の位置は `text` の中の位置
+    static func transcribe(_ text: String) -> RomajiReading? {
+        let source = text as CFString
         let range = CFRange(location: 0, length: CFStringGetLength(source))
         let locale = Locale(identifier: "ja") as CFLocale
         guard let tokenizer = CFStringTokenizerCreate(

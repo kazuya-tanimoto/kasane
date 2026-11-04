@@ -15,6 +15,14 @@ final class TextNormalizerTests: XCTestCase {
         XCTAssertFalse(TextNormalizer.containsJapanese("meeting 123"))
     }
 
+    /// NFD（「カ」＋濁点の 2 文字）は、IME で打った「ガ」と同じ形にそろう。ひらがなも同じ
+    func testDecomposedKanaBecomesComposed() {
+        let decomposed = "\u{30AB}\u{3099}\u{30A4}\u{30C8}\u{3099}"  // カ゛イト゛（NFD の「ガイド」）
+        XCTAssertEqual(Array(TextNormalizer.normalize(decomposed).utf16), Array("ガイド".utf16))
+        XCTAssertEqual(Array(TextNormalizer.normalize("\u{304B}\u{3099}").utf16), Array("ガ".utf16), "ひらがなの NFD")
+        XCTAssertEqual(Array(TextNormalizer.normalize("Cafe\u{301}").utf16), Array("café".utf16))
+    }
+
     func testNewlinesBecomeSpaces() {
         XCTAssertEqual(TextNormalizer.normalize("A\nB\tC"), "a b c")
     }

@@ -63,6 +63,45 @@ final class SearchBenchmarkTests: XCTestCase {
         }
     }
 
+    /// 検索の準備（1 万件の SearchCandidate を作る所）のうち、NFC にそろえる分の時間（2026-10-31。NFC を足したとき）。
+    /// 同じ実行の中で、準備の全体と、正規化した文を NFC にする分だけを並べて出す。日本語の本文と英字の本文を半分ずつにする
+    func testPreparationTimeWithNFC() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let japanese = String(repeating: "明日の会議の資料をガイドにまとめて、かいぎしつで共有します。", count: 70)
+        let texts = Array(repeating: japanese, count: 5_000) + (0..<5_000).map { "make test release \($0) " + String(repeating: "build window ", count: 150) }
+        func time(_ body: () -> Void) -> Double {
+            var best = Double.infinity
+            for _ in 0..<3 {
+                let start = DispatchTime.now().uptimeNanoseconds
+                body()
+                best = min(best, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+            }
+            return best
+        }
+        let whole = time { _ = texts.map { SearchCandidate(id: 0, text: $0, romaji: nil) } }
+        let prefixed = texts.map { String($0.prefix(SearchCandidate.maxFieldLength)) }
+        let nfc = time { _ = prefixed.map { $0.precomposedStringWithCanonicalMapping } }
+        print(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
+    }
+
+    /// 一致した文字に色を付ける時間。日本語 200 文字の題名を 30 行、1 文字打つごとに照合し直す（2026-10-31。
+    /// ASCII だけではない題名はいつも 1 文字ずつ正規化するようにしたため。要件書 §5 の 1 文字入力ごとに 50ms 以内）
+    func testHighlightTimeOfVisibleRows() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let title = String(String(repeating: "明日の会議の資料をガイドにまとめて、かいぎしつで共有します。", count: 8).prefix(200))
+        for query in ["かいぎ", "がいど しりょう", "kaigi"] {
+            var slowest = 0.0
+            for prefix in (1...query.count).map({ String(query.prefix($0)) }) where !prefix.hasSuffix(" ") {
+                let start = DispatchTime.now().uptimeNanoseconds
+                for _ in 0..<30 {
+                    _ = MatchHighlighter.ranges(query: prefix, title: title)
+                }
+                slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+            }
+            print(String(format: "色を付ける時間「%@」日本語 200 文字 × 30 行: 1 文字ごとの最も遅い回 %.1f ms", query, slowest))
+        }
+    }
+
     /// 1 万件、1 項目は上限いっぱいの 2,000 文字で、原文とローマ字の 2 欄（どちらも照合する）
     static func makeCandidates() -> [SearchCandidate] {
         let words = [
