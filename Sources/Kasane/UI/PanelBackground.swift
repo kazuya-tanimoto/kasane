@@ -52,10 +52,20 @@ struct PanelBackground: View {
             if appearance.usesSystemMaterial && appearance.blurRadius > 0 {
                 VisualEffectBackground(material: .popover)
             }
-            Color(nsColor: .windowBackgroundColor)
+            Color.panelBase
                 .opacity(appearance.opacity)
         }
     }
+}
+
+extension Color {
+    /// 履歴ウインドウと小さいウインドウの地の色。不透明度はこの色に掛ける
+    /// （モック「C案 改訂版」の base: ライト rgb(244,244,247)、ダーク rgb(30,31,36)）
+    static let panelBase = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 30 / 255, green: 31 / 255, blue: 36 / 255, alpha: 1)
+            : NSColor(srgbRed: 244 / 255, green: 244 / 255, blue: 247 / 255, alpha: 1)
+    })
 }
 
 /// ウインドウの後ろ（デスクトップや他のアプリ）をぼかす NSVisualEffectView

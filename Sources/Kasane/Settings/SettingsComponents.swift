@@ -4,11 +4,50 @@ import SwiftUI
 /// 設定画面の部品。Mac のシステム設定に近い見た目（角丸の箱の中に行を並べ、行の間に線）にする。
 /// Form の grouped は中でスクロールして高さを決めないので、タブごとにウインドウの高さを中身に合わせられるよう自前で並べる
 
-/// 幅（全タブ共通。settings-screen-2026-10-22.md §4）
+/// 幅と間（全タブ共通。幅は settings-screen-2026-10-22.md §4、余白と間はモック「設定画面 10/22 案」の値）
 enum SettingsLayout {
     static let width: CGFloat = 760
-    static let padding: CGFloat = 20
-    static let rowSpacing: CGFloat = 8
+    /// 中の余白（モック: 上 18・左右 22・下 22）
+    static let padding = EdgeInsets(top: 18, leading: 22, bottom: 22, trailing: 22)
+    /// 箱・見出し・説明の間（モック: 16）
+    static let rowSpacing: CGFloat = 16
+    /// 箱の角の丸み（モック: 12）
+    static let boxCornerRadius: CGFloat = 12
+}
+
+/// 設定画面の色。Mac のシステムの色を使う（requirements.md「設定画面の部品の色はシステムの色を使う（アクセントカラーは使わない）」。
+/// 2026-10-31 にモックの決まった色へ変えたのを、Kazuya さんの了解が無いので戻した。fixes-without-asking-2026-10-31.md の前の 9）。
+/// システムの色なので、ダークと「コントラストを上げる」にも Mac が合わせる
+enum SettingsColor {
+    /// 箱の地（main と同じ）
+    static let box = Color(nsColor: .quaternaryLabelColor).opacity(0.25)
+    /// 箱の縁と、行の間の線
+    static let line = Color(nsColor: .separatorColor)
+    /// 本文の色
+    static let text = Color(nsColor: .labelColor)
+    /// ウインドウの地
+    static let window = Color(nsColor: .windowBackgroundColor)
+    /// 見出しと説明の灰色
+    static let sub = Color(nsColor: .secondaryLabelColor)
+    /// 文字のボタン、キーや検索の書き方の札の地
+    static let chip = Color(nsColor: .tertiarySystemFill)
+    /// 箱の中の、一段沈んだ地（検索の例）
+    static let inset = Color(nsColor: .quaternarySystemFill)
+    /// 一覧の下の ＋ − の帯の地
+    static let footer = Color(nsColor: .quaternarySystemFill)
+    /// 赤い文
+    static let danger = Color(nsColor: .systemRed)
+
+    /// ライトとダークで色を変える（外観タブの見本の絵だけに使う。見本は履歴ウインドウの絵なので、設定画面の色の決めの外）
+    static func dynamic(light: NSColor, dark: NSColor) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        })
+    }
+
+    static func rgb(_ red: Int, _ green: Int, _ blue: Int) -> NSColor {
+        NSColor(srgbRed: CGFloat(red) / 255, green: CGFloat(green) / 255, blue: CGFloat(blue) / 255, alpha: 1)
+    }
 }
 
 /// 文字の大きさ（settings-screen-2026-10-22.md §3「文字の大きさ」）。
@@ -33,14 +72,24 @@ struct SettingsBox<Content: View>: View {
         VStack(alignment: .leading, spacing: 0) {
             content
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .quaternaryLabelColor).opacity(0.25)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor), lineWidth: 0.5))
+        .settingsBoxBackground()
     }
 }
 
+extension View {
+    /// 箱の地と縁（モック: 角 12、縁 1px）
+    func settingsBoxBackground() -> some View {
+        let shape = RoundedRectangle(cornerRadius: SettingsLayout.boxCornerRadius, style: .continuous)
+        return background(shape.fill(SettingsColor.box))
+            .overlay(shape.strokeBorder(SettingsColor.line, lineWidth: 1))
+            .clipShape(shape)
+    }
+}
+
+/// 行の間の線。モックと同じく、箱の左右の端まで引く
 struct SettingsDivider: View {
     var body: some View {
-        Divider().padding(.leading, 12)
+        Rectangle().fill(SettingsColor.line).frame(height: 1)
     }
 }
 
@@ -50,13 +99,15 @@ struct SettingsHeader<Trailing: View>: View {
     @ViewBuilder var trailing: Trailing
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: SettingsFont.text, weight: .semibold))
+        // モック: 14pt の太字（600）を灰色で。右に「標準に戻す」などを置くときも、行の高さは 24 から
+        HStack(alignment: .center, spacing: 8) {
+            Text(title)
+                .font(.system(size: SettingsFont.text, weight: .semibold))
+                .foregroundStyle(SettingsColor.sub)
             Spacer(minLength: 8)
             trailing
         }
         .padding(.horizontal, 4)
-        .padding(.top, 10)
     }
 }
 
@@ -74,8 +125,8 @@ struct SettingsRow<Control: View>: View {
     @ViewBuilder var control: Control
 
     var body: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 3) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.system(size: SettingsFont.item))
                 if let description {
                     SettingsCaption(description)
@@ -84,23 +135,33 @@ struct SettingsRow<Control: View>: View {
             Spacer(minLength: 0)
             control
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+        .settingsRowPadding()
+    }
+}
+
+extension View {
+    /// 箱の中の 1 行の余白（モック: 上下 11・左右 14）
+    func settingsRowPadding() -> some View {
+        padding(.horizontal, 14).padding(.vertical, 11)
     }
 }
 
 /// 灰色の小さい説明の文
 struct SettingsCaption: View {
     var text: String
+    /// 行の高さ（文字の大きさの何倍か）。nil ならシステムの標準
+    var lineHeight: CGFloat?
 
-    init(_ text: String) {
+    init(_ text: String, lineHeight: CGFloat? = nil) {
         self.text = text
+        self.lineHeight = lineHeight
     }
 
     var body: some View {
         Text(text)
             .font(.system(size: SettingsFont.text))
-            .foregroundStyle(.secondary)
+            .lineHeight(lineHeight ?? 0, fontSize: SettingsFont.text)
+            .foregroundStyle(SettingsColor.sub)
             .fixedSize(horizontal: false, vertical: true)
     }
 }
@@ -121,16 +182,19 @@ struct FittingScroll<Content: View>: View {
         ScrollView(.vertical) {
             content
                 .font(.system(size: SettingsFont.text))
+                .foregroundStyle(SettingsColor.text)
                 .padding(SettingsLayout.padding)
                 .frame(width: SettingsLayout.width, alignment: .topLeading)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
         }
         .scrollDisabled(height <= maxHeight)
         .frame(width: SettingsLayout.width, height: min(height, maxHeight))
+        // ウインドウの地（モック: ライト #F5F5F7、ダーク #26282D）。上のタブの帯は Mac 標準のまま
+        .background(SettingsColor.window)
     }
 }
 
-/// 状態の印（許可の行）
+/// 状態の印（許可の行）。Mac の記号（settings-screen-2026-10-22.md §3 の文字の表「変えない: 許可の状態の前の印（SF Symbols の印）」）
 struct StatusMark: View {
     var ok: Bool
 
@@ -140,4 +204,26 @@ struct StatusMark: View {
             .font(.system(size: 15))
             .accessibilityHidden(true)
     }
+}
+
+/// 文字のボタン（「システム設定を開く」「標準に戻す」など）。モックの形: 平らな地、角 7、上下 4・左右 10（色はシステムの色）。
+/// 文字の大きさは置く所で決める（ふだん 14pt、いちばん下の行は 13pt。settings-screen-2026-10-22.md §3）
+struct SettingsButtonStyle: ButtonStyle {
+    /// 文字の色。nil なら本文の色（「履歴を削除…」だけ赤）
+    var tint: Color?
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? (tint ?? SettingsColor.text) : SettingsColor.sub)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(SettingsColor.chip, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .opacity(configuration.isPressed ? 0.7 : 1)
+    }
+}
+
+extension ButtonStyle where Self == SettingsButtonStyle {
+    static var settings: SettingsButtonStyle { SettingsButtonStyle() }
 }

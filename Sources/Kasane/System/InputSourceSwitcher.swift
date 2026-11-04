@@ -4,9 +4,10 @@ import Carbon
 /// 履歴ウインドウを開いている間だけ、日本語入力をオフ（英数）にする。
 ///
 /// Kasane はローマ字で日本語の項目も検索できるので、英数のまま打てば大半の検索ができる。
-/// 閉じたら開く前の入力方法に戻す。ウインドウは前のアプリを前面に残したまま開くので、
-/// 戻さないと貼り付け先のアプリまで英数のままになる。
-/// 日本語入力へは かなキー で戻すので、戻るのは「ひらがな」（開く前がカタカナなどでも）。
+/// 閉じたら開く前の入力方法に戻す（requirements.md「閉じたら開く前の入力方法に戻す」2026-10-17 決定）。
+/// ウインドウは前のアプリを前面に残したまま開くので、戻さないと貼り付け先のアプリまで英数のままになる。
+/// 日本語入力へはまず かなキー で戻し、それで開く前と違う入力方法（カタカナなど）になったときだけ、
+/// ウインドウを閉じたあとで開く前の入力方法を選び直す。
 ///
 /// 切り替えは、利用者が 英数 / かな キーを押したときと同じキーを送って行う。
 /// 入力方法を選び直す API（TISSelectInputSource）は日本語入力との切り替えに時間がかかり、
@@ -21,6 +22,8 @@ import Carbon
 final class InputSourceSwitcher {
     /// 開いたときに日本語入力などがオンだったか。nil なら開いていない
     private var wasNonASCII: Bool?
+    /// 開く前の入力方法（閉じたあと、かなキーで戻らなかったときに選び直す）
+    private var savedSource: TISInputSource?
 
     private var switchObserver: NSObjectProtocol?
     private var waitID = 0
@@ -32,6 +35,7 @@ final class InputSourceSwitcher {
         guard wasNonASCII == nil, AppSettings.switchesToASCIIOnOpen else { return false }
         let nonASCII = !Self.isCurrentASCII()
         wasNonASCII = nonASCII
+        savedSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue()
         guard nonASCII else { return false }
         // 切り替わった知らせを取りこぼさないよう、キーを送る前に待ち始める
         waitForSwitch(timeout: 0.3, onSwitched)
@@ -74,13 +78,36 @@ final class InputSourceSwitcher {
     func restore() {
         guard let wasNonASCII else { return }
         self.wasNonASCII = nil
+        let saved = savedSource
+        savedSource = nil
+        let key: CGKeyCode
         if wasNonASCII {
             // ウインドウの中でかなキーを押していても、もう一度押すだけなので変わらない
-            Self.post(key: CGKeyCode(kVK_JIS_Kana))
+            key = CGKeyCode(kVK_JIS_Kana)
         } else if !Self.isCurrentASCII() {
             // 開く前は英数で、ウインドウの中でかなキーを押したときだけ戻す
-            Self.post(key: CGKeyCode(kVK_JIS_Eisu))
+            key = CGKeyCode(kVK_JIS_Eisu)
+        } else {
+            return
         }
+        // キーで切り替わったら（0.5 秒たっても変わらなければそこで）、開く前と同じかを確かめる
+        waitForSwitch(timeout: 0.5) { _ in
+            Self.select(saved)
+        }
+        Self.post(key: key)
+    }
+
+    /// 今の入力方法が `source` と違うときだけ、`source` を選び直す（かなキーでは戻らないカタカナなどのため）
+    static func select(_ source: TISInputSource?) {
+        guard let source, let current = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue(),
+              identifier(of: current) != identifier(of: source)
+        else { return }
+        TISSelectInputSource(source)
+    }
+
+    private static func identifier(of source: TISInputSource) -> String? {
+        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyInputSourceID) else { return nil }
+        return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
     }
 
     /// 前面にある、Kasane 以外のアプリ
