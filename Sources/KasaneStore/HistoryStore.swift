@@ -6,8 +6,9 @@ import KasaneCore
 ///
 /// GRDB の DatabaseQueue がスレッドセーフなので、どのスレッドから呼んでもよい。
 public final class HistoryStore: @unchecked Sendable {
-    /// これより大きい型ごとのデータは DB ではなくファイルに保存する
-    public static let inlineDataLimit = 256 * 1024
+    /// 型ごとのデータは、この大きさ以上なら DB ではなくファイルに保存する（100KB 未満だけを DB に入れる。2026-11-04 に 256KB から変えた。
+    /// 前に DB に入れた 100〜256KB のデータは DB に入ったまま読める。読むときは行ごとに DB かファイルかを見るため）
+    public static let inlineDataLimit = 100 * 1024
     /// これより大きいデータは保存しない（巨大な画像などで DB と容量を圧迫しないため）
     public static let maxRepresentationSize = 64 * 1024 * 1024
 
@@ -195,7 +196,7 @@ public final class HistoryStore: @unchecked Sendable {
                         itemID: itemID, itemIndex: rep.itemIndex, position: position,
                         type: rep.type, data: nil, filePath: nil
                     )
-                    if rep.data.count > Self.inlineDataLimit {
+                    if rep.data.count >= Self.inlineDataLimit {
                         let name = "\(itemID)-\(UUID().uuidString)"
                         try rep.data.write(to: self.blobDirectory.appendingPathComponent(name))
                         writtenFiles.append(name)

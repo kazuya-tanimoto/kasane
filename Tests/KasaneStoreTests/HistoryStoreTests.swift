@@ -182,6 +182,31 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNotNil(try store.data(itemID: third.item.id!, types: ["public.png"]), "新しいほうのファイルは残る")
     }
 
+    /// 100KB 未満だけを DB に入れ、100KB ちょうどからファイルにする。前に DB に入れた 100〜256KB のデータもそのまま読める
+    func testInlineLimitIsUnder100KB() throws {
+        XCTAssertEqual(HistoryStore.inlineDataLimit, 100 * 1024)
+        func capture(_ size: Int, _ byte: UInt8) -> Capture {
+            let data = Data(repeating: byte, count: size)
+            return Capture(kind: .image, title: "画像\(byte)", text: nil, primaryData: data,
+                           representations: [.init(itemIndex: 0, type: "public.png", data: data)])
+        }
+        let under = try store.save(capture(100 * 1024 - 1, 1), limit: 100).item.id!
+        XCTAssertEqual(try blobFiles().count, 0)
+        let exact = try store.save(capture(100 * 1024, 2), limit: 100).item.id!
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertEqual(try store.data(itemID: under, types: ["public.png"])?.data.count, 100 * 1024 - 1)
+        XCTAssertEqual(try store.data(itemID: exact, types: ["public.png"])?.data.count, 100 * 1024)
+
+        // 前の境目（256KB）で DB に入れた 200KB のデータ
+        let old = try store.save(capture(10, 3), limit: 100).item.id!
+        let oldData = Data(repeating: 3, count: 200 * 1024)
+        try store.dbQueue.write { db in
+            try db.execute(sql: "UPDATE representation SET data = ? WHERE itemID = ?", arguments: [oldData, old])
+        }
+        XCTAssertEqual(try store.data(itemID: old, types: ["public.png"])?.data, oldData)
+        XCTAssertEqual(try store.representations(itemID: old).first?.data, oldData)
+    }
+
     func testSortByPasteCount() throws {
         let t0 = Date(timeIntervalSince1970: 1_000)
         let a = try store.save(textCapture("A"), limit: 100, now: t0)
