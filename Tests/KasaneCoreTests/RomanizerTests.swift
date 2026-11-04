@@ -43,5 +43,25 @@ final class RomanizerTests: XCTestCase {
             )
         }
     }
+    /// 長い本文は先頭 2,000 文字を読みにし、その読みは全部を検索に使う（要件書 §3.2「先頭の一部（2,000文字）だけを変換」）。
+    /// 読みは元の文より長くなる（「かきくけこ」の 5 文字は kakikukeko の 10 文字）ので、読みの欄を 2,000 文字で切ると、
+    /// 先頭 2,000 文字の中の語でも後ろのほうはローマ字で当たらなかった（2026-11-04 に見つけた不具合）
+    func testRomajiOfWholeFirst2000CharactersIsSearched() throws {
+        let filler = String(repeating: "かきくけこ", count: 389)  // 1,945 文字
+        let text = filler + "。高松。" + String(repeating: "あ", count: 100) + "。東京。"
+        let tail = text.index(text.startIndex, offsetBy: Romanizer.maxLength)
+        XCTAssertTrue(text[..<tail].contains("高松"), "高松は先頭 2,000 文字の中")
+        XCTAssertFalse(text[..<tail].contains("東京"), "東京は先頭 2,000 文字の外")
+
+        let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
+        XCTAssertGreaterThan(romaji.utf16.count, SearchCandidate.maxFieldLength, "読みが 2,000 文字を超える場合を試す")
+        XCTAssertTrue(romaji.contains("takamatsu"), "高松は読みになる")
+        XCTAssertFalse(romaji.contains("toukyou"), "東京は読みにしない")
+
+        for query in ["'takamatsu", "takamatsu"] {
+            XCTAssertNotNil(FuzzyMatcher.score(query, text: text, romaji: romaji), "\(query) で当たる")
+        }
+        XCTAssertNil(FuzzyMatcher.score("'toukyou", text: text, romaji: romaji), "先頭 2,000 文字の外の語はローマ字では当たらない")
+    }
 }
 #endif
