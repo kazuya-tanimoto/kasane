@@ -1,0 +1,6 @@
+PROBE windows at launch: ["0:[\"X\": 511.0, \"Width\": 560.0, \"Height\": 480.0, \"Y\": 31.0]"]
+PROBE after closing onboarding: ["0:[\"X\": 511.0, \"Width\": 560.0, \"Height\": 480.0, \"Y\": 31.0]"]
+PROBE after ⌥V: ["0:[\"X\": 511.0, \"Width\": 560.0, \"Height\": 480.0, \"Y\": 31.0]"]
+PROBE after ⌥V: ["0:[\"X\": 511.0, \"Width\": 560.0, \"Height\": 480.0, \"Y\": 31.0]"]
+PROBE after ⌥V: ["0:[\"X\": 511.0, \"Width\": 560.0, \"Height\": 480.0, \"Y\": 31.0]"]
+PROBE history window not found
