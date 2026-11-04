@@ -40,7 +40,7 @@ struct HistoryView: View {
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                     // プレビューの地は帯の上で終える（Kazuya さんが OK したモック「Liquid Glass 3 案」の B と同じ形）。
-                    // その下の空いた所（帯の左など）は、前の下の帯の空いた所と同じく、つかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）
+                    // その下の、帯の上の細い所は、前の下の帯の空いた所と同じく、つかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）
                     WindowDragArea()
                         .frame(height: previewBottomClearance)
                 }
@@ -52,6 +52,8 @@ struct HistoryView: View {
         .overlay(alignment: .bottomTrailing) {
             ActionBar(model: model)
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { actionBarHeight = $0 }
+                // 左端は一覧の右端から actionBarListOverlap だけ左に置き、どの幅でも一覧に重ねる（2026-11-04 Kazuya さんが OK、問い 2）。
+                .padding(.leading, actionBarLeading)
                 // 右端はプレビューの地の右端にそろえる（モック「Liquid Glass 3 案」の B では、どちらも 10px でそろっている）
                 .padding(.trailing, Self.contentHorizontalPadding)
                 .padding(.bottom, ActionBar.margin)
@@ -77,6 +79,16 @@ struct HistoryView: View {
     private static let actionBarGap: CGFloat = 6
     /// 帯と、プレビューの地の下端との間（モック B: プレビューの下 56px − 帯の下 10px − 帯の高さ 30px）
     private static let previewGap: CGFloat = 16
+
+    /// 帯が一覧に重なる幅（文字の大きさが標準のとき）。一覧の幅 350 と同じ割合で大きくする。
+    /// 10/30 のモック B から見積もった値。延ばすことは問い 2 で Kazuya さんが OK（2026-11-04）。160 という値はまだ OK をもらっていない（manual-test 17 章で見てもらう）
+    private static let actionBarListOverlap: CGFloat = 160
+
+    /// ウインドウの左端から帯の左端まで
+    private var actionBarLeading: CGFloat {
+        let size = appearance.historyTextSize
+        return Self.contentHorizontalPadding + size.scaled(350) - size.scaled(Self.actionBarListOverlap)
+    }
 
     /// 一覧とプレビューの下端のうち、帯が重なる高さに少し間を足したもの。
     /// 一覧は帯の下までスクロールでき（行が透けて見える）、いちばん下までスクロールすれば帯の上に出る。↓ で選んだ行も、帯に隠れない所まで送る。
@@ -197,6 +209,10 @@ private struct ActionBar: View {
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
         HStack(spacing: 4) {
+            // ボタンの左の空いた所。つかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）。
+            // 帯を一覧の上まで延ばしたので、この下の一覧の行はクリックできない（問い 2 で Kazuya さんが OK）
+            WindowDragArea()
+                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             Button("ペースト ⏎") { model.activateSelection(.paste) }
                 .buttonStyle(ActionStyle(isPrimary: true))
             Button("書式なし ⇧⏎") { model.activateSelection(.plainText) }
