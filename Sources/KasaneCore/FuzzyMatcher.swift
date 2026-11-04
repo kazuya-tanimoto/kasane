@@ -6,14 +6,17 @@ public struct SearchCandidate: Sendable {
     /// 原文と、ローマ字の読み（あれば）
     let fields: [[UInt16]]
 
-    /// 1項目あたり検索の対象にする長さ（UTF-16 単位）。長文の全文を毎回なめないための上限
+    /// 原文のうち検索の対象にする長さ（UTF-16 単位）。長文の全文を毎回なめないための上限
     public static let maxFieldLength = 2_000
 
+    /// ローマ字の読みは切らずに全部を対象にする。読みは Romanizer が原文の先頭 2,000 文字（`Romanizer.maxLength`）から作るので、
+    /// 長さはそこで決まっている。読みは原文より長くなる（「かきくけこ」は kakikukeko）ため、読みを 2,000 文字で切ると、
+    /// 先頭 2,000 文字の中の語でも後ろのほうがローマ字で当たらなかった（2026-11-04 修正。要件書 §3.2）
     public init(id: Int64, text: String, romaji: String?) {
         self.id = id
         var fields = [Self.prepare(text)]
         if let romaji, !romaji.isEmpty {
-            fields.append(Self.prepare(romaji))
+            fields.append(Array(TextNormalizer.normalize(romaji).utf16))
         }
         self.fields = fields
     }

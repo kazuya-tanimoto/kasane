@@ -102,6 +102,33 @@ final class SearchBenchmarkTests: XCTestCase {
         }
     }
 
+    #if canImport(Darwin)
+    /// 1 万件すべてが日本語 2,000 文字の項目で、読みを Romanizer で作った場合の速さ（2026-11-04。読みの欄を 2,000 文字で切るのをやめたとき）。
+    /// 読みは原文より長いので、上の 2,000 文字 × 2 欄より欄が長くなる。読みの長さも出す
+    func testSearchSpeedWithFullRomaji() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let sentence = "明日の会議の資料をガイドにまとめて、かいぎしつで共有します。高松の天気は晴れです。"
+        let text = String(String(repeating: sentence, count: 2_000 / sentence.count + 1).prefix(Romanizer.maxLength))
+        let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
+        print(String(format: "読みの長さ: 原文 %d 文字から %d 文字", text.count, romaji.utf16.count))
+        let candidates = (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }
+        _ = FuzzyMatcher.search("kaigi", in: candidates)
+        for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
+            let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+            for looseness in SearchLooseness.allCases {
+                var slowest = 0.0
+                for prefix in prefixes {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    _ = FuzzyMatcher.search(prefix, in: candidates, spanRatio: looseness.spanRatio)
+                    slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                }
+                print(String(format: "読みを切らない検索の速さ「%@」%@（%d 倍）: 1 文字ごとの最も遅い回 %.1f ms",
+                             query, looseness.displayName, looseness.spanRatio, slowest))
+            }
+        }
+    }
+    #endif
+
     /// 1 万件、1 項目は上限いっぱいの 2,000 文字で、原文とローマ字の 2 欄（どちらも照合する）
     static func makeCandidates() -> [SearchCandidate] {
         let words = [
