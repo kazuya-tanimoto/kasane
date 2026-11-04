@@ -179,6 +179,16 @@ final class FuzzyMatcherTests: XCTestCase {
         XCTAssertNotNil(FuzzyMatcher.score("'push", text: "git push", spanRatio: 2))
     }
 
+    /// 原文は最後まで探す。2,001 文字目より後ろの語も、2,000 文字目をまたぐ語も当たる（2026-11-04 Kazuya さんが決定）
+    func testWholeTextIsSearched() {
+        let filler = String(repeating: "x", count: 1_997)
+        let text = filler + "takamatsu " + String(repeating: "y", count: 5_000) + " kasane"
+        for query in ["takamatsu", "'takamatsu", "kasane", "'kasane", "takamatsu kasane"] {
+            XCTAssertNotNil(FuzzyMatcher.score(query, text: text), query)
+        }
+        XCTAssertNil(FuzzyMatcher.score("'tokyo", text: text))
+    }
+
     func testLoosenessRatios() {
         XCTAssertEqual(SearchLooseness.allCases.map(\.spanRatio), [2, 3, 4, 5, 6])
         XCTAssertEqual(SearchLooseness.default, .standard)

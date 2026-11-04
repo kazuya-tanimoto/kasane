@@ -54,7 +54,7 @@ final class RomanizerTests: XCTestCase {
         XCTAssertFalse(text[..<tail].contains("東京"), "東京は先頭 2,000 文字の外")
 
         let romaji = try XCTUnwrap(Romanizer.romaji(for: text))
-        XCTAssertGreaterThan(romaji.utf16.count, SearchCandidate.maxFieldLength, "読みが 2,000 文字を超える場合を試す")
+        XCTAssertGreaterThan(romaji.utf16.count, 2_000, "読みが 2,000 文字を超える場合を試す")
         XCTAssertTrue(romaji.contains("takamatsu"), "高松は読みになる")
         XCTAssertFalse(romaji.contains("toukyou"), "東京は読みにしない")
 

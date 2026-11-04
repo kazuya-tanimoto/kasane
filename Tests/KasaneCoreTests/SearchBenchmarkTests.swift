@@ -12,6 +12,9 @@ final class SearchBenchmarkTests: XCTestCase {
         FileHandle.standardError.write(Data((line + "\n").utf8))
     }
 
+    /// 速さを測る項目 1 件の長さ（2026-11-04 までの検索の上限だった 2,000 文字。前からの記録と比べるため、そのままにしている）
+    static let fieldLength = 2_000
+
     func testSearchSpeedPerLooseness() throws {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
 
@@ -84,7 +87,7 @@ final class SearchBenchmarkTests: XCTestCase {
             return best
         }
         let whole = time { _ = texts.map { SearchCandidate(id: 0, text: $0, romaji: nil) } }
-        let prefixed = texts.map { String($0.prefix(SearchCandidate.maxFieldLength)) }
+        let prefixed = texts.map { String($0.prefix(Self.fieldLength)) }
         let nfc = time { _ = prefixed.map { $0.precomposedStringWithCanonicalMapping } }
         report(String(format: "検索の準備（1 万件）: 全体 %.1f ms、そのうち NFC にそろえる分 %.1f ms", whole, nfc))
     }
@@ -134,6 +137,66 @@ final class SearchBenchmarkTests: XCTestCase {
     }
     #endif
 
+    /// 原文を最後まで探すようにしたときの速さ（2026-11-04。要件書 §5: 1 万件で、1 文字入力ごとに 50ms 以内）。
+    /// 同じ実行の中で、先頭 2,000 文字だけを探す前の作りと、最後まで探す今の作りを並べる。
+    /// 長い項目の数と長さを変えた組み合わせで、準備（読み込み時の正規化）の時間と、1 文字ごとの最も遅い回を出す
+    func testWholeTextSearch() throws {
+        try XCTSkipUnless(ProcessInfo.processInfo.environment["KASANE_BENCH"] == "1", "KASANE_BENCH=1 のときだけ流す")
+        let base = Self.paragraphs(count: 10_000, length: Self.fieldLength)
+        // （長い項目の数, 1 件の文字数）。1 万件のうちその数だけを長い項目に置き換える
+        let cases: [(count: Int, length: Int)] = [(0, 0), (10, 100_000), (100, 100_000), (1, 1_000_000), (10, 1_000_000)]
+        for longCase in cases {
+            var texts = base
+            let long = Self.paragraphs(count: longCase.count, length: longCase.length)
+            for i in 0..<longCase.count { texts[i * (10_000 / max(longCase.count, 1))] = long[i] }
+            let label = longCase.count == 0 ? "全部 2,000 文字" : "うち \(longCase.count) 件が \(longCase.length) 文字"
+            var prepared: [String: [SearchCandidate]] = [:]
+            for (name, cut) in [("前（先頭 2,000 文字）", true), ("今（最後まで）", false)] {
+                let start = DispatchTime.now().uptimeNanoseconds
+                let candidates = texts.enumerated().map {
+                    SearchCandidate(id: Int64($0.offset), text: cut ? String($0.element.prefix(Self.fieldLength)) : $0.element, romaji: nil)
+                }
+                let prepareMs = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000
+                let units = candidates.reduce(0) { $0 + $1.fields.reduce(0) { $0 + $1.count } }
+                prepared[name] = candidates
+                report(String(format: "最後まで探す・%@・%@: 準備 %.0f ms、欄の合計 %d 単位", label, name, prepareMs, units))
+            }
+            for query in ["make test", "taqz", "agkr"] {
+                let prefixes = (1...query.count).map { String(query.prefix($0)) }.filter { !$0.hasSuffix(" ") }
+                for name in ["前（先頭 2,000 文字）", "今（最後まで）"] {
+                    let candidates = prepared[name]!
+                    _ = FuzzyMatcher.search(query, in: candidates)
+                    var slowest = 0.0
+                    for prefix in prefixes {
+                        let start = DispatchTime.now().uptimeNanoseconds
+                        _ = FuzzyMatcher.search(prefix, in: candidates)
+                        slowest = max(slowest, Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000)
+                    }
+                    report(String(format: "最後まで探す・%@・%@「%@」標準: 1 文字ごとの最も遅い回 %.1f ms", label, name, query, slowest))
+                }
+            }
+        }
+    }
+
+    /// 英字の語を並べた文を `count` 件。どれも `length` 文字（語は makeCandidates と同じ）
+    static func paragraphs(count: Int, length: Int) -> [String] {
+        let words = [
+            "the", "make", "test", "build", "release", "settings", "window", "history", "search", "paste",
+            "clipboard", "kaigi", "shiryou", "ashita", "tokyo", "takamatsu", "meeting", "review", "commit", "merge",
+            "a", "is", "to", "of", "and", "in", "for", "with", "on", "at",
+        ]
+        var seed: UInt64 = 7
+        return (0..<count).map { _ in
+            var text = ""
+            text.reserveCapacity(length + 16)
+            while text.utf8.count < length {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                text += words[Int((seed >> 33) % UInt64(words.count))] + " "
+            }
+            return String(text.prefix(length))
+        }
+    }
+
     /// 1 万件、1 項目は上限いっぱいの 2,000 文字で、原文とローマ字の 2 欄（どちらも照合する）
     static func makeCandidates() -> [SearchCandidate] {
         let words = [
@@ -148,10 +211,10 @@ final class SearchBenchmarkTests: XCTestCase {
         }
         func paragraph() -> String {
             var text = ""
-            while text.count < SearchCandidate.maxFieldLength {
+            while text.count < Self.fieldLength {
                 text += nextWord() + " "
             }
-            return String(text.prefix(SearchCandidate.maxFieldLength))
+            return String(text.prefix(Self.fieldLength))
         }
         return (0..<10_000).map { SearchCandidate(id: Int64($0), text: paragraph(), romaji: paragraph()) }
     }

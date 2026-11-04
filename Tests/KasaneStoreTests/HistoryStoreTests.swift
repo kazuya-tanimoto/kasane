@@ -115,6 +115,14 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertEqual(titles, ["1", "3", "4"], "ピン留めは件数に含めず、古い 2 が消える")
     }
 
+    /// 検索用に読み込む本文は、最後まで（2026-11-04。前は先頭 2,000 文字だけだった）
+    func testIndexKeepsWholeTextForSearch() throws {
+        let text = String(repeating: "a ", count: 3_000) + "takamatsu"
+        _ = try store.save(textCapture(text), limit: 100)
+        let candidate = try XCTUnwrap(try store.loadIndex(sort: .recent).first?.candidate)
+        XCTAssertFalse(FuzzyMatcher.search("'takamatsu", in: [candidate]).isEmpty)
+    }
+
     func testUnpinnedCountLeavesOutPinned() throws {
         let a = try store.save(textCapture("A"), limit: 100)
         _ = try store.save(textCapture("B"), limit: 100)
