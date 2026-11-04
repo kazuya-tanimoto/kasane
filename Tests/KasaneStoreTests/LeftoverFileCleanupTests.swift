@@ -189,10 +189,15 @@ final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
             }
         }
         func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
-        print(String(format: "履歴 %d 件、ファイル %d 個、残ったファイル %d 個（5 回の中央値）", itemCount, itemCount, leftoverCount))
-        print(String(format: "  起動（開いて読み込む）: 掃除なし %.1f ms、掃除あり %.1f ms", median(launchWithout), median(launchWith)))
-        print(String(format: "  起動直後のコピーの保存: 掃除なし %.1f ms、掃除と同時 %.1f ms", median(saveWithout), median(saveDuring)))
-        print(String(format: "  裏の掃除: %.1f ms、増えたメモリの最大 %.1f MB", median(cleanupTimes), median(memoryIncreases)))
+        let lines = [
+            String(format: "残ったファイルの掃除: 履歴 %d 件、ファイル %d 個、残ったファイル %d 個（5 回の中央値）", itemCount, itemCount, leftoverCount),
+            String(format: "  起動（開いて読み込む）: 掃除なし %.1f ms、掃除あり %.1f ms", median(launchWithout), median(launchWith)),
+            String(format: "  起動直後のコピーの保存: 掃除なし %.1f ms、掃除と同時 %.1f ms", median(saveWithout), median(saveDuring)),
+            String(format: "  裏の掃除: %.1f ms、増えたメモリの最大 %.1f MB", median(cleanupTimes), median(memoryIncreases)),
+        ]
+        // 結果が CI のログに必ず残るよう、ためずにすぐ出す
+        FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
+        fflush(stdout)
     }
 }
 
