@@ -148,6 +148,73 @@ final class HistoryStoreTests: XCTestCase {
         XCTAssertNil(try store.item(id: id))
     }
 
+    private func bigCapture(_ byte: UInt8) -> Capture {
+        let big = Data(repeating: byte, count: HistoryStore.inlineDataLimit + 1)
+        return Capture(
+            kind: .image, title: "画像\(byte)", text: nil, primaryData: big,
+            representations: [.init(itemIndex: 0, type: "public.png", data: big)]
+        )
+    }
+
+    private func blobFiles() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: store.blobDirectory.path).filter { $0 != "links" }
+    }
+
+    /// 「履歴を削除…」で、消した行のファイルも消える。ピン留めを残すときは、その行のファイルは残る
+    func testDeleteAllRemovesFiles() throws {
+        let pinned = try store.save(bigCapture(1), limit: 100).item
+        _ = try store.save(bigCapture(2), limit: 100)
+        _ = try store.save(bigCapture(3), limit: 100)
+        try store.setPinned(true, itemID: pinned.id!)
+        XCTAssertEqual(try blobFiles().count, 3)
+
+        try store.deleteAll(keepPinned: true)
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertNotNil(try store.data(itemID: pinned.id!, types: ["public.png"]), "ピン留めのファイルは残る")
+
+        try store.deleteAll(keepPinned: false)
+        XCTAssertEqual(try blobFiles(), [])
+    }
+
+    /// 保存件数の上限を超えて消えた行のファイルも消える（コピーで超えたときと、上限を下げたとき）
+    func testPruneRemovesFiles() throws {
+        let t0 = Date(timeIntervalSince1970: 1_000)
+        _ = try store.save(bigCapture(1), limit: 2, now: t0)
+        _ = try store.save(bigCapture(2), limit: 2, now: t0.addingTimeInterval(1))
+        let third = try store.save(bigCapture(3), limit: 2, now: t0.addingTimeInterval(2))
+        XCTAssertEqual(third.prunedIDs.count, 1)
+        XCTAssertEqual(try blobFiles().count, 2)
+
+        try store.prune(limit: 1)
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertNotNil(try store.data(itemID: third.item.id!, types: ["public.png"]), "新しいほうのファイルは残る")
+    }
+
+    /// 100KB 未満だけを DB に入れ、100KB ちょうどからファイルにする。前に DB に入れた 100〜256KB のデータもそのまま読める
+    func testInlineLimitIsUnder100KB() throws {
+        XCTAssertEqual(HistoryStore.inlineDataLimit, 100 * 1024)
+        func capture(_ size: Int, _ byte: UInt8) -> Capture {
+            let data = Data(repeating: byte, count: size)
+            return Capture(kind: .image, title: "画像\(byte)", text: nil, primaryData: data,
+                           representations: [.init(itemIndex: 0, type: "public.png", data: data)])
+        }
+        let under = try store.save(capture(100 * 1024 - 1, 1), limit: 100).item.id!
+        XCTAssertEqual(try blobFiles().count, 0)
+        let exact = try store.save(capture(100 * 1024, 2), limit: 100).item.id!
+        XCTAssertEqual(try blobFiles().count, 1)
+        XCTAssertEqual(try store.data(itemID: under, types: ["public.png"])?.data.count, 100 * 1024 - 1)
+        XCTAssertEqual(try store.data(itemID: exact, types: ["public.png"])?.data.count, 100 * 1024)
+
+        // 前の境目（256KB）で DB に入れた 200KB のデータ
+        let old = try store.save(capture(10, 3), limit: 100).item.id!
+        let oldData = Data(repeating: 3, count: 200 * 1024)
+        try store.dbQueue.write { db in
+            try db.execute(sql: "UPDATE representation SET data = ? WHERE itemID = ?", arguments: [oldData, old])
+        }
+        XCTAssertEqual(try store.data(itemID: old, types: ["public.png"])?.data, oldData)
+        XCTAssertEqual(try store.representations(itemID: old).first?.data, oldData)
+    }
+
     func testSortByPasteCount() throws {
         let t0 = Date(timeIntervalSince1970: 1_000)
         let a = try store.save(textCapture("A"), limit: 100, now: t0)

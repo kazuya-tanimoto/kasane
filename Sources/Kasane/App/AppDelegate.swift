@@ -34,6 +34,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         model = HistoryModel(store: store, sortOrder: AppSettings.sortOrder)
         model.onActivate = { [weak self] id, action in self?.activate(itemID: id, action: action) }
+        // 行を消したあとに消せずに残ったファイルを片付ける。起動とコピーを待たせないよう、
+        // 履歴を読み込んだあとに、いちばん低い優先度で裏で行う（2026-11-04）
+        let store = self.store!
+        model.onFirstLoad = {
+            DispatchQueue.global(qos: .background).async { store.removeUnreferencedFiles() }
+        }
         model.load()
 
         panel = HistoryPanelController(model: model)
