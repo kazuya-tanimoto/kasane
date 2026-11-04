@@ -42,4 +42,23 @@ final class PasteQueueTests: XCTestCase {
         XCTAssertEqual(q.itemsInPasteOrder, ["A", "b", "C"])
         XCTAssertEqual(q.next, "A")
     }
+
+    /// FIFO 中に LIFO に切り替えても、積んだ中身は残り、貼る順番だけが変わる（逆も）
+    func testSwitchModeKeepsItemsAndChangesOrder() {
+        var q = PasteQueue<String>(mode: .fifo)
+        ["A", "B", "C"].forEach { q.push($0) }
+        q.popNext()
+        q.switchMode(to: .lifo)
+        XCTAssertEqual(q.mode, .lifo)
+        XCTAssertEqual(q.count, 2)
+        XCTAssertEqual(q.itemsInPasteOrder, ["C", "B"])
+        q.push("D")
+        XCTAssertEqual(q.popNext(), "D")
+        q.switchMode(to: .fifo)
+        XCTAssertEqual(q.mode, .fifo)
+        XCTAssertEqual(q.itemsInPasteOrder, ["B", "C"])
+        XCTAssertEqual(q.popNext(), "B")
+        XCTAssertEqual(q.popNext(), "C")
+        XCTAssertTrue(q.isEmpty)
+    }
 }

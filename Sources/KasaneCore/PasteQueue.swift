@@ -11,7 +11,7 @@ public enum QueueMode: String, Sendable, CaseIterable {
 ///
 /// クリップボードの操作は持たず、「次に貼り付けるのはどれか」だけを管理する。
 public struct PasteQueue<Element: Equatable>: Equatable {
-    public let mode: QueueMode
+    public private(set) var mode: QueueMode
     public private(set) var items: [Element] = []
 
     public init(mode: QueueMode) {
@@ -40,6 +40,12 @@ public struct PasteQueue<Element: Equatable>: Equatable {
         for index in items.indices where match(items[index]) {
             change(&items[index])
         }
+    }
+
+    /// 積んだ中身はそのままで、貼る順番だけを変える（FIFO 中に LIFO のキーを押したときなど。2026-11-04 Kazuya さんが決定）。
+    /// 中身はコピーした順に持っているので、モードを変えるだけで次に貼るものと並びが変わる
+    public mutating func switchMode(to mode: QueueMode) {
+        self.mode = mode
     }
 
     /// 次の項目を取り出す（貼り付けが済んだときに呼ぶ）

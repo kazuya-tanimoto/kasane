@@ -39,12 +39,18 @@ final class QueueController {
 
     var mode: QueueMode? { queue?.mode }
 
-    /// 同じモードなら終了、違うモードなら切り替える（残りのキューは破棄する）
+    /// 同じモードなら終了（残りのキューは破棄する）。違うモードの最中なら、積んだ中身を残して貼る順番だけ切り替える
+    /// （2026-11-04 Kazuya さんが決定。押し間違えても積んだものを失わないため）
     /// - Returns: 開始できなかった（アクセシビリティ権限がない）とき false
     @discardableResult
     func toggle(_ mode: QueueMode) -> Bool {
         if queue?.mode == mode {
             stop()
+            return true
+        }
+        if queue != nil {
+            queue?.switchMode(to: mode)
+            onChange?()
             return true
         }
         return start(mode)
