@@ -141,59 +141,78 @@ final class LeftoverFileCleanupBenchmarkTests: XCTestCase {
 
         func ms(_ start: UInt64) -> Double { Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000 }
 
-        // 起動のときと同じ順: 保存先を開く → 履歴を読み込む → （読み込み後に）裏で掃除 → その間にコピーを保存
-        var launchWithout: [Double] = []
-        var launchWith: [Double] = []
-        var saveWithout: [Double] = []
-        var saveDuring: [Double] = []
-        var cleanupTimes: [Double] = []
+        func save(_ store: HistoryStore, _ text: String) throws -> Double {
+            let data = Data(text.utf8)
+            let start = DispatchTime.now().uptimeNanoseconds
+            _ = try store.save(
+                Capture(kind: .text, title: text, text: text, primaryData: data,
+                        representations: [.init(itemIndex: 0, type: "public.utf8-plain-text", data: data)]),
+                limit: itemCount + 10_000
+            )
+            return ms(start)
+        }
+
+        // 起動のときと同じ順: 保存先を開く → 履歴を読み込む → （読み込み後に）裏で掃除。
+        // 掃除は 一覧を取る・DB を読む・消す に分けて時間を測る（removeUnreferencedFiles と同じ順）。
+        // コピーの保存は、掃除のない時と、掃除がファイルを消している最中（消し終わるまで続けて保存する）とで比べる
+        var launches: [Double] = []
+        var listTimes: [Double] = []
+        var readTimes: [Double] = []
+        var removeTimes: [Double] = []
         var memoryIncreases: [Double] = []
+        var savesWithout: [Double] = []
+        var savesDuring: [Double] = []
         for round in 0..<5 {
             try makeLeftovers()
-            for cleans in [false, true] {
-                let start = DispatchTime.now().uptimeNanoseconds
-                let store = try HistoryStore(directory: directory)
-                let loaded = try store.loadIndex(sort: .recent)
-                let launch = ms(start)
-                XCTAssertEqual(loaded.count, itemCount + 2 * round + (cleans ? 1 : 0))
+            let start = DispatchTime.now().uptimeNanoseconds
+            let store = try HistoryStore(directory: directory)
+            _ = try store.loadIndex(sort: .recent)
+            launches.append(ms(start))
 
-                let done = DispatchSemaphore(value: 0)
-                if cleans {
-                    DispatchQueue.global(qos: .background).async {
-                        let sampler = MemorySampler()
-                        let s = DispatchTime.now().uptimeNanoseconds
-                        let removed = store.removeUnreferencedFiles()
-                        cleanupTimes.append(ms(s))
-                        memoryIncreases.append(sampler.stop())
-                        XCTAssertEqual(removed.count, leftoverCount)
-                        done.signal()
-                    }
-                }
-                let text = "新しいコピー \(round) \(cleans)"
-                let data = Data(text.utf8)
-                let saveStart = DispatchTime.now().uptimeNanoseconds
-                _ = try store.save(
-                    Capture(kind: .text, title: text, text: text, primaryData: data,
-                            representations: [.init(itemIndex: 0, type: "public.utf8-plain-text", data: data)]),
-                    limit: itemCount + 100
-                )
-                let saveMs = ms(saveStart)
-                if cleans {
-                    done.wait()
-                    launchWith.append(launch)
-                    saveDuring.append(saveMs)
-                } else {
-                    launchWithout.append(launch)
-                    saveWithout.append(saveMs)
-                }
+            for n in 0..<20 { savesWithout.append(try save(store, "掃除なし \(round) \(n)")) }
+
+            let removing = DispatchSemaphore(value: 0)
+            let done = DispatchSemaphore(value: 0)
+            let lock = NSLock()
+            var finished = false
+            DispatchQueue.global(qos: .background).async {
+                let sampler = MemorySampler()
+                var s = DispatchTime.now().uptimeNanoseconds
+                let candidates = store.filesWrittenBeforeOpening()
+                listTimes.append(ms(s))
+                s = DispatchTime.now().uptimeNanoseconds
+                let referenced = (try? store.referencedFiles()) ?? []
+                readTimes.append(ms(s))
+                let removed = candidates.filter { !referenced.contains($0) }
+                XCTAssertEqual(removed.count, leftoverCount)
+                removing.signal()
+                s = DispatchTime.now().uptimeNanoseconds
+                store.removeFiles(removed)
+                removeTimes.append(ms(s))
+                lock.lock(); finished = true; lock.unlock()
+                memoryIncreases.append(sampler.stop())
+                done.signal()
             }
+            removing.wait()
+            var n = 0
+            while true {
+                lock.lock(); let over = finished; lock.unlock()
+                if over { break }
+                savesDuring.append(try save(store, "掃除と同時 \(round) \(n)"))
+                n += 1
+            }
+            done.wait()
         }
-        func median(_ values: [Double]) -> Double { values.sorted()[values.count / 2] }
+        func median(_ values: [Double]) -> Double { values.isEmpty ? .nan : values.sorted()[values.count / 2] }
+        func slowest(_ values: [Double]) -> Double { values.max() ?? .nan }
         let lines = [
-            String(format: "残ったファイルの掃除: 履歴 %d 件、ファイル %d 個、残ったファイル %d 個（5 回の中央値）", itemCount, itemCount, leftoverCount),
-            String(format: "  起動（開いて読み込む）: 掃除なし %.1f ms、掃除あり %.1f ms", median(launchWithout), median(launchWith)),
-            String(format: "  起動直後のコピーの保存: 掃除なし %.1f ms、掃除と同時 %.1f ms", median(saveWithout), median(saveDuring)),
-            String(format: "  裏の掃除: %.1f ms、増えたメモリの最大 %.1f MB", median(cleanupTimes), median(memoryIncreases)),
+            String(format: "残ったファイルの掃除: 履歴 %d 件、ファイル %d 個、残ったファイル %d 個（5 回）", itemCount, itemCount, leftoverCount),
+            String(format: "  起動（開いて読み込む。掃除はこの後に始める）: 中央値 %.1f ms", median(launches)),
+            String(format: "  裏の掃除（中央値）: 一覧を取る %.1f ms、DB を読む %.1f ms、消す %.1f ms。増えたメモリの最大 %.1f MB",
+                   median(listTimes), median(readTimes), median(removeTimes), median(memoryIncreases)),
+            String(format: "  コピーの保存: 掃除なし 中央値 %.1f ms・最大 %.1f ms（%d 回）、ファイルを消している最中 中央値 %.1f ms・最大 %.1f ms（%d 回）",
+                   median(savesWithout), slowest(savesWithout), savesWithout.count,
+                   median(savesDuring), slowest(savesDuring), savesDuring.count),
         ]
         // 結果が CI のログに必ず残るよう、ためずにすぐ出す
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))

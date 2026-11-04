@@ -270,8 +270,15 @@ public final class HistoryStore: @unchecked Sendable {
     @discardableResult
     public func removeUnreferencedFiles() -> [String] {
         let candidates = filesWrittenBeforeOpening()
-        guard !candidates.isEmpty else { return [] }
-        guard let referenced = try? dbQueue.read({ db -> Set<String> in
+        guard !candidates.isEmpty, let referenced = try? referencedFiles() else { return [] }
+        let removed = candidates.filter { !referenced.contains($0) }
+        removeFiles(removed)
+        return removed
+    }
+
+    /// 行が使っているファイル（blobs からの相対パス）。ファイル名の列だけを 1 回ずつ読む
+    func referencedFiles() throws -> Set<String> {
+        try dbQueue.read { db -> Set<String> in
             var paths = Set(try String.fetchAll(db, sql: "SELECT filePath FROM representation WHERE filePath IS NOT NULL"))
             let rows = try Row.fetchAll(db, sql: "SELECT iconPath, imagePath FROM linkPreview")
             for row in rows {
@@ -279,14 +286,15 @@ public final class HistoryStore: @unchecked Sendable {
                 if let image: String = row["imagePath"] { paths.insert(image) }
             }
             return paths
-        }) else { return [] }
-        let removed = candidates.filter { !referenced.contains($0) }
-        removed.forEach(removeBlob)
-        return removed
+        }
+    }
+
+    func removeFiles(_ names: [String]) {
+        names.forEach(removeBlob)
     }
 
     /// blobs の中（links/ を含む）の、この保存先を開く前に書いたファイル。blobs からの相対パスで返す
-    private func filesWrittenBeforeOpening() -> [String] {
+    func filesWrittenBeforeOpening() -> [String] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .contentModificationDateKey]
         let base = blobDirectory.standardizedFileURL.resolvingSymlinksInPath().path
         guard let enumerator = fileManager.enumerator(
