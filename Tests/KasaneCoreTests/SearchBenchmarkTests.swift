@@ -125,9 +125,7 @@ final class SearchBenchmarkTests: XCTestCase {
             ("前（読みを 2,000 で切る）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: cutRomaji) }),
             ("今（読みを切らない）", (0..<10_000).map { SearchCandidate(id: Int64($0), text: text, romaji: romaji) }),
         ]
-        // 7 回ずつ流すと時間がかかるので、語は 3 つにした。「kgsr」は 2026-11-04 の 1 回ずつの測定（17ecb23）で、
-        // どの組でも「agkr」より速かった（遅い側は agkr で見られる）ため外した
-        for query in ["kaigi shiryou", "taqz", "agkr"] {
+        for query in ["kaigi shiryou", "taqz", "kgsr", "agkr"] {
             for looseness in SearchLooseness.allCases {
                 let medians = Self.medianSlowest(query: query, sets: sets.map(\.1), spanRatio: looseness.spanRatio)
                 for (index, set) in sets.enumerated() {
