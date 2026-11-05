@@ -88,6 +88,14 @@ public enum ContrastFit {
     public static let kindGrayLight = SRGBColor(hex: 0x55585F)
     public static let kindGrayDark = SRGBColor(hex: 0xABAEB6)
 
+    /// 一覧の右端の「⌘1」〜「⌘9」の薄い灰色。モック t.faint（ライト #7C7F86、ダーク #868991）は選んだ行の上で
+    /// ライト 4.01、ダーク 2.97 だったので、色みと彩度を保ち、明るさだけを変えて選んだ行の地で 4.5 以上にした
+    /// （谷本さん 2026-11-04、16 の問いの 6。fitLightness で target 4.5 にした値）
+    public static let faintGrayLight = SRGBColor(hex: 0x72757C)
+    public static let faintGrayDark = SRGBColor(hex: 0xA9ABB1)
+    /// ライトの選んだ行の地（白）
+    public static let selectedLightBackground = SRGBColor(hex: 0xFFFFFF)
+
     /// WCAG の相対輝度
     public static func luminance(_ color: SRGBColor) -> Double {
         func linear(_ v: Double) -> Double {

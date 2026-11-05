@@ -117,6 +117,11 @@ final class ContrastFitTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.kindGrayDark, ContrastFit.darkBackground), 4.5)
     }
 
+    func testFaintGrayReadsOnSelectedRow() {
+        XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.faintGrayLight, ContrastFit.selectedLightBackground), 4.5)
+        XCTAssertGreaterThanOrEqual(ContrastFit.contrast(ContrastFit.faintGrayDark, ContrastFit.darkBackground), 4.5)
+    }
+
     func testHexRoundTrip() {
         XCTAssertEqual(SRGBColor(hex: 0x165E83).hex, 0x165E83)
         let (h, s, l) = SRGBColor(hex: 0x165E83).hsl

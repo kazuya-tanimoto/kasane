@@ -484,11 +484,9 @@ extension Color {
     /// 灰の文字（アプリ名・時刻・ピン・URL・詳細のラベル）。種類の文字と同じ灰（ライト #55585F、ダーク #ABAEB6）。
     /// モック t.sub のダーク #A7AAB2 は選んだ行のダークの地 #3D4047 で 4.47 になり、4.5 に届かないため使わない（accent-implementation-2026-10-23.md）
     static let historySub = Color.kindGray
-    /// もっと薄い灰の文字（モック t.faint: ライト #7C7F86、ダーク #868991）
+    /// もっと薄い灰の文字（「⌘1」〜「⌘9」）。選んだ行の上でも 4.5 以上（ライト #72757C、ダーク #A9ABB1。ContrastFit.faintGray*）
     static let historyFaint = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            ? NSColor(srgbRed: 0x86 / 255, green: 0x89 / 255, blue: 0x91 / 255, alpha: 1)
-            : NSColor(srgbRed: 0x7C / 255, green: 0x7F / 255, blue: 0x86 / 255, alpha: 1)
+        NSColor(appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? ContrastFit.faintGrayDark : ContrastFit.faintGrayLight)
     })
     /// プレビューの地（モック: ライト 白 72% で周りより明るく、ダーク 白 7%）
     static let previewCard = Color(nsColor: NSColor(name: nil) { appearance in
@@ -719,7 +717,7 @@ private struct SelectionBackground: View {
         RoundedRectangle(cornerRadius: size.scaled(12), style: .continuous)
             // ダークは不透明の #3D4047。半透明だと後ろの画面で地の明るさが変わり、一致した文字のコントラストが保てないため
             // （accent-usage-2026-10-22.md「実装で気をつけること」。今までの白 13% をふつうのダークのガラスに重ねた色とほぼ同じ）
-            .fill(isSelected ? (colorScheme == .dark ? Color(nsColor: NSColor(ContrastFit.darkBackground)) : Color.white) : Color.clear)
+            .fill(isSelected ? Color(nsColor: NSColor(colorScheme == .dark ? ContrastFit.darkBackground : ContrastFit.selectedLightBackground)) : Color.clear)
             .shadow(color: isSelected && colorScheme == .light ? .black.opacity(0.10) : .clear, radius: 5, y: 2)
     }
 }
