@@ -103,6 +103,24 @@ final class LinkPrefetcher: ObservableObject {
         pump()
     }
 
+    // MARK: 履歴から
+
+    /// 履歴から消した項目の結果を捨て、取っている途中なら取り消す。消した項目の保存した画像は DB と一緒に消えるので
+    /// （requirements.md §3.3「項目を消したら、保存した画像のファイルも消す」）、起動中もカードやプレビューに残さない。
+    /// キューに残っているリンクのカードは URL だけに戻る（design/queue-band-implementation-2026-10-30.md §5）
+    func forget(_ ids: [Int64]) {
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            if let fetch = fetches.removeValue(forKey: id) {
+                fetch.provider.cancel()
+                fetch.task.cancel()
+                scheduler.finish(id)
+            }
+            loaded[id] = nil
+        }
+        pump()
+    }
+
     // MARK: 設定から
 
     func setEnabled(_ enabled: Bool) {

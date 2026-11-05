@@ -2,7 +2,7 @@ import AppKit
 import KasaneCore
 import KasaneStore
 
-/// UserDefaults に保存する設定。設定画面は v1 の仕上げで作るので、MVP ではメニューと `defaults` コマンドで変える
+/// UserDefaults に保存する設定。設定画面（メニューバーの「設定…」、履歴ウインドウで ⌘,）で変える
 enum AppSettings {
     private static var defaults: UserDefaults { .standard }
 
@@ -102,6 +102,13 @@ enum AppSettings {
         set { defaults.set(newValue.rawValue, forKey: "hudTextSize") }
     }
 
+    /// FIFO / LIFO の帯の幅（12pt のときの値。2026-10-30 決定）。nil なら初期の幅。
+    /// 帯の内側の端をドラッグして変える。文字の大きさの倍率を掛けて出す（`QueueBandLayout`）
+    static var hudBandWidth: CGFloat? {
+        get { (defaults.object(forKey: "hudBandWidth") as? Double).map { CGFloat($0) } }
+        set { defaults.set(newValue.map { Double($0) }, forKey: "hudBandWidth") }
+    }
+
     /// 小さいウインドウの文字の大きさ（pt）
     static var hudFontSize: Double { Double(hudTextSize.hudFontSize) }
 
@@ -125,7 +132,7 @@ enum AppSettings {
         set { defaults.set(newValue.map(NSStringFromPoint), forKey: "historyWindowOffset") }
     }
 
-    /// 小さいウインドウを出す側（左は左上、右は右上）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
+    /// 小さいウインドウ（画面の端の帯）を出す側（左は左端、右は右端）。前の版の 4 つの角の設定は、初めて読むときに 1 回だけ読み替える
     static var hudSide: HUDSide {
         get {
             if let side = HUDSide(rawValue: defaults.string(forKey: "hudSide") ?? "") {

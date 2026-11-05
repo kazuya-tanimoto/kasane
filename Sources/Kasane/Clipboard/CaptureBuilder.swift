@@ -21,6 +21,10 @@ enum CaptureBuilder {
             )
             // すべてが画像のファイルなら「画像」の絞り込みにも入れる（行のアイコンと種類の文字は「ファイル」のまま）
             capture.isImageFile = FileKinds.areAllImages(paths: raw.fileURLs.map(\.path))
+            // 画像のファイル（CleanShot などがファイルとしてコピーした絵）は、FIFO / LIFO のカードに縮小を出す（2026-10-31 Kazuya さんの決定）
+            if capture.isImageFile, let first = raw.fileURLs.first {
+                capture.thumbnail = imageFileThumbnail(first)
+            }
         } else if let string = raw.string, !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let kind: ClipKind
             if isWebURL(string) {
@@ -37,7 +41,8 @@ enum CaptureBuilder {
             capture.romaji = Romanizer.romaji(for: string)
         } else if let image = raw.representations.first(where: { imageTypes.contains($0.type) }) {
             let info = imageInfo(image.data)
-            let size = info.width.flatMap { w in info.height.map { h in "\(w)×\(h)" } }
+            // 大きさはどの画面も「1920 × 1080 px」と書く（2026-10-31 画面のデザインの決め S3。詳細の書き方にそろえた）
+            let size = info.width.flatMap { w in info.height.map { h in "\(w) × \(h) px" } }
             capture = Capture(
                 kind: .image, title: size.map { "画像 \($0)" } ?? "画像", text: nil,
                 primaryData: image.data, representations: raw.representations,
@@ -61,25 +66,70 @@ enum CaptureBuilder {
         LinkPreviewPolicy.webURL(text) != nil
     }
 
+    /// 画像のファイルの縮小。読めなければ nil
+    static func imageFileThumbnail(_ url: URL) -> Data? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        return thumbnail(source)
+    }
+
     static func imageInfo(_ data: Data) -> (thumbnail: Data?, width: Int?, height: Int?) {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return (nil, nil, nil) }
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
         let width = properties?[kCGImagePropertyPixelWidth] as? Int
         let height = properties?[kCGImagePropertyPixelHeight] as? Int
+        return (thumbnail(source), width, height)
+    }
+
+    // MARK: - FIFO / LIFO のカードの絵
+
+    // カードに出す絵は、横が帯の幅のピクセル数以上になる大きさで元の絵から作る（DB の 128px の縮小を帯の幅に広げるとぼやけるため。
+    // 2026-10-31 の照合）。大きさの計算は QueueBandLayout.cardPictureMaxPixel
+
+    /// 画像の項目の元の絵（クリップボードから取った中身）から作る。画像の型の中身を順に試す
+    static func cardPicture(representations: [Capture.Representation], pixelWidth: CGFloat) -> CGImage? {
+        for representation in representations where UTType(representation.type)?.conforms(to: .image) == true {
+            guard let source = CGImageSourceCreateWithData(representation.data as CFData, nil),
+                  let image = cardPicture(source, pixelWidth: pixelWidth)
+            else { continue }
+            return image
+        }
+        return nil
+    }
+
+    /// 画像のファイルから作る。読めなければ nil
+    static func cardPicture(fileURL: URL, pixelWidth: CGFloat) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+        return cardPicture(source, pixelWidth: pixelWidth)
+    }
+
+    private static func cardPicture(_ source: CGImageSource, pixelWidth: CGFloat) -> CGImage? {
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        guard let width = properties?[kCGImagePropertyPixelWidth] as? Int,
+              let height = properties?[kCGImagePropertyPixelHeight] as? Int,
+              width > 0, height > 0
+        else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: QueueBandLayout.cardPictureMaxPixel(width: width, height: height, pixelWidth: pixelWidth),
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// 長い辺 128px の PNG
+    private static func thumbnail(_ source: CGImageSource) -> Data? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: 128,
         ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return (nil, width, height)
-        }
+        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         let output = NSMutableData()
         guard let destination = CGImageDestinationCreateWithData(
             output as CFMutableData, UTType.png.identifier as CFString, 1, nil
-        ) else { return (nil, width, height) }
+        ) else { return nil }
         CGImageDestinationAddImage(destination, image, nil)
-        guard CGImageDestinationFinalize(destination) else { return (nil, width, height) }
-        return (output as Data, width, height)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return output as Data
     }
 }

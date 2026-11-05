@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: PasteboardMonitor!
     private var panel: HistoryPanelController!
     private var queue: QueueController!
-    private lazy var queueHUD = QueueHUDController()
+    private lazy var queueHUD = QueueHUDController(links: model.links)
     private var statusItem: StatusItemController!
     private var shortcuts: ShortcutController!
     private var onboarding: OnboardingWindowController?
@@ -137,7 +137,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
               let representations = try? store.representations(itemID: itemID)
         else { return }
         // FIFO / LIFO 中の ⌘⏎ は、選んだ項目をキューに追加するだけ（クリップボードは変えない）。
-        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは隅の小さいウインドウでわかる）
+        // ウインドウは閉じず、続けて選んで追加できるようにする（追加したことは画面の端の帯でわかる）
         if action == .copyOnly, queue.mode != nil {
             queue.didCapture(itemID: itemID)
             fetchLinkForQueue(item)
@@ -192,11 +192,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateQueueHUD()
     }
 
-    /// モード中は、履歴ウインドウの開閉に関係なく、画面の隅にキューの全件を出す
+    /// モード中は、履歴ウインドウの開閉に関係なく、画面の端の帯にキューの全件をカードで出す
     private func updateQueueHUD() {
         let current = queue.queue
-        let titles = current?.itemsInPasteOrder.map(\.title) ?? []
-        queueHUD.update(mode: current?.mode, titles: titles)
+        queueHUD.update(mode: current?.mode, clips: current?.itemsInPasteOrder ?? [])
     }
 
     // MARK: - 設定
