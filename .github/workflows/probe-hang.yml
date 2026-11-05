@@ -1,0 +1,28 @@
+# 起動したあとに画面の描き直しが止まらなくなる不具合を、版ごとに測る（2026-11-05、一時的な枝）
+name: Probe launch hang
+on:
+  push:
+jobs:
+  probe:
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        ref: [9fe0029, 88f464f, c2ee764, ec7f1db, f8b975b, e429832, c2e6e3e, ae0aabd]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ matrix.ref }}
+          fetch-depth: 0
+      - name: build
+        run: scripts/build-app.sh
+      - name: launch and measure
+        run: |
+          defaults write io.github.kazuya-tanimoto.kasane hasCompletedOnboarding -bool true
+          open build/Kasane.app
+          sleep 20
+          echo "== ref ${{ matrix.ref }}"
+          ps -axo pid,%cpu,comm | grep -i kasane | grep -v grep || echo "not running"
+          sleep 10
+          ps -axo pid,%cpu,comm | grep -i kasane | grep -v grep || echo "not running"
+          sample Kasane 3 2>/dev/null | sed -n '/Call graph:/,$p' | head -40 || true
