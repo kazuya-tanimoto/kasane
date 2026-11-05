@@ -67,9 +67,12 @@ public enum TextSizeLevel: String, CaseIterable, Sendable {
 }
 
 extension WindowPlacement {
-    /// 履歴ウインドウのうち、文字の大きさで変わらない部分（上の帯・検索欄・絞り込み・下のボタンの高さと、左右と間の余白）。
-    /// 文字の大きさを変えるときは、ウインドウからこの分を除いた残りに割合を掛ける
-    public static let historyChrome = CGSize(width: 36, height: 175)
+    /// 履歴ウインドウのうち、文字の大きさで変わらない部分（上の帯・検索欄・絞り込み・一覧の下の余白の高さと、左右と間の余白）。
+    /// 文字の大きさを変えるときは、ウインドウからこの分を除いた残りに割合を掛ける。
+    /// 高さは 上の帯 28 ＋ 線 1 ＋ 検索欄 約 55 ＋ 絞り込み 約 37 ＋ 一覧の下 6 ＝ 127。
+    /// 上の帯の下の線 1 は PR #13 で入る（#13 より先にこの行が入る間は実際より 1 多いが、大で約 0.1pt の差）
+    /// 下のボタンは一覧の上に浮く帯になり（requirements.md §3.3）、ウインドウの高さを取らないので入れない（前は帯の分を入れて 175）
+    public static let historyChrome = CGSize(width: 36, height: 127)
 
     /// 標準での大きさ `size` を、`level` の大きさにする（初めの大きさと最小の大きさに使う）
     public static func size(_ size: CGSize, scaledTo level: TextSizeLevel) -> CGSize {

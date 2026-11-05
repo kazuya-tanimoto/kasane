@@ -96,6 +96,10 @@ struct AppearanceSettingsView: View {
                     Button("標準に戻す") { model.resetBackground() }
                 }
             }
+            // 帯のボタンは Liquid Glass で、この 2 つの設定が効かない。使う人が設定と見え方の違いに迷わないように書く
+            // （requirements.md §3.3、2026-10-30 Kazuya さん「こういうのは一般人はわかんないんですよ。…明記しておいてくださいね。」）
+            SettingsCaption("この 2 つの設定は、履歴ウインドウの右下の「コピー ⌘⏎」などのボタンには反映されません。ボタンの透け方は Mac のシステム設定に従います。")
+                .padding(.horizontal, 4)
             SettingsBox {
                 sliderRow(
                     title: "不透明度",
@@ -301,17 +305,25 @@ private struct AppearanceSample: View {
                 .padding(.vertical, 1.5)
                 .background(index == 0 ? Color.primary.opacity(0.08) : .clear, in: RoundedRectangle(cornerRadius: 3))
             }
-            HStack(spacing: 3) {
-                Text("ペースト")
-                    .font(.system(size: 6.5, weight: .semibold))
-                    .foregroundStyle(appearance.accent.foreground)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(appearance.accent.color, in: RoundedRectangle(cornerRadius: 3))
-                ForEach(0..<3, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: 3).fill(Color.primary.opacity(0.1)).frame(width: 24, height: 11)
-                }
+            // 実物と同じく、右下に浮く両端の丸い帯にする（requirements.md §3.3。実物はガラスだが、見本は縁と薄い地で形だけ描く）
+            HStack(spacing: 0) {
                 Spacer(minLength: 0)
+                HStack(spacing: 2) {
+                    Text("ペースト")
+                        .font(.system(size: 6.5, weight: .semibold))
+                        .foregroundStyle(appearance.accent.foreground)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(appearance.accent.color, in: Capsule())
+                    // ペースト以外の 5 つ（書式なし・コピー・ピン・削除・詳細）。実物と同じ 6 つにする
+                    ForEach(0..<5, id: \.self) { _ in
+                        Capsule().fill(Color.primary.opacity(0.12)).frame(width: 14, height: 5)
+                            .padding(.horizontal, 1.5)
+                    }
+                }
+                .padding(2)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.2), lineWidth: 0.5))
             }
             .padding(.top, 2)
         }
