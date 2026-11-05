@@ -7,6 +7,23 @@ public enum QueueMode: String, Sendable, CaseIterable {
     case lifo
 }
 
+extension QueueMode {
+    /// メニューバーのメニューで、このモードの項目に出す言葉
+    /// - Parameters:
+    ///   - current: 今のモード。モード外なら nil
+    ///   - count: キューの残り件数
+    /// 別のモードの最中は、積んだものを残して順番だけ切り替えるので「切り替え」と出す
+    /// （2026-11-05 Kazuya さんが OK「言葉を変えても良いですよ。実際の動きに合わせるってことですよね。」）
+    public func menuTitle(current: QueueMode?, count: Int) -> String {
+        let name = self == .fifo ? "FIFO" : "LIFO"
+        switch current {
+        case self: return "\(name) モードを終了（残り \(count) 件）"
+        case nil: return "\(name) モードを開始"
+        default: return "\(name) に切り替え"
+        }
+    }
+}
+
 /// FIFO / LIFO モードで積んだ項目のキュー。
 ///
 /// クリップボードの操作は持たず、「次に貼り付けるのはどれか」だけを管理する。

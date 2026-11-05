@@ -61,4 +61,14 @@ final class PasteQueueTests: XCTestCase {
         XCTAssertEqual(q.popNext(), "C")
         XCTAssertTrue(q.isEmpty)
     }
+
+    /// メニューの言葉: モード外は「開始」、同じモードは「終了（残り件数）」、別のモードの最中は「切り替え」
+    func testMenuTitle() {
+        XCTAssertEqual(QueueMode.fifo.menuTitle(current: nil, count: 0), "FIFO モードを開始")
+        XCTAssertEqual(QueueMode.lifo.menuTitle(current: nil, count: 0), "LIFO モードを開始")
+        XCTAssertEqual(QueueMode.fifo.menuTitle(current: .fifo, count: 3), "FIFO モードを終了（残り 3 件）")
+        XCTAssertEqual(QueueMode.lifo.menuTitle(current: .fifo, count: 3), "LIFO に切り替え")
+        XCTAssertEqual(QueueMode.fifo.menuTitle(current: .lifo, count: 2), "FIFO に切り替え")
+        XCTAssertEqual(QueueMode.lifo.menuTitle(current: .lifo, count: 2), "LIFO モードを終了（残り 2 件）")
+    }
 }
