@@ -244,10 +244,10 @@ private struct ActionBar: View {
     var body: some View {
         let isPinned = model.selectedID.flatMap { model.summary(id: $0) }?.isPinned ?? false
         HStack(spacing: 4) {
-            // ボタンの左の空いた所。つかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）。
-            // 帯を一覧の上まで延ばしたので、この下の一覧の行はクリックできない（問い 2 で Kazuya さんが OK）
-            WindowDragArea()
-                .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
+            // ボタンの左の空いた所。高さを求めない Spacer で空け、つかむ所は帯の後ろの WindowDragArea にする。
+            // （WindowDragArea を maxHeight: .infinity で並べると、帯の高さが外の高さまで伸び、測った高さから一覧の下の余白を決め直す
+            //  計算が止まらなくなり、起動直後に固まった。2026-11-05）
+            Spacer(minLength: 0)
             HStack(spacing: 4) {
                 Button("ペースト ⏎") { model.activateSelection(.paste) }
                     .buttonStyle(ActionStyle(isPrimary: true))
@@ -290,6 +290,9 @@ private struct ActionBar: View {
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { onButtonsWidthChange($0) }
         }
         .padding(4)
+        // ボタンの左の空いた所をつかむとウインドウが動く（2026-10-16 決定、manual-test 3 章）。
+        // 帯を一覧の上まで延ばしたので、この下の一覧の行はクリックできない（問い 2 で Kazuya さんが OK）。ボタンは手前なので押せる
+        .background(WindowDragArea())
         // 地・縁・光の線・影は、Kazuya さんが OK したモック「Liquid Glass 3 案」の B の値に合わせる（2026-10-31）
         .glassEffect(.regular.tint(Self.barTint(colorScheme)), in: Capsule())
         .overlay {
