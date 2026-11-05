@@ -65,9 +65,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(item("履歴を開く  \(shortcuts.history)", #selector(showHistory)))
         menu.addItem(.separator())
 
-        let fifoTitle = queueMode == .fifo ? "FIFO モードを終了（残り \(queueCount) 件）" : "FIFO モードを開始"
+        let fifoTitle = QueueMode.fifo.menuTitle(current: queueMode, count: queueCount)
         menu.addItem(item("\(fifoTitle)  \(shortcuts.fifo)", #selector(toggleFIFO)))
-        let lifoTitle = queueMode == .lifo ? "LIFO モードを終了（残り \(queueCount) 件）" : "LIFO モードを開始"
+        let lifoTitle = QueueMode.lifo.menuTitle(current: queueMode, count: queueCount)
         menu.addItem(item("\(lifoTitle)  \(shortcuts.lifo)", #selector(toggleLIFO)))
         menu.addItem(.separator())
 
